@@ -60,9 +60,7 @@ from advtest_ext.document.target import DocumentCapabilities
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIB_PATH = REPO_ROOT / "references.bib"
 _BIBKEY_RE = re.compile(r"^@\w+\s*\{\s*([^,\s]+)\s*,", re.MULTILINE)
-PAYLOADS_PATH = (
-    REPO_ROOT / "advtest_ext" / "attacks" / "indirect_injection" / "payloads.yaml"
-)
+PAYLOADS_PATH = REPO_ROOT / "advtest_ext" / "attacks" / "indirect_injection" / "payloads.yaml"
 
 
 def _bib_keys() -> set[str]:
