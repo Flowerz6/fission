@@ -558,6 +558,49 @@ async def test_invoke_skips_navigation_when_already_on_target_doc(
     )
 
 
+@pytest.mark.asyncio
+async def test_invoke_navigates_when_target_id_only_substring_of_other_doc(
+    tmp_path: Path,
+) -> None:
+    """Regression: the target doc id appearing only as a substring of a
+    DIFFERENT doc's URL (here in a query param) must NOT be read as 'already
+    on the doc'. A substring check would skip navigation and strand the
+    session on the wrong document; the invoker must navigate."""
+    page = _FakePage(response_text="reply")
+    # Viewing OTHER-doc-9; the target id "doc-mt" only rides in a query param.
+    page.url = "https://docs.google.com/document/d/OTHER-doc-9/edit?ref=doc-mt"
+    factory = await _build_factory(page)
+
+    await ui_mode_invoke(
+        document_id="doc-mt",
+        user_prompt="p",
+        trace_id="trace-wrong-target",
+        output_dir=tmp_path,
+        page_factory=factory,
+        reset_conversation=False,
+    )
+
+    goto_calls = [c for c in page.calls if c[0] == "goto"]
+    assert goto_calls, (
+        "invoker must navigate when not actually on the target doc — the id "
+        "appeared only in another doc's query string"
+    )
+
+
+def test_url_is_on_doc_matches_path_id_not_substrings() -> None:
+    from advtest_ext.adapters.google_docs.ui_mode.invoker import _url_is_on_doc
+
+    base = "https://docs.google.com/document/d/{id}/edit"
+    # Exact path id, with or without suffixes → on the doc.
+    assert _url_is_on_doc(base.format(id="abc123"), "abc123")
+    assert _url_is_on_doc(base.format(id="abc123") + "?usp=sharing", "abc123")
+    assert _url_is_on_doc("https://docs.google.com/document/d/abc123", "abc123")
+    # Id only in a query, or a prefix of a different doc's id → NOT on it.
+    assert not _url_is_on_doc(base.format(id="OTHER") + "?ref=abc123", "abc123")
+    assert not _url_is_on_doc(base.format(id="abc123456"), "abc123")
+    assert not _url_is_on_doc("", "abc123")
+
+
 # ----------------------------------------------------------------------
 # Failure modes — all surface as SidePanelUnavailable
 # ----------------------------------------------------------------------
