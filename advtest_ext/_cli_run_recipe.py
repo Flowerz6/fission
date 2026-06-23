@@ -71,7 +71,7 @@ def register(app: typer.Typer) -> None:
         # cli imports this module to call register(), and this
         # function call from inside the command body happens after
         # cli is fully loaded.
-        from advtest_ext.cli import _resolve_db_url
+        from advtest_ext._cli_providers import _resolve_db_url
         from advtest_ext.storage import (
             get_recipe,
             make_engine,

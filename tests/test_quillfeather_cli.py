@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from advtest_ext import cli
+from advtest_ext import _cli_factories, _cli_providers, cli
 from advtest_ext.core.models import load_seed_behaviors
 from advtest_ext.judges.heuristic import HeuristicJudge
 from advtest_ext.judges.retrieval_verdict_judge import RetrievalVerdictJudge
@@ -18,10 +18,10 @@ _CONFIGS = Path(__file__).resolve().parents[1] / "configs"
 
 
 def test_new_attacks_and_target_registered() -> None:
-    assert "crescendo" in cli._ATTACK_REGISTRY
-    assert "tap_chain" in cli._ATTACK_REGISTRY
-    assert "tap_crescendo" in cli._ATTACK_REGISTRY
-    assert "google_docs_multiturn" in cli._TARGET_REGISTRY
+    assert "crescendo" in _cli_factories._ATTACK_REGISTRY
+    assert "tap_chain" in _cli_factories._ATTACK_REGISTRY
+    assert "tap_crescendo" in _cli_factories._ATTACK_REGISTRY
+    assert "google_docs_multiturn" in _cli_factories._TARGET_REGISTRY
 
 
 def test_tap_crescendo_config_parses() -> None:
@@ -60,17 +60,19 @@ def test_signal_specs_build() -> None:
 
 
 def test_default_persona_ladder() -> None:
-    ladder = cli._default_persona_ladder("Project QUILLFEATHER", "QUILLFEATHER-ENGINEER")
+    ladder = _cli_factories._default_persona_ladder("Project QUILLFEATHER", "QUILLFEATHER-ENGINEER")
     assert len(ladder) == 4
     assert "QUILLFEATHER-ENGINEER" in ladder[-1]
     assert "Project QUILLFEATHER" in ladder[1]
 
 
 def test_retrieval_judge_from_opts() -> None:
-    j = cli._retrieval_judge_from_opts({"entity": "QUILLFEATHER", "canary": "CODE-QF-4417"})
+    j = _cli_factories._retrieval_judge_from_opts(
+        {"entity": "QUILLFEATHER", "canary": "CODE-QF-4417"}
+    )
     assert isinstance(j, RetrievalVerdictJudge)
     # No entity → generic heuristic judge.
-    assert isinstance(cli._retrieval_judge_from_opts({}), HeuristicJudge)
+    assert isinstance(_cli_factories._retrieval_judge_from_opts({}), HeuristicJudge)
 
 
 def test_quillfeather_behavior_in_catalogue() -> None:
@@ -84,7 +86,7 @@ def test_quillfeather_behavior_in_catalogue() -> None:
 def test_retrieval_verdict_judge_registered_and_resolves() -> None:
     from advtest_ext.judges.retrieval_verdict_judge import RetrievalVerdictJudge
 
-    assert "retrieval_verdict" in cli._JUDGE_REGISTRY
+    assert "retrieval_verdict" in _cli_factories._JUDGE_REGISTRY
     judge = cli._resolve_judge("retrieval_verdict")
     assert isinstance(judge, RetrievalVerdictJudge)
 
@@ -101,9 +103,9 @@ def test_quillfeather_configs_use_retrieval_verdict_judge() -> None:
 
 def test_model_override_env_mapping() -> None:
     # The three CLI flags map to the three provider roles.
-    assert cli._MODEL_OVERRIDE_ENV["CLAUDE_ATTACKER"] == "ADVTEST_ATTACKER_MODEL"
-    assert cli._MODEL_OVERRIDE_ENV["CLAUDE_JUDGE"] == "ADVTEST_JUDGE_MODEL"
-    assert cli._MODEL_OVERRIDE_ENV["GEMINI_TARGET"] == "ADVTEST_TARGET_MODEL"
+    assert _cli_providers._MODEL_OVERRIDE_ENV["CLAUDE_ATTACKER"] == "ADVTEST_ATTACKER_MODEL"
+    assert _cli_providers._MODEL_OVERRIDE_ENV["CLAUDE_JUDGE"] == "ADVTEST_JUDGE_MODEL"
+    assert _cli_providers._MODEL_OVERRIDE_ENV["GEMINI_TARGET"] == "ADVTEST_TARGET_MODEL"
 
 
 # ----------------------------------------------------------------------
