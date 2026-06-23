@@ -884,8 +884,9 @@ class Orchestrator:
 
     def _db_update_verdict(self, trace: AttackTrace) -> None:
         """Persist a verdict change (layered-oracle signal upgrade) to
-        the already-inserted trace row. No-op without a DB sink."""
-        if self._session_factory is None:
+        the already-inserted trace row. No-op without a DB sink (or when the
+        trace has no verdict to persist)."""
+        if self._session_factory is None or trace.verdict is None:
             return
         from advtest_ext.storage import session_scope, update_trace_verdict
 

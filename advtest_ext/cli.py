@@ -973,6 +973,11 @@ def _build_orchestrator(
     a_opts = attack_options if attack_options is not None else config.attack_options
     b_names = behavior_names if behavior_names is not None else config.behaviors
 
+    if t_name is None:
+        raise ValueError(
+            "no target resolved: set `target_name` on the config (single-phase) "
+            "or on the phase (multi-phase)"
+        )
     target = _resolve_target(t_name, t_opts)
     attacks = [_resolve_attack(name, a_opts.get(name)) for name in a_names]
     behaviors = _resolve_behaviors(b_names)
@@ -1462,7 +1467,9 @@ def import_run(
         upsert_run(
             s,
             run_id=run_result.run_id,
-            target_name=run_result.config.target_name,
+            # Phased runs carry no single top-level target; label them so the
+            # dashboard row isn't blank (per-phase targets live in the config).
+            target_name=run_result.config.target_name or "(multi-phase)",
             strategy="imported",
             config=run_result.config,
             output_dir=str(path.parent.resolve()),
