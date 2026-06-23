@@ -325,7 +325,7 @@ class TapCrescendoAttack(AttackPlugin):
             ),
         }
         if root_scripted:
-            root["scripted"] = list(self._seed_chain)
+            root["scripted"] = list(self._seed_chain or [])
         async for attempt in self._run_node(behavior, target, root):
             yield attempt
         logger.info("tap_crescendo.node", node="n0", depth=0, score=root.get("score"))
@@ -362,7 +362,7 @@ class TapCrescendoAttack(AttackPlugin):
                         "strategy": strategy,
                     }
                     if is_seed_slot:
-                        child["scripted"] = list(self._seed_chain)
+                        child["scripted"] = list(self._seed_chain or [])
                     # Give the orchestrator time to persist the prior node's
                     # final turn before this node resets to a fresh chat.
                     if self._node_settle_s:
