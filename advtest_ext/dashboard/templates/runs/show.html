@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}run {{ run.id }} · advtest{% endblock %}
+{% block content %}
+
+{# Five auto-refreshing panels. Each is a self-contained partial
+   that knows whether the run is still in flight and decides on its
+   own whether to opt into HTMX polling. See runs/_*.html. #}
+
+{% include "runs/_hero.html" %}
+
+{# Live attack-tree visualisation — Mermaid SVG that grows as TAP
+   explores branches. Sits high on the page so during a live pitch
+   it's the first thing the audience sees alongside the Chrome
+   window. Self-polls every 2 s; see runs/_tree_live.html. #}
+<div class="section-head" style="margin-top: 0.5rem;">
+  <h2 style="margin: 0;">Attack tree
+    {% if not run.finished_at %}<span class="pill" style="font-size: 0.55em; vertical-align: middle; background: #ffedd5; color: #9a3412;">LIVE</span>{% endif %}
+  </h2>
+  <a class="muted" href="/runs/{{ run.id }}/tree">Full-screen view →</a>
+  <a class="muted" href="/runs/{{ run.id }}/transcript">Multi-turn transcript →</a>
+</div>
+{% include "runs/_tree_live.html" %}
+
+{% include "runs/_findings.html" %}
+
+{% include "runs/_techniques.html" %}
+
+{% include "runs/_heatmap_wrap.html" %}
+
+{% include "runs/_timeline.html" %}
+
+{% endblock %}

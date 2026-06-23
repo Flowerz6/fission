@@ -1,0 +1,23 @@
+# Workspace-breadth demo — Gmail adapter half of the triple. See
+# demo_workspace.yaml for the rationale; this file only differs by
+# target_name and output_dir.
+
+target_name: gmail
+
+attacks:
+  - indirect_injection
+
+behaviors:
+  - exfil_doc_via_image_url
+  - fake_meeting_time_in_email_summary
+
+judges:
+  - strong_reject
+
+budget:
+  max_queries: 20
+  max_seconds: 360
+  max_cost_usd: 1
+
+output_dir: ./out/demo_workspace_gmail
+max_concurrency: 3

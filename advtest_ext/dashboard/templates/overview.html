@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Fission — Overview{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Adversarial testing overview</h1>
+  <p class="sub">Live posture across all runs against Gemini for Workspace —
+     coverage, findings, attack effectiveness, and drift detection.</p>
+</div>
+
+{% if s.total_runs == 0 %}
+<div class="empty-state">
+  <div class="big">No runs yet</div>
+  Once a run executes, this page summarises coverage, findings by severity,
+  attack-success rate over time, and drift events. Start a run, then refresh.
+</div>
+{% else %}
+
+{# ---- headline metric tiles ---- #}
+<div class="metric-grid">
+  <div class="metric">
+    <div class="label">Runs</div>
+    <div class="value">{{ s.total_runs }}</div>
+    <div class="sub">{{ s.total_traces }} attempts executed</div>
+  </div>
+  <div class="metric is-good">
+    <div class="label">Mean attack-success rate</div>
+    <div class="value">{{ '%.0f'|format(s.overall_asr * 100) }}<span class="unit">%</span></div>
+    <div class="sub">across executed runs</div>
+  </div>
+  <div class="metric is-critical">
+    <div class="label">Findings</div>
+    <div class="value">{{ s.total_findings }}</div>
+    <div class="sub">
+      {{ s.findings_by_severity.get('critical', 0) }} critical ·
+      {{ s.findings_by_severity.get('high', 0) }} high
+    </div>
+  </div>
+  <div class="metric is-drift">
+    <div class="label">Drift events detected</div>
+    <div class="value">{{ s.drift_events }}</div>
+    <div class="sub">
+      {{ s.drift_pruned }} attacker-goal · {{ s.drift_recovered }} platform recovered
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+  {# ---- ASR trend ---- #}
+  <div class="card">
+    <h2>Attack-success rate over time</h2>
+    <p class="card-hint">Per run, oldest to newest. Each bar is one run's ASR;
+       a sustained drop can signal target-model drift (a Gemini safety update).</p>
+    {% if s.asr_trend %}
+    <div class="spark">
+      {% for pt in s.asr_trend %}
+      <div class="bar" style="height: {{ (pt.asr * 100) | round(0, 'floor') | int }}%"
+           title="{{ pt.run_id }} — {{ '%.0f'|format(pt.asr * 100) }}% ({{ pt.traces }} attempts)"></div>
+      {% endfor %}
+    </div>
+    <div class="spark-axis"><span>oldest</span><span>0–100% ASR</span><span>newest</span></div>
+    {% else %}
+    <p class="muted">No executed runs yet.</p>
+    {% endif %}
+  </div>
+
+  {# ---- findings by severity ---- #}
+  <div class="card">
+    <h2>Findings by severity</h2>
+    <p class="card-hint">Confirmed vulnerabilities, graded. Click through to
+       <a href="/findings">Findings</a> for evidence and replay bundles.</p>
+    {% set total = s.total_findings if s.total_findings > 0 else 1 %}
+    {% for key, label in [('critical','Critical'), ('high','High'), ('med','Medium'), ('low','Low')] %}
+    {% set n = s.findings_by_severity.get(key, 0) %}
+    <div class="sev-row">
+      <span class="sev-name">{{ label }}</span>
+      <span class="track"><span class="fill {{ key }}" style="width: {{ (n / total * 100) | round(1) }}%"></span></span>
+      <span class="n">{{ n }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="grid-2">
+  {# ---- attack effectiveness ---- #}
+  <div class="card">
+    <h2>Attack effectiveness</h2>
+    <p class="card-hint">Which techniques land most often. Bar = success rate;
+       count = successes / attempts.</p>
+    {% if s.attack_breakdown %}
+    {% for a in s.attack_breakdown[:8] %}
+    <div class="hbar-row">
+      <span class="nm" title="{{ a.attack }}">{{ a.attack }}</span>
+      <span class="track"><span class="fill" style="width: {{ (a.asr * 100) | round(1) }}%"></span></span>
+      <span class="meta">{{ '%.0f'|format(a.asr * 100) }}% · {{ a.successes }}/{{ a.total }}</span>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="muted">No attempts recorded yet.</p>
+    {% endif %}
+  </div>
+
+  {# ---- recent runs ---- #}
+  <div class="card">
+    <h2>Recent runs</h2>
+    <p class="card-hint">Most recent executions. <a href="/runs">View all →</a></p>
+    <table>
+      <thead><tr><th>Run</th><th>Target</th><th>ASR</th><th>Started</th></tr></thead>
+      <tbody>
+        {% for r in s.recent_runs %}
+        <tr>
+          <td><a href="/runs/{{ r.id }}"><code>{{ r.id[:16] }}</code></a></td>
+          <td>{{ r.target_name }}</td>
+          <td>{{ '%.0f'|format((r.summary.get('overall_asr', 0.0) or 0.0) * 100) }}%</td>
+          <td class="muted">{{ (r.started_at|string)[:16] if r.started_at else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

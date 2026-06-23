@@ -1,0 +1,281 @@
+% references.bib — citations used by advtest.
+%
+% Every attack, hiding technique, judge, and provider stub records a
+% citation key from this file in its plugin metadata or a leading code
+% comment. Keep this file as the single source of truth; FOUNDATIONS.md
+% explains *why* each entry matters and where it slots into the threat
+% model. Add a citation here before referencing it from code.
+
+% ---------- Foundational threat-model paper ----------
+
+@inproceedings{greshake2023ipi,
+  title     = {Not what you've signed up for: Compromising Real-World
+               LLM-Integrated Applications with Indirect Prompt Injection},
+  author    = {Greshake, Kai and Abdelnabi, Sahar and Mishra, Shailesh and
+               Endres, Christoph and Holz, Thorsten and Fritz, Mario},
+  booktitle = {AISec '23},
+  year      = {2023},
+  eprint    = {2302.12173},
+  archivePrefix = {arXiv},
+  note      = {Coined indirect prompt injection (IPI). Demonstrated against
+               Bing Chat. Origin of the threat class advtest targets.}
+}
+
+% ---------- Industry framing ----------
+
+@misc{owasp_llm_top10_2025,
+  title  = {OWASP Top 10 for Large Language Model Applications, 2025},
+  author = {{OWASP Foundation}},
+  year   = {2025},
+  note   = {LLM01:2025 = Prompt Injection. Direct vs. indirect framing
+            used in advtest severity assessments.}
+}
+
+% ---------- Real-world Workspace evidence ----------
+
+@misc{geminijack_2025,
+  title  = {GeminiJack: Zero-Click Data Exfiltration via Shared Google Docs},
+  author = {{Noma Security}},
+  year   = {2025},
+  month  = dec,
+  note   = {Public disclosure. RAG pipeline confused instructions with
+            content; markdown image rendering used for exfiltration.}
+}
+
+@misc{gemini_trifecta_2025,
+  title  = {Gemini Trifecta: Three IPI Flaws in Gemini Cloud Assist,
+            Search Personalization, and Browsing},
+  author = {{Tenable}},
+  year   = {2025},
+  month  = sep,
+}
+
+@misc{promptware_nassi2025,
+  title  = {Invitation Is All You Need! (Promptware): IPI via Google
+            Calendar invites against Gemini for Workspace},
+  author = {Nassi, Ben and others},
+  year   = {2025},
+}
+
+@misc{slackai_promptarmor_2024,
+  title  = {Slack AI Data Exfiltration via Markdown Image Rendering},
+  author = {{PromptArmor}},
+  year   = {2024},
+  note   = {Image-tag exfiltration chain that applies identically to
+            Workspace targets.}
+}
+
+% ---------- Benchmarks ----------
+
+@inproceedings{zhan2024injecagent,
+  title     = {{InjecAgent}: Benchmarking Indirect Prompt Injections in
+               Tool-Integrated Large Language Model Agents},
+  author    = {Zhan, Qiusi and Liang, Zhixiang and Ying, Zifan and Kang, Daniel},
+  booktitle = {Findings of ACL},
+  year      = {2024},
+  note      = {1{,}054 IPI test cases; attack-intention taxonomy
+               (direct harm vs. data exfiltration) is the basis for
+               advtest's Behavior model.}
+}
+
+@inproceedings{debenedetti2024agentdojo,
+  title     = {{AgentDojo}: A Dynamic Environment to Evaluate Attacks
+               and Defenses for {LLM} Agents},
+  author    = {Debenedetti, Edoardo and Zhang, Jie and Balunovi{\'c}, Mislav and
+               Beurer-Kellner, Luca and Fischer, Marc and Tram{\`e}r, Florian},
+  booktitle = {NeurIPS Datasets and Benchmarks},
+  year      = {2024},
+  note      = {Closest existing tool to advtest. We extend it by attacking
+               real Workspace surfaces, not simulated ones.}
+}
+
+@inproceedings{zhang2025asb,
+  title     = {Agent Security Bench (ASB): Formalizing and Benchmarking
+               Attacks and Defenses in {LLM}-based Agents},
+  author    = {Zhang, Hanrong and others},
+  booktitle = {ICLR},
+  year      = {2025},
+}
+
+@misc{bhagwatkar2025firewalls,
+  title  = {Indirect Prompt Injections: Are Firewalls All You Need, or
+            Stronger Benchmarks?},
+  author = {Bhagwatkar, Rishabh and others},
+  year   = {2025},
+  note   = {Three-stage cascading attack strategy informs advtest's
+            orchestrator composition logic.}
+}
+
+@inproceedings{mazeika2024harmbench,
+  title     = {{HarmBench}: A Standardized Evaluation Framework for
+               Automated Red Teaming and Robust Refusal},
+  author    = {Mazeika, Mantas and others},
+  booktitle = {ICML},
+  year      = {2024},
+  note      = {De facto standard for ASR. advtest uses the HarmBench
+               classifier as one of three judges.}
+}
+
+% ---------- Attack techniques (priority) ----------
+
+@misc{chao2023pair,
+  title  = {Jailbreaking Black Box Large Language Models in Twenty
+            Queries (PAIR)},
+  author = {Chao, Patrick and others},
+  year   = {2023},
+  eprint = {2310.08419},
+  archivePrefix = {arXiv},
+}
+
+@misc{russinovich2024crescendo,
+  title  = {Great, Now Write an Article About That: The Crescendo
+            Multi-Turn {LLM} Jailbreak Attack},
+  author = {Russinovich, Mark and Salem, Ahmed and Eldan, Ronen},
+  year   = {2024},
+}
+
+@misc{zeng2024pap,
+  title  = {How Johnny Can Persuade {LLMs} to Jailbreak Them: Rethinking
+            Persuasion to Challenge {AI} Safety by Humanizing {LLMs} (PAP)},
+  author = {Zeng, Yi and others},
+  year   = {2024},
+}
+
+@inproceedings{anil2024msj,
+  title     = {Many-Shot Jailbreaking},
+  author    = {Anil, Cem and others},
+  booktitle = {NeurIPS},
+  year      = {2024},
+  note      = {Long-context attack via hundreds of fake assistant
+               demonstrations. Power-law scaling.}
+}
+
+@misc{hughes2024bon,
+  title  = {Best-of-N Jailbreaking},
+  author = {Hughes, John and others},
+  year   = {2024},
+  note   = {78\% ASR on Claude 3.5 Sonnet at N=10{,}000. Composes with
+            MSJ for 28x sample efficiency.}
+}
+
+@misc{agentvigil2025,
+  title  = {{AgentVigil} / {AGENTFUZZER}: MCTS-Based Black-Box Fuzzing
+            for IPI},
+  author = {{Anonymous}},
+  year   = {2025},
+  note   = {71\% on AgentDojo against o3-mini.}
+}
+
+% ---------- Attack techniques (secondary) ----------
+
+@misc{mehrotra2024tap,
+  title  = {Tree of Attacks: Jailbreaking Black-Box {LLMs} Automatically (TAP)},
+  author = {Mehrotra, Anay and others},
+  year   = {2024},
+}
+
+@inproceedings{liu2024autodan,
+  title     = {{AutoDAN}: Generating Stealthy Jailbreak Prompts on Aligned
+               Large Language Models},
+  author    = {Liu, Xiaogeng and Xu, Nan and Chen, Muhao and Xiao, Chaowei},
+  booktitle = {ICLR},
+  year      = {2024},
+}
+
+@misc{zhao2024speakeasy,
+  title  = {{Speak Easy}: Eliciting Harmful Jailbreaks from {LLMs} via
+            Multi-Turn Task Decomposition},
+  author = {Zhao, Yiming and others},
+  year   = {2024},
+}
+
+@misc{gong2023figstep,
+  title  = {{FigStep}: Jailbreaking Large Vision-Language Models via
+            Typographic Visual Prompts},
+  author = {Gong, Yichen and others},
+  year   = {2023},
+}
+
+@misc{zou2023gcg,
+  title  = {Universal and Transferable Adversarial Attacks on Aligned
+            Language Models (GCG)},
+  author = {Zou, Andy and Wang, Zifan and Kolter, J. Zico and Fredrikson, Matt},
+  year   = {2023},
+  note   = {Historical baseline; published suffixes do not transfer to
+            current frontier models.}
+}
+
+@misc{qi2023visualadv,
+  title  = {Visual Adversarial Examples Jailbreak Aligned Large Language
+            Models},
+  author = {Qi, Xiangyu and others},
+  year   = {2023},
+}
+
+@misc{li2024hades,
+  title  = {{HADES}: Hiding and Amplifying Harmful Embeddings},
+  author = {Li, Yifan and others},
+  year   = {2024},
+}
+
+% ---------- Hiding techniques ----------
+
+@inproceedings{boucher2022badchars,
+  title     = {Bad Characters: Imperceptible {NLP} Attacks},
+  author    = {Boucher, Nicholas and Shumailov, Ilia and Anderson, Ross and
+               Papernot, Nicolas},
+  booktitle = {IEEE S\&P},
+  year      = {2022},
+  note      = {Zero-width / hidden Unicode / Unicode tag chars. Cited in
+               Greshake et al. 2023.}
+}
+
+% ---------- Judges ----------
+
+@misc{souly2024strongreject,
+  title  = {{StrongREJECT} for Empty Jailbreaks},
+  author = {Souly, Alexandra and others},
+  year   = {2024},
+  note   = {LLM-as-judge with rubric. Catches hedged / partial compliance.}
+}
+
+@misc{llamaguard3_2024,
+  title  = {{Llama Guard 3}: Fine-Tuned Safety Classifier},
+  author = {{Meta}},
+  year   = {2024},
+}
+
+@misc{shieldgemma_2024,
+  title  = {{ShieldGemma}: Generative AI Content Moderation Based on Gemma},
+  author = {{Google}},
+  year   = {2024},
+}
+
+% ---------- Frameworks ----------
+
+@misc{pyrit_microsoft,
+  title  = {{PyRIT}: Python Risk Identification Tool for {LLMs}},
+  author = {{Microsoft AI Red Team}},
+  howpublished = {\url{https://github.com/microsoft/PyRIT}},
+  note   = {advtest is a fork of PyRIT — see FORK.md for the pinned
+            commit and sync workflow.}
+}
+
+@misc{garak_nvidia,
+  title  = {{Garak}: A Framework for Security Probing {LLMs}},
+  author = {{NVIDIA}},
+  howpublished = {\url{https://github.com/NVIDIA/garak}},
+}
+
+@misc{inspect_aisi,
+  title  = {{Inspect}: An Open-Source Framework for Large Language Model
+            Evaluations},
+  author = {{UK AI Security Institute}},
+}
+
+@misc{promptarmor_defender,
+  title  = {{PromptArmor}: Defender-Side Guardrail for IPI},
+  author = {{PromptArmor}},
+  note   = {<1\% FPR/FNR on AgentDojo. advtest must bypass this class of
+            defence to demonstrate impact.}
+}

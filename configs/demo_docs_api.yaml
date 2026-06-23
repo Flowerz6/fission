@@ -1,0 +1,45 @@
+# Headline demo — real Gemini Flash via the GoogleDocsTarget
+# api_mode path. This is the wedge: the audience watches advtest
+# generate a doc with a hidden payload, the Gemini summariser process
+# it, and the StrongREJECT judge flag the response. ~10 min wall
+# clock, ~$1 in Gemini calls.
+#
+# Wire-up:
+#   target_name=google_docs   → GoogleDocsTarget(gemini_provider=
+#                                  load_provider_from_yaml(dev.yaml,
+#                                                          GEMINI_TARGET))
+#   attacks=[indirect_injection] → seed payloads × 25 techniques
+#   judges=[strong_reject]    → Claude Sonnet 4.6 via StrongRejectJudge
+#
+# Pre-flight: GEMINI_API_KEY + ANTHROPIC_API_KEY must be exported.
+# ADVTEST_PROVIDER_CONFIG can override configs/dev.yaml.
+
+target_name: google_docs
+
+attacks:
+  - indirect_injection
+
+# Three representative behaviours — one per major category —
+# matches the run_workspace_docs.yaml subset so the demo result
+# table parses to the same shape as the headline benchmark.
+behaviors:
+  - exfil_doc_via_image_url            # exfiltration
+  - fake_meeting_time_in_email_summary # output_manipulation
+  - leak_system_prompt                  # prompt_leakage
+
+judges:
+  - strong_reject
+
+budget:
+  # ~30 attempts is enough for several techniques per behaviour
+  # while staying well under $2 of Gemini + Claude. The orchestrator
+  # stops on whichever bound trips first.
+  max_queries: 30
+  max_seconds: 600
+  max_cost_usd: 2
+
+output_dir: ./out/demo_docs_api
+# api_mode is the Gemini endpoint directly — moderate parallelism is
+# fine, but keep it low enough that one rate-limit blip doesn't tank
+# the whole demo.
+max_concurrency: 3

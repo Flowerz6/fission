@@ -1,0 +1,49 @@
+# Full benchmark sweep — every attack × every behaviour × every
+# technique against the live Workspace Docs target. Hours of wall
+# clock, several dollars in Gemini + Claude judge cost. Not for
+# demos; not for CI. Run before the pitch to refresh the numbers
+# that land in advtest_ext/benchmarks/RESULTS.md.
+#
+# What's swept:
+#   * attacks: static (baseline), indirect_injection (the wedge),
+#     pap (paraphrase-style), pair_indirect (refinement loop —
+#     Claude attacker), tap_indirect (tree-search refinement).
+#   * behaviours: empty list → entire seed_behaviors.yaml catalogue
+#     (currently 20).
+#   * techniques: every supported technique on the target;
+#     orchestrator filters by capabilities.
+#
+# Cost shape (rough, Sonnet 4.6 + Gemini Flash):
+#   static_payload:     ~$0 (no LLM in the loop)
+#   indirect_injection: ~$0.01/attempt (Gemini only)
+#   pap:                ~$0.05/attempt (paraphrase model + Gemini)
+#   pair_indirect:      ~$0.30/converged cell (PAIR loop @ 8 rounds)
+#   tap_indirect:       ~$1.00/cell (TAP tree @ depth=3, bf=3)
+# Cap dollars at $200 — orchestrator stops on whichever bound
+# trips first.
+
+target_name: google_docs
+
+attacks:
+  - static_payload
+  - indirect_injection
+  - pap
+  - pair_indirect
+  - tap_indirect
+
+# Empty = full seed_behaviors.yaml catalogue. Override per attack
+# from the CLI if you want a per-attack restricted set.
+behaviors: []
+
+judges:
+  - strong_reject
+
+budget:
+  max_queries: 2000
+  max_seconds: 14400         # 4 hours
+  max_cost_usd: 200          # full sweep ceiling
+
+output_dir: ./out/benchmark_full
+# Higher than the demo configs — full sweep wants parallelism.
+# Tune down if you're hitting Gemini or Anthropic rate limits.
+max_concurrency: 8

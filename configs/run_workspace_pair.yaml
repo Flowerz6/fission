@@ -1,0 +1,54 @@
+# RunConfig — Claude (Sonnet 4.6) attacking Gemini 2.5 Flash via PAIR
+# refinement, with each refined payload delivered through the 25
+# document-hiding techniques against the live Google Docs adapter,
+# graded by Claude (Sonnet 4.6) via the StrongREJECT rubric.
+#
+# Auth + model wiring:
+#   target_name=google_docs   → GoogleDocsTarget(gemini_provider=GEMINI_TARGET)
+#   attack=pair_indirect      → PairIndirectAttack(attacker=CLAUDE_ATTACKER,
+#                                                  judge=StrongRejectJudge(CLAUDE_JUDGE))
+#   judges=[strong_reject]    → trace-level StrongRejectJudge(CLAUDE_JUDGE)
+# All three roles come from configs/dev.yaml; override the path via
+# ADVTEST_PROVIDER_CONFIG. PAIR's inner loop bottoms out at 8 rounds
+# by default — override via ADVTEST_PAIR_MAX_ROUNDS.
+#
+# Cost: each attempt is up to ``max_rounds`` paid attacker+judge
+# calls plus a final trace judge call, so the per-attempt cost is
+# materially higher than indirect_injection. Tune
+# ``budget.max_queries`` and ``budget.max_cost_usd`` accordingly —
+# the values below assume Sonnet 4.6 pricing (≈$3/M in, $15/M out).
+
+target_name: google_docs
+
+attacks:
+  - pair_indirect
+
+# Empty list = whole seed_behaviors.yaml catalogue (currently 20
+# behaviours across exfil / output-manipulation / bias /
+# unauthorized-action / prompt-leakage). PAIR returns early on
+# convergence (score >= 0.6), so most cells finish in 1-2 rounds
+# even at ADVTEST_PAIR_MAX_ROUNDS=8 — total attempt count is
+# closer to 1× cells than rounds × cells.
+behaviors: []
+
+judges:
+  # Trace-level grading also runs through Claude — same role as
+  # the inner-loop judge, but a fresh instance (no shared state).
+  - strong_reject
+
+budget:
+  # 20 behaviours × 23 techniques = 460 cells. PAIR yields one
+  # attempt per ROUND, but the dashboard only sees the round
+  # actually persisted; with early convergence the real attempt
+  # count lands well under max_queries. max_cost_usd is the real
+  # backstop — Sonnet 4.6 PAIR at max_rounds=8 averages ~$0.30 per
+  # converged cell.
+  max_queries: 500
+  max_seconds: 7200
+  max_cost_usd: 80
+
+output_dir: ./out
+# 20 behaviours × 1 attack = 20 (attack × behaviour) tasks; cap at
+# 8 to stay under most API rate limits while making meaningful
+# parallel progress. Lift if your API key tolerates more.
+max_concurrency: 8

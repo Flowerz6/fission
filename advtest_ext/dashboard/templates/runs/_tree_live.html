@@ -1,0 +1,79 @@
+{# Live attack-tree visualisation, grouped by PHASE. A multi-phase run
+   (e.g. Gmail→Docs then Docs→Docs) renders one labelled tree section per
+   phase, in order; a single-phase run renders one unlabelled group, so
+   the markup is uniform across both. One Mermaid ``graph TD`` per
+   (behaviour, technique) cell within a phase — each persisted trace is a
+   node, each ``parent_id`` link an edge, node colour its verdict.
+
+   Self-polls every 2 s while the run is in flight; stops when complete.
+
+   Node id format: ``p{phase}c{cell}_t{trace-id}`` (hyphens stripped) so
+   ids stay valid Mermaid identifiers AND unique across phases. #}
+<section id="run-tree-live"
+         {% if not run.finished_at %}
+         hx-get="/runs/{{ run.id }}/_tree?v={{ tree_hash }}"
+         hx-trigger="every 2s"
+         hx-swap="outerHTML"
+         {% endif %}>
+  {% set ns = namespace(any=false) %}
+  {% for phase in phases %}{% if phase.forest %}{% set ns.any = true %}{% endif %}{% endfor %}
+  {% if not ns.any %}
+  <p class="muted">
+    No traces yet — waiting for the first branch to land.
+    {% if not run.finished_at %}(this view refreshes every 2 seconds){% endif %}
+  </p>
+  {% else %}
+  {% for phase in phases %}
+  {% set p_idx = loop.index %}
+  {% if phase.label %}
+  <div class="phase-head" style="margin: 1.5rem 0 0.5rem; padding: 0.5rem 0.85rem;
+       background: #eef2ff; border-left: 4px solid #4338ca; border-radius: 4px;">
+    <strong style="font-size: 1.05rem;">Attack tree for {{ phase.label }}</strong>
+    <span class="muted">&mdash; {{ phase.n_success }}/{{ phase.n_traces }} success</span>
+  </div>
+  {% endif %}
+  {% for cell in phase.forest %}
+  {% set cell_idx = "p" ~ p_idx ~ "c" ~ loop.index %}
+  {% set cell_trace_ids = cell.lines | map(attribute="trace.id") | list %}
+  <section class="tree-cell">
+    <h2>
+      <code>{{ cell.behavior_id }}</code>
+      &times;
+      <code>{{ cell.technique_id }}</code>
+      <span class="muted">
+        &mdash; {{ cell.n_success }}/{{ cell.n_traces }} success
+      </span>
+    </h2>
+    <div class="mermaid">
+graph TD
+    R{{ cell_idx }}(("root"))
+{%- for line in cell.lines %}
+{%- set t = line.trace %}
+{%- set tid = t.id | replace("-", "") %}
+{%- set nid = cell_idx ~ "_t" ~ tid %}
+{%- set parent_id = t.parent_id %}
+{%- if parent_id and parent_id in cell_trace_ids %}
+{%- set parent_nid = cell_idx ~ "_t" ~ (parent_id | replace("-", "")) %}
+    {{ parent_nid }} --> {{ nid }}
+{%- else %}
+    R{{ cell_idx }} --> {{ nid }}
+{%- endif %}
+{%- set score = t.judge_scores[0].score if t.judge_scores else None %}
+    {{ nid }}["#{{ loop.index }} · d={{ t.depth }}{% if score is not none %} · {{ '%.2f'|format(score) }}{% endif %}"]
+    click {{ nid }} "/traces/{{ t.id }}"
+{%- endfor %}
+    classDef success fill:#cfeacb,stroke:#1a531b,stroke-width:2px,color:#0f3a10
+    classDef refused fill:#f0c8c8,stroke:#6f1414,color:#3f0808
+    classDef partial fill:#f8e3a0,stroke:#6b4f0a,color:#3a2a04
+    classDef error fill:#dddddd,stroke:#444444,color:#222
+{%- for line in cell.lines %}
+{%- set t = line.trace %}
+{%- set tid = t.id | replace("-", "") %}
+    class {{ cell_idx }}_t{{ tid }} {{ t.verdict or "refused" }}
+{%- endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  {% endfor %}
+  {% endif %}
+</section>

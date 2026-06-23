@@ -1,0 +1,75 @@
+{# Document-content panel shared by trace + finding detail views.
+
+Renders the side-by-side "Visible doc body" / "Hidden injection"
+panel showing what Gemini saw when it opened the Doc. The panel
+only renders when there's something to show (either an attacker-
+generated cover_story or a payload_text on the trace).
+
+Args:
+  trace — the AttackTrace row (Pydantic or ORM, duck-typed). The
+          macro pulls ``extra_metadata`` (for cover_story +
+          attacker_reasoning under the ``tap`` / ``pair`` namespaces),
+          ``payload_text``, and ``technique_id``.
+
+The intro paragraph and panel labels are intentionally identical
+across both call sites — the previous duplicates had wording
+drift ("white-on-white" wording specific to the white_text
+technique only) which this consolidation corrects toward the
+more accurate "via the X hiding technique".
+#}
+
+{% macro doc_content_panel(trace) %}
+{# Attack-namespace metadata. PAIR-class plugins write under
+   ``pair``; TAP-class plugins write under ``tap``. Same field
+   names. Pick whichever is present so the panel works for either. #}
+{% set meta = trace.extra_metadata or {} %}
+{% set tap_meta = meta.get('tap') or {} %}
+{% set pair_meta = meta.get('pair') or {} %}
+{% set attack_meta = tap_meta or pair_meta %}
+{% set cover_story = attack_meta.get('cover_story') %}
+{% if cover_story or trace.payload_text %}
+<h2>Document content delivered to the target</h2>
+<p class="muted">
+  This is what Gemini saw when it opened the Doc — the visible body
+  shown to the user PLUS the hidden injection text (rendered via
+  the {% if trace.technique_id %}<code>{{ trace.technique_id }}</code>{% else %}configured{% endif %}
+  hiding technique). The user prompt asked for a summary; if the
+  attack landed, Gemini followed the hidden instruction instead.
+</p>
+
+<div class="doc-panel">
+  <div class="doc-panel-row">
+    <div class="doc-panel-label">Visible doc body
+      <span class="doc-panel-sublabel">(what the user sees)</span>
+    </div>
+    <pre class="doc-visible">{% if cover_story %}{{ cover_story }}{% else %}<em class="muted">(static default cover doc — attacker generated no cover_story for this trace)</em>{% endif %}</pre>
+  </div>
+  <div class="doc-panel-row">
+    <div class="doc-panel-label">Hidden injection
+      <span class="doc-panel-sublabel">(invisible to the user)</span>
+    </div>
+    <pre class="doc-hidden">{{ trace.payload_text }}</pre>
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{% macro attacker_reasoning_block(trace) %}
+{# Attacker-reasoning block. Same TAP/PAIR namespace lookup as the
+   panel above; rendered separately because the panel can fire
+   without reasoning (and vice versa). #}
+{% set meta = trace.extra_metadata or {} %}
+{% set tap_meta = meta.get('tap') or {} %}
+{% set pair_meta = meta.get('pair') or {} %}
+{% set attack_meta = tap_meta or pair_meta %}
+{% set attacker_reasoning = attack_meta.get('attacker_reasoning') %}
+{% if attacker_reasoning %}
+<h2>Attacker reasoning</h2>
+<p class="muted">
+  Why the attacker LLM chose this particular framing for this round /
+  branch. Captured from the per-round JSON output before delivery.
+</p>
+<pre>{{ attacker_reasoning }}</pre>
+{% endif %}
+{% endmacro %}

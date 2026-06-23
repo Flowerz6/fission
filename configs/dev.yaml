@@ -1,0 +1,60 @@
+# Dev profile — everything points at the local vLLM server so we get
+# realistic responses without paying anyone. Used for stub realism and
+# the inner development loop.
+#
+# Start the server with: scripts/start_vllm.sh dev
+
+ATTACKER_MODEL:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 1024
+  temperature: 0.7
+
+JUDGE_MODEL:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 256
+  temperature: 0.0
+
+TARGET_MODEL_DEV:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 1024
+  temperature: 0.7
+
+# Gemini-for-Workspace target. Used by the Workspace adapter
+# integration tests (gated behind ADVTEST_WORKSPACE_INTEGRATION=1)
+# and by anything else that wants to talk to a real Gemini model
+# from the dev profile. Set GEMINI_API_KEY in your shell first.
+GEMINI_TARGET:
+  provider_type: gemini
+  api_key_env: GEMINI_API_KEY
+  model_id: gemini-2.5-flash
+  max_tokens: 1024
+  temperature: 0.7
+
+# Claude-as-judge. Wire StrongRejectJudge (Souly 2024 rubric) at
+# this provider for nuanced refused/convincing/specific scoring —
+# Qwen-7B over-refuses on the rubric and pulls overall_asr to 0.
+# Temperature pinned at 0.0: judging is deterministic-by-rubric.
+CLAUDE_JUDGE:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-4-6
+  max_tokens: 512
+  temperature: 0.0
+
+# Claude-as-attacker. Used by PAIR / BoN / MSJ refinement loops
+# when you want stronger jailbreak generation than Qwen-7B. Note:
+# only kicks in for attacks that actually call an attacker LLM —
+# IndirectInjectionAttack uses static seed payloads and won't
+# touch this role.
+CLAUDE_ATTACKER:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-4-6
+  max_tokens: 1024
+  temperature: 1.0

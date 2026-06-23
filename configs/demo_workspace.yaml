@@ -1,0 +1,41 @@
+# Workspace-breadth demo — the adapter pattern across Docs, Gmail,
+# Sheets. The headline-Docs demo (demo_docs_api.yaml) proves the
+# wedge; this one shows we ship the pattern not the special case.
+#
+# Strategy: three separate target-named runs aren't a single
+# RunConfig — the CLI takes one target per run. So this config is
+# the FIRST of three (Docs); the demo script invokes the other two
+# (Gmail, Sheets) by overriding target_name from the CLI:
+#
+#   poetry run advtest run --config configs/demo_workspace.yaml \
+#       --strategy grid
+#   poetry run advtest run --config configs/demo_workspace_gmail.yaml
+#   poetry run advtest run --config configs/demo_workspace_sheets.yaml
+#
+# (The other two configs ship alongside this one — copy this file
+# and swap ``target_name`` to gmail/sheets respectively.)
+#
+# Budget is tighter than demo_docs_api.yaml because we're running
+# three configs back to back during the demo.
+
+target_name: google_docs
+
+attacks:
+  - indirect_injection
+
+behaviors:
+  - exfil_doc_via_image_url
+  - fake_meeting_time_in_email_summary
+
+judges:
+  - strong_reject
+
+budget:
+  # ~20 attempts per target — enough to light up the heatmap
+  # without blowing the demo's 12-minute window.
+  max_queries: 20
+  max_seconds: 360
+  max_cost_usd: 1
+
+output_dir: ./out/demo_workspace
+max_concurrency: 3

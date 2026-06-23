@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>advtest report — run {{ run.id }}</title>
+  <style>
+    @page { size: A4; margin: 22mm 18mm; }
+    body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; font-size: 10pt; line-height: 1.45; }
+    h1 { font-size: 22pt; margin: 0 0 0.3em 0; }
+    h2 { font-size: 14pt; border-bottom: 2px solid #c0392b; padding-bottom: 0.2em; margin-top: 1.4em; }
+    h3 { font-size: 11pt; margin-top: 1.2em; }
+    .cover { page-break-after: always; }
+    .cover .meta { margin-top: 1.5em; color: #555; }
+    .cover .headline { margin-top: 3em; padding: 1em; background: #f4f4f4; border-left: 4px solid #c0392b; }
+    table { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 0.5em 0; table-layout: fixed; page-break-inside: auto; }
+    th, td { padding: 4px 6px; border-bottom: 1px solid #ddd; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+    th { background: #f4f4f4; }
+    /* Paginated-table contract: allow the table itself to split
+       across pages, repeat the thead on every page, and never
+       split an individual row. Without ``thead { display:
+       table-header-group; }`` WeasyPrint silently clips long
+       tables at the first page boundary instead of continuing. */
+    thead { display: table-header-group; }
+    tbody { display: table-row-group; }
+    tr { page-break-inside: avoid; page-break-after: auto; }
+    /* Long trace ids / titles wrap inside their cells instead of
+       overflowing the page width (which on a fixed-layout table
+       caused the right-hand columns to clip). */
+    td code { word-break: break-all; }
+    .heatmap td { text-align: center; min-width: 50px; padding: 4px; }
+    .heatmap th { background: #2c3e50; color: #fff; }
+    .heatmap th.row { text-align: right; }
+    .heatmap-cell { color: #fff; font-variant-numeric: tabular-nums; }
+    .severity-low { background: #95a5a6; color: #fff; padding: 1px 6px; border-radius: 8px; font-size: 8pt; }
+    .severity-med { background: #f39c12; color: #fff; padding: 1px 6px; border-radius: 8px; font-size: 8pt; }
+    .severity-high { background: #e67e22; color: #fff; padding: 1px 6px; border-radius: 8px; font-size: 8pt; }
+    .severity-critical { background: #c0392b; color: #fff; padding: 1px 6px; border-radius: 8px; font-size: 8pt; }
+    pre { background: #f4f4f4; padding: 6px 8px; border: 1px solid #ddd; border-radius: 3px; font-size: 8pt; white-space: pre-wrap; word-break: break-word; }
+    .muted { color: #777; }
+    /* Attack-tree section. Mirrors the live dashboard's tree-pre
+       styling but with PDF-print-friendly tweaks: no word-break (we
+       want the box-drawing characters to align), smaller font so a
+       full TAP cell fits on one page where possible. */
+    .tree-cell { margin-top: 0.8em; page-break-inside: avoid; }
+    .tree-cell h3 { margin-bottom: 0.2em; }
+    pre.tree-pre {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 7.5pt;
+      line-height: 1.35;
+      background: #fafafa;
+      border: 1px solid #e2e2e6;
+      border-radius: 4px;
+      padding: 6px 10px;
+      margin: 0.2em 0 0 0;
+      white-space: pre;
+      word-break: normal;
+      overflow: hidden;
+    }
+    .tree-pre .tid { font-weight: 600; }
+    .tree-pre .verdict { padding: 0 4px; border-radius: 3px; margin-left: 4px; font-size: 7pt; }
+    .tree-pre .verdict.success { background: #cfeacb; color: #1a531b; }
+    .tree-pre .verdict.partial { background: #f8e3a0; color: #6b4f0a; }
+    .tree-pre .verdict.refused { background: #f0c8c8; color: #6f1414; }
+    .tree-pre .verdict.error   { background: #ddd;    color: #444; }
+    .tree-pre .score { color: #555; margin-left: 3px; }
+    .tree-pre .draw  { color: #888; }
+  </style>
+</head>
+<body>
+
+<section class="cover">
+  <h1>advtest run report</h1>
+  <p class="meta">
+    Run id: <code>{{ run.id }}</code><br>
+    Target: {{ run.target_name }}<br>
+    Strategy: {{ run.strategy }}<br>
+    Started: {{ run.started_at.strftime('%Y-%m-%d %H:%M UTC') if run.started_at else '-' }}<br>
+    {% if run.finished_at %}Finished: {{ run.finished_at.strftime('%Y-%m-%d %H:%M UTC') }}<br>{% endif %}
+  </p>
+  <div class="headline">
+    <strong>Headline ASR:</strong>
+    {{ '%.2f'|format(summary.get('overall_asr', 0.0)) }}
+    ({{ summary.get('successful_traces', 0) }} / {{ summary.get('total_traces', 0) }} traces flagged success)
+  </div>
+</section>
+
+<section>
+  <h2>Executive summary</h2>
+  <p>
+    This run drove {{ summary.get('total_traces', 0) }} attack attempts
+    against <strong>{{ run.target_name }}</strong> using the
+    <strong>{{ run.strategy }}</strong> orchestration strategy.
+    {{ findings|length }} attempts were promoted to findings.
+  </p>
+  {% include "_heatmap.html" %}
+</section>
+
+<section>
+  <h2>Methodology</h2>
+  <p>
+    advtest is a document-centric extension of Microsoft PyRIT
+    targeted at indirect prompt injection (IPI) against productivity
+    AI; see <code>FOUNDATIONS.md</code> for the full citation map.
+    Attacks invoked in this run:
+  </p>
+  <table>
+    <thead><tr><th>Attack</th><th>Class</th><th>Description</th><th>Citations</th></tr></thead>
+    <tbody>
+      {% for a in attacks %}
+      <tr>
+        <td>{{ a.name }}</td>
+        <td>{{ a.attack_class }}</td>
+        <td>{{ a.description }}</td>
+        <td><code>{{ a.references|join(', ') }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Findings</h2>
+  {% if findings %}
+  <table>
+    <thead>
+      <tr><th>Severity</th><th>Behaviour</th><th>Title</th><th>Trace</th></tr>
+    </thead>
+    <tbody>
+      {% for f in findings %}
+      <tr>
+        <td><span class="severity-{{ f.severity }}">{{ f.severity }}</span></td>
+        <td>{{ f.trace.behavior_id }}</td>
+        <td>{{ f.title or '(untitled)' }}</td>
+        <td><code>{{ f.trace_id }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No findings flagged for this run.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Attack trees</h2>
+  <p>
+    One tree per <strong>(behaviour, technique)</strong> cell. Each node is
+    a persisted trace; edges are reconstructed from <code>parent_id</code>.
+    Linear-chain attacks (PAIR, single-step) render as a flat list under
+    their cell. The colour next to each trace is its verdict
+    (<span class="severity-low">refused</span>,
+    <span class="severity-med">partial</span>,
+    <span class="severity-high">success</span>).
+  </p>
+  {% if not tree_forest %}
+  <p class="muted">No traces recorded for this run.</p>
+  {% else %}
+  {% for cell in tree_forest %}
+  <div class="tree-cell">
+    <h3>
+      <code>{{ cell.behavior_id }}</code> &times;
+      <code>{{ cell.technique_id }}</code>
+      <span class="muted">— {{ cell.n_success }}/{{ cell.n_traces }} success</span>
+    </h3>
+<pre class="tree-pre">{% for line in cell.lines -%}
+{% set t = line.trace -%}
+{% set score = t.judge_scores[0].score if t.judge_scores else None -%}
+<span class="draw">{{ line.prefix }}{{ line.connector }}</span><span class="tid">{{ t.id }}</span><span class="verdict {{ t.verdict or 'refused' }}">{{ t.verdict or '-' }}</span>{% if score is not none %}<span class="score">score={{ '%.2f'|format(score) }}</span>{% endif %} <span class="muted">d={{ t.depth }}</span>
+{% endfor %}</pre>
+  </div>
+  {% endfor %}
+  {% endif %}
+</section>
+
+<section>
+  <h2>Selected reproducible traces</h2>
+  {% if selected_traces %}
+  {% for t in selected_traces %}
+  <h3>{{ t.attack_name }} → {{ t.behavior_id }} ({{ t.id }})</h3>
+  <p class="muted">
+    Technique: {{ t.technique_id or '-' }} ·
+    Depth: {{ t.depth }} ·
+    Verdict: {{ t.verdict or '-' }}
+  </p>
+  <p><strong>Request:</strong></p>
+  <pre>{{ t.raw_request[:400] }}{% if t.raw_request|length > 400 %}…{% endif %}</pre>
+  <p><strong>Response:</strong></p>
+  <pre>{{ t.raw_response[:400] }}{% if t.raw_response|length > 400 %}…{% endif %}</pre>
+  {% endfor %}
+  {% else %}
+  <p class="muted">No successful traces to feature.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>References</h2>
+  {% if references %}
+  <table>
+    <thead><tr><th>Key</th><th>Title</th><th>Authors</th><th>Year</th></tr></thead>
+    <tbody>
+      {% for e in references %}
+      <tr>
+        <td><code>{{ e.citation_key }}</code></td>
+        <td>{{ e.title }}</td>
+        <td>{{ e.author }}</td>
+        <td>{{ e.year }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No matched references for the attacks invoked.</p>
+  {% endif %}
+</section>
+
+  <section class="conversations-section" style="page-break-before: always; margin-top: 28px;">
+    <h2 class="section-title">Multi-turn Conversations</h2>
+    <p style="color:#555; font-size:13px; margin:6px 0 14px;">
+      Every conversation in this run, one block per attack-tree node / replay
+      round, shown in order. Each turn lists the user prompt and Gemini's full
+      reply exactly as recorded.
+    </p>
+    {% if not conversations %}
+    <p style="color:#777;">No conversation turns were recorded for this run.</p>
+    {% endif %}
+    {% for conv in conversations %}
+    <div class="conv-node" style="border:1px solid #e0e0e0; border-radius:8px; padding:16px 18px; margin:16px 0; page-break-inside:avoid;">
+      <div style="border-bottom:1px solid #eee; padding-bottom:8px; margin-bottom:4px;">
+        <span style="font-size:16px; font-weight:700;">{{ conv.label }}</span>
+        <span style="font-size:12px; color:#666; margin-left:10px;">{{ conv.turns|length }} turn{% if conv.turns|length != 1 %}s{% endif %}</span>
+      </div>
+      {% if conv.reason %}
+      <div style="font-size:12px; color:#444; background:#f6f8fa; border:1px solid #eee; border-radius:4px; padding:6px 9px; margin:8px 0 4px;">{{ conv.reason }}</div>
+      {% endif %}
+      {% for turn in conv.turns %}
+      <div class="conv-turn" style="margin:14px 0 0; padding-top:12px; border-top:1px dashed #e5e5e5; page-break-inside:avoid;">
+        <div style="font-size:13px; font-weight:600; margin-bottom:6px;">
+          Turn {{ turn.turn }}
+          {% if turn.verdict %}<span style="display:inline-block; padding:1px 8px; border-radius:10px; font-size:10px; font-weight:600; margin-left:6px; {% if turn.verdict == 'success' %}background:#e6f4ea; color:#137333;{% elif turn.verdict == 'refused' %}background:#fce8e6; color:#c5221f;{% else %}background:#fef7e0; color:#b06000;{% endif %}">{{ turn.verdict }}</span>{% endif %}
+          {% if turn.score is not none %}<span style="font-weight:400; color:#666; margin-left:6px;">score {{ '%.2f'|format(turn.score) }}</span>{% endif %}
+        </div>
+        <p style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:#888; margin:8px 0 0;">User prompt</p>
+        <pre style="white-space:pre-wrap; word-wrap:break-word; overflow-wrap:anywhere; background:#f4f6f8; border:1px solid #e3e8ee; border-radius:4px; padding:10px; font-size:12px; margin:4px 0 0;">{{ turn.prompt }}</pre>
+        <p style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:#888; margin:8px 0 0;">Gemini reply</p>
+        <pre style="white-space:pre-wrap; word-wrap:break-word; overflow-wrap:anywhere; background:#fbf7ff; border:1px solid #ebe0f5; border-radius:4px; padding:10px; font-size:12px; margin:4px 0 0;">{{ turn.response }}</pre>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </section>
+
+
+</body>
+</html>

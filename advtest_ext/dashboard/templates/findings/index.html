@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}findings · advtest{% endblock %}
+{% block content %}
+<h1>Findings</h1>
+<p class="muted">Flagged traces — promoted from successful or HITL-confirmed attempts.</p>
+
+<form class="filter-bar" hx-get="/findings" hx-target="#findings-table" hx-swap="innerHTML" hx-trigger="change">
+  <label>severity:
+    <select name="severity">
+      <option value="">all</option>
+      {% for s in ('low', 'med', 'high', 'critical') %}
+      <option value="{{ s }}" {% if severity == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>run:
+    {# Picking a run scopes the behaviour dropdown — re-render the
+       whole index (not just the table) so the behaviour options
+       update. Behaviour selection stays a partial swap since its
+       options don't change when behaviour changes. #}
+    <select name="run_id"
+            hx-get="/findings"
+            hx-target="body"
+            hx-push-url="true"
+            hx-include="closest form"
+            hx-trigger="change">
+      <option value="">all</option>
+      {% for r in run_options %}
+      <option value="{{ r }}" {% if run_id == r %}selected{% endif %}>{{ r }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>behaviour:
+    <select name="behavior_id">
+      <option value="">all</option>
+      {% for b in behavior_options %}
+      <option value="{{ b }}" {% if behavior_id == b %}selected{% endif %}>{{ b }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<div id="findings-table">
+  {% include "findings/_table.html" %}
+</div>
+{% endblock %}

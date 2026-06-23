@@ -1,0 +1,98 @@
+digraph FissionContinuous {
+  rankdir=TB;
+  graph [fontname="Helvetica", fontsize=18, labelloc="t",
+         label="Fission — Continuous UI-Mode Red-Team (Google Workspace Gemini)",
+         fontcolor="#111111", splines=spline, nodesep=0.45, ranksep=0.7, pad=0.5,
+         bgcolor="white", compound=true];
+  node  [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", penwidth=1.3];
+  edge  [fontname="Helvetica", fontsize=9, color="#555555", arrowsize=0.8];
+
+  // ===== A. SEED / GUIDE FEED =====
+  subgraph cluster_feed {
+    label="1 · Seed feed";
+    style="rounded,filled"; color="#1f6feb"; fillcolor="#eaf2ff"; fontcolor="#1f6feb"; penwidth=1.6;
+    humans [label="Human red-teamers", fillcolor="#cfe3ff"];
+    ext    [label="Chrome capture\n(Playwright)", fillcolor="#e3eeff", shape=note];
+    osint  [label="OSINT (curated)", fillcolor="#e3eeff", style="rounded,filled,dashed"];
+    guides [label="Guide corpus\n+ success oracle", fillcolor="#d8c4ff", shape=folder];
+    humans -> ext -> guides; osint -> guides;
+  }
+
+  // ===== B. CONTROL PLANE =====
+  subgraph cluster_control {
+    label="2 · Control";
+    style="rounded,filled"; color="#8957e5"; fillcolor="#f5efff"; fontcolor="#8957e5"; penwidth=1.6;
+    coverage  [label="Coverage map\n(stale / new)", fillcolor="#e7dbff", shape=cylinder];
+    scheduler [label="Scheduler\n(budget split)", fillcolor="#d8c4ff", shape=hexagon];
+    coverage -> scheduler;
+  }
+  guides -> scheduler;
+
+  // ===== C. EXECUTION =====
+  subgraph cluster_exec {
+    label="3 · Execution  (UI-mode · browser farm)";
+    style="rounded,filled"; color="#bc4c00"; fillcolor="#fff3ea"; fontcolor="#bc4c00"; penwidth=1.6;
+    regwatch [label="Regression watch\n(known attacks)", fillcolor="#ffe7d4"];
+    frontier [label="Frontier search\n(new attacks)", fillcolor="#ffd9bd"];
+    engine   [label="Attacker  ⇄  Gemini UI", fillcolor="#ffcaa3", shape=component, width=3.2];
+    infra    [label="Infra: test tenants ·\naccounts · stable hooks", fillcolor="#ffeede",
+              color="#bc4c00", style="rounded,filled,dashed"];
+    regwatch -> engine; frontier -> engine;
+    infra -> engine [style=dashed, color="#bc4c00", dir=none];
+  }
+  scheduler -> regwatch [label="re-test"];
+  scheduler -> frontier [label="discover"];
+
+  // ===== D. JUDGE =====
+  subgraph cluster_judge {
+    label="4 · Judge";
+    style="rounded,filled"; color="#0969da"; fillcolor="#eaf3ff"; fontcolor="#0969da"; penwidth=1.6;
+    jsig [label="Signals / regex", fillcolor="#cfe3ff"];
+    jrub [label="Scoring rubric", fillcolor="#cfe3ff"];
+    jagg [label="Verdict", fillcolor="#aecbf5", shape=hexagon];
+    jsig -> jagg; jrub -> jagg;
+  }
+  engine -> jsig; engine -> jrub;
+
+  uncertain [label="Confident?", shape=diamond, fillcolor="#fff1b8", style=filled, width=1.0];
+  hitl      [label="Human review", fillcolor="#ffe08a"];
+  jagg -> uncertain;
+  uncertain -> hitl [label="no"];
+
+  // ===== E. TRUST PLANE =====
+  subgraph cluster_trust {
+    label="5 · Trust";
+    style="rounded,filled"; color="#1a7f37"; fillcolor="#eafbf0"; fontcolor="#1a7f37"; penwidth=1.6;
+    harness [label="Harness health", fillcolor="#c8f0d6"];
+    novelty [label="Novelty / dedup", fillcolor="#c8f0d6"];
+    spine   [label="Measurement\n(ASR ± CI)", fillcolor="#aee6c2"];
+    novelty -> spine;
+  }
+  engine    -> harness [color="#1a7f37"];
+  uncertain -> novelty [label="yes"];
+  hitl      -> novelty;
+
+  // ===== F. OUTPUTS =====
+  subgraph cluster_out {
+    label="6 · Output to Google";
+    style="rounded,filled"; color="#57606a"; fillcolor="#f3f4f6"; fontcolor="#57606a"; penwidth=1.6;
+    dash   [label="Dashboard", fillcolor="#e2e5e9", shape=tab];
+    digest [label="Digest:\nNEW · REGRESSED · FIXED", fillcolor="#e2e5e9", shape=note];
+  }
+  novelty -> digest;
+  harness -> dash [color="#1a7f37"];
+  spine   -> dash [color="#1a7f37"];
+
+  // ===== FLYWHEEL =====
+  gold    [label="Gold set\n(human labels)", style="rounded,filled,bold",
+           fillcolor="#ffd6d6", color="#cf222e", fontcolor="#cf222e", penwidth=1.6];
+  improve [label="Improve models\n(gated)", style="rounded,filled,bold",
+           fillcolor="#ffd6d6", color="#cf222e", fontcolor="#cf222e", penwidth=1.6];
+  hitl  -> gold    [color="#cf222e", style=bold];
+  gold  -> improve [color="#cf222e", style=bold];
+  spine -> improve [label="go / no-go", color="#cf222e", style=bold];
+  improve  -> frontier [label="better attacker", color="#cf222e", style="bold,dashed", constraint=false];
+  improve  -> jrub     [label="better judge",    color="#cf222e", style="bold,dashed", constraint=false];
+  novelty  -> regwatch [label="add to suite",    color="#cf222e", style="bold,dashed", constraint=false];
+  digest   -> coverage [label="update",          color="#cf222e", style="bold,dashed", constraint=false];
+}

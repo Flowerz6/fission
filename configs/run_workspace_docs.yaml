@@ -1,0 +1,47 @@
+# RunConfig — IndirectInjectionAttack against the live Google Docs
+# adapter (Gemini summarisation), no PAIR/MSJ/BoN refinement. Each
+# of the 25 hiding techniques crosses against each behaviour and each
+# matching seed payload from
+# ``advtest_ext/attacks/indirect_injection/payloads.yaml``, bounded by
+# the Budget below.
+#
+# Auth + Gemini config:
+#   target_name=google_docs resolves at CLI time to:
+#     GoogleDocsTarget(gemini_provider=load_provider_from_yaml(
+#       configs/dev.yaml, "GEMINI_TARGET"))
+#   so the Gemini model is whatever GEMINI_TARGET in dev.yaml
+#   resolves to. The dev.yaml in this repo currently points at
+#   ``gemini-2.5-flash`` (gemini-2.0-flash was being phased out for
+#   new users and 404'd on fresh keys); set ADVTEST_PROVIDER_CONFIG
+#   to override the dev.yaml path.
+#
+# Behaviours: three picked across categories — exfiltration,
+# output-manipulation, prompt-leakage. Behaviour IDs are seed
+# catalogue ids (advtest_ext/core/seed_behaviors.yaml).
+
+target_name: google_docs
+
+attacks:
+  - indirect_injection
+
+behaviors:
+  - exfil_doc_via_image_url            # exfiltration
+  - fake_meeting_time_in_email_summary # output_manipulation
+  - leak_system_prompt                  # prompt_leakage
+
+judges:
+  # StrongREJECT rubric (Souly 2024) routed through CLAUDE_JUDGE
+  # in configs/dev.yaml — Sonnet 4.6 catches hedged / partial
+  # compliance the heuristic regex misses, which was pulling
+  # overall_asr to 0 on earlier runs.
+  - strong_reject
+
+budget:
+  # 30 attempts is enough to sample several techniques x payloads per
+  # behaviour without burning a full ASR sweep.
+  max_queries: 30
+  max_seconds: 600
+  max_cost_usd: 2
+
+output_dir: ./out
+max_concurrency: 2

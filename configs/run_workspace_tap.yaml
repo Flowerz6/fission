@@ -1,0 +1,50 @@
+# RunConfig — Claude (Sonnet 4.6) attacking Gemini 2.5 Flash via TAP
+# tree-search refinement (Mehrotra 2024), with each refined payload
+# delivered through the 25 document-hiding techniques against the
+# live Google Docs adapter, graded by Claude (Sonnet 4.6) via the
+# StrongREJECT rubric.
+#
+# Auth + model wiring (parallel to run_workspace_pair.yaml):
+#   target_name=google_docs   → GoogleDocsTarget(gemini_provider=GEMINI_TARGET)
+#   attack=tap_indirect       → TapIndirectAttack(attacker=CLAUDE_ATTACKER,
+#                                                 judge=StrongRejectJudge(CLAUDE_JUDGE),
+#                                                 max_depth=3, branching_factor=3,
+#                                                 keep_top=1)
+#   judges=[strong_reject]    → trace-level StrongRejectJudge(CLAUDE_JUDGE)
+#
+# Cost shape: TAP at default knobs explores up to 1+3+9+27 = 40 nodes
+# per (behaviour, technique) cell — 3-5x PAIR's per-attempt cost.
+# Override the tree shape via ADVTEST_TAP_MAX_DEPTH /
+# ADVTEST_TAP_BRANCHING_FACTOR / ADVTEST_TAP_KEEP_TOP.
+
+target_name: google_docs
+
+attacks:
+  - tap_indirect
+
+# Empty list = use the whole seed_behaviors.yaml catalogue (currently
+# 20 behaviours across exfiltration / output-manipulation / bias /
+# unauthorized-action / prompt-leakage). Set ADVTEST_TAP_BRANCHING_FACTOR=1
+# at run-time if you want the budget to comfortably fit all behaviours
+# (collapses TAP to PAIR-shape, ~460 attempts vs ~1380).
+behaviors: []
+
+judges:
+  - strong_reject
+
+budget:
+  # All 20 behaviours × 23 techniques = 460 cells minimum. With TAP
+  # default branching=3 that balloons to ~1380 attempts and ~$400 of
+  # Sonnet, so cap dollars at $80 — orchestrator stops on whichever
+  # bound trips first. For full coverage of all 20 behaviours run
+  # with ADVTEST_TAP_BRANCHING_FACTOR=1 (collapses TAP to PAIR-shape,
+  # 460 attempts ≈ $50-70).
+  max_queries: 500
+  max_seconds: 7200
+  max_cost_usd: 80
+
+output_dir: ./out
+# Match the typical behaviour count so a dozen+ (attack × behaviour)
+# tasks make progress in parallel. Each task takes one client+API
+# slot so don't push this above what your API key tolerates.
+max_concurrency: 8

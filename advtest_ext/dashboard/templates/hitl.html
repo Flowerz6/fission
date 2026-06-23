@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}HITL queue · advtest{% endblock %}
+{% block content %}
+<h1>Human-in-the-loop queue</h1>
+<p class="muted">
+  Traces flagged when judge ensemble disagreement crosses the
+  configured threshold (see <code>EnsembleAsJudge</code>). Resolve
+  by confirming or rejecting the flag.
+</p>
+
+<form class="filter-bar">
+  <label>status:
+    <select name="status" onchange="window.location='/hitl?status=' + this.value">
+      {% for s in ('pending', 'confirmed', 'rejected') %}
+      <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+{% if items %}
+<table>
+  <thead>
+    <tr><th>Item</th><th>Run</th><th>Trace</th><th>Disagreement</th><th>Reason</th><th>Enqueued</th></tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td><code>{{ item.id }}</code></td>
+      <td><a href="/runs/{{ item.run_id }}">{{ item.run_id }}</a></td>
+      <td>{% if item.trace_id %}<code>{{ item.trace_id }}</code>{% else %}—{% endif %}</td>
+      <td>{{ '%.2f'|format(item.judge_disagreement) }}</td>
+      <td class="muted">{{ item.reason }}</td>
+      <td class="muted">{{ item.enqueued_at.strftime('%Y-%m-%d %H:%M') }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Nothing in the {{ status }} queue.</p>
+{% endif %}
+{% endblock %}

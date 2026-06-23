@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}seeds · advtest{% endblock %}
+{% block content %}
+<h1>Seeds</h1>
+<p class="muted">
+  Ingested artefacts awaiting (or already backing) one Recipe each.
+  Two kinds: <strong>human_chat</strong> seeds come from red-team
+  reports (docx, chat exports, markdown, HAR); <strong>dataset_entry</strong>
+  seeds come from public vulnerability corpora (HarmBench, AdvBench,
+  AgentDojo, etc.) pinned by ``corpus_version``.
+</p>
+
+<form class="filter-bar" hx-get="/seeds" hx-target="body" hx-push-url="true" hx-trigger="change">
+  <label>kind:
+    <select name="kind">
+      <option value="">all</option>
+      {% for k in ('human_chat', 'dataset_entry') %}
+      <option value="{{ k }}" {% if kind == k %}selected{% endif %}>{{ k }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+{% if seeds %}
+<table>
+  <thead>
+    <tr>
+      <th>Id</th><th>Kind</th><th>Title</th><th>Source format</th>
+      <th>Submitted</th><th>By</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in seeds %}
+    <tr>
+      <td><a href="/seeds/{{ s.id }}"><code>{{ s.id }}</code></a></td>
+      <td><code>{{ s.kind }}</code></td>
+      <td>{{ s.title }}</td>
+      <td class="muted"><code>{{ s.source_format }}</code></td>
+      <td class="muted">{{ s.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td class="muted">{{ s.submitted_by }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">
+  No seeds ingested yet. Phase 6 (Recipe Extractor + docx ingest) will
+  populate this view; for now operators land Seeds via direct database
+  writes or future <code>advtest ingest-seed</code> calls.
+</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,46 @@
+{# Heatmap partial — embedded by /runs/{id} and the PDF report. #}
+{% if heatmap.is_empty %}
+<p class="muted">No traces to plot yet.</p>
+{% else %}
+<table class="heatmap">
+  <thead>
+    <tr>
+      <th class="row">technique \ family</th>
+      {% for fam in heatmap.families %}
+      <th>{{ fam }}</th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in heatmap.rows %}
+    <tr>
+      <th class="row">{{ row.technique }}</th>
+      {% for cell in row.cells %}
+      {# Two-stop gradient: 0.0 → near-white, 1.0 → indigo→red.
+         Using HSL for perceptually-smoother interpolation than RGB.
+         No traces (attempts=0) renders as a neutral grey "no data". #}
+      {% set asr = cell.asr %}
+      {% if cell.attempts == 0 %}
+        {% set bg = '#f8fafc' %}
+        {% set fg = '#94a3b8' %}
+      {% else %}
+        {# Hue 220 (cool indigo) at low ASR → 0 (red) at high ASR.
+           Saturation rises with ASR; lightness drops so high-ASR
+           cells feel "hot" without being neon. #}
+        {% set hue = (220 - 220 * asr)|int %}
+        {% set sat = (30 + 60 * asr)|int %}
+        {% set lit = (95 - 40 * asr)|int %}
+        {% set bg = 'hsl(' ~ hue ~ ', ' ~ sat ~ '%, ' ~ lit ~ '%)' %}
+        {% if asr >= 0.55 %}{% set fg = '#ffffff' %}{% else %}{% set fg = '#0f172a' %}{% endif %}
+      {% endif %}
+      <td class="heatmap-cell"
+          style="background: {{ bg }}; color: {{ fg }};"
+          title="{{ cell.successes }}/{{ cell.attempts }} successes (ASR={{ '%.2f'|format(asr) }})">
+        {% if cell.attempts == 0 %}—{% else %}{{ '%.2f'|format(asr) }}{% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

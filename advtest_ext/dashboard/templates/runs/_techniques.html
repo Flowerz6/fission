@@ -1,0 +1,30 @@
+{# Per-technique mean ASR bar chart. Polls every 5 s while in flight.
+   Heatmap is a separate partial below — the two refresh independently
+   so a slow heatmap render doesn't gate the cheaper technique chart. #}
+<section id="run-techniques"
+         {% if not run.finished_at %}
+         hx-get="/runs/{{ run.id }}/_techniques"
+         hx-trigger="every 5s"
+         hx-swap="outerHTML"
+         {% endif %}>
+  {% if technique_chart %}
+  <div class="section-head">
+    <h2>Technique effectiveness</h2>
+    <span class="muted">Mean ASR per hiding technique, across all behaviours in this run.</span>
+  </div>
+  <div class="bar-chart">
+    {% for row in technique_chart %}
+    {% set pct = row.asr * 100 %}
+    <div class="bar-row">
+      <div class="bar-label" title="{{ row.technique }}">{{ row.technique }}</div>
+      <div class="bar-track">
+        <div class="bar-fill bar-fill-{% if row.asr >= 0.7 %}hot{% elif row.asr >= 0.3 %}warm{% else %}cool{% endif %}"
+             style="width: {{ pct }}%;"></div>
+      </div>
+      <div class="bar-value">{{ '%.0f'|format(pct) }}%</div>
+      <div class="bar-count muted">{{ row.successes }}/{{ row.attempts }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>

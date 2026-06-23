@@ -1,0 +1,39 @@
+# Safe demo — fully synthetic; runs against StubDocumentTarget without
+# hitting any external API. Designed for the live demo where the
+# audience watches the pipeline complete end-to-end in under a minute
+# before we cut over to the real-Gemini config.
+#
+# Wire-up:
+#   target_name=stub          → StubDocumentTarget (no API calls)
+#   attacks=[static_payload]  → seed payloads from
+#                                attacks/payloads/static.yaml
+#   judges=[heuristic]        → HeuristicJudge (regex over refusal /
+#                                indicator strings, no LLM judge cost)
+#
+# Why ``static_payload``: the demo shows the pipeline, not the
+# attacker LLM — and ``static_payload`` covers all 25 hiding
+# techniques against the seed catalogue without any provider calls.
+
+target_name: stub
+
+attacks:
+  - static_payload
+
+# Single representative behaviour for speed; the heatmap renders with
+# one row populated but every technique column lit, which is a clean
+# visual without 20 mostly-empty rows.
+behaviors:
+  - exfil_doc_via_image_url
+
+judges:
+  - heuristic
+
+budget:
+  # ~50 attempts — enough for every supported technique against the
+  # one behaviour, completes in well under a minute.
+  max_queries: 50
+  max_seconds: 60
+
+output_dir: ./out/demo_safe
+# Stub target is cheap; bump concurrency so 50 attempts finish fast.
+max_concurrency: 8

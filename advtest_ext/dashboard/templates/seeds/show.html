@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}seed {{ seed.id }} · advtest{% endblock %}
+{% block content %}
+<h1>
+  <span class="pill">{{ seed.kind }}</span>
+  {{ seed.title }}
+</h1>
+<p class="muted">
+  Seed <code>{{ seed.id }}</code> · source <code>{{ seed.source_format }}</code>
+  · submitted {{ seed.submitted_at.strftime('%Y-%m-%d %H:%M') }} by {{ seed.submitted_by }}
+</p>
+
+<h2>Source artefact</h2>
+<p class="muted">
+  Raw file preserved on disk so the operator-review queue (Phase 6)
+  can render it side-by-side with the Extractor's draft Recipe.
+</p>
+<pre>{{ seed.raw_artefact_path }}</pre>
+
+{% if seed.taxonomy_hints %}
+<h2>Taxonomy hints</h2>
+<p class="muted">
+  Operator-supplied or loader-derived tags. The Extractor uses these
+  as priors when assigning the Recipe's final taxonomy.
+</p>
+<p>
+  {% for tag in seed.taxonomy_hints %}
+  <code>{{ tag }}</code>
+  {% endfor %}
+</p>
+{% endif %}
+
+<h2>Payload</h2>
+<p class="muted">
+  Kind-specific structured content. For human_chat seeds this is
+  typically the normalised turn list + declared metadata; for
+  dataset_entry seeds it's the upstream corpus fields verbatim.
+</p>
+<pre>{{ seed.payload | tojson(indent=2) }}</pre>
+
+<h2>Recipes derived from this seed</h2>
+{% if recipes %}
+<table>
+  <thead>
+    <tr><th>Id</th><th>Name</th><th>Version</th><th>State</th><th>Steps</th></tr>
+  </thead>
+  <tbody>
+    {% for r in recipes %}
+    <tr>
+      <td><a href="/recipes/{{ r.id }}"><code>{{ r.id }}</code></a></td>
+      <td>{{ r.name }}</td>
+      <td>v{{ r.version }}</td>
+      <td><span class="pill">{{ r.draft_state }}</span></td>
+      <td class="muted">{{ r.steps | length }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">
+  No Recipes derived from this Seed yet. The Recipe Extractor
+  (Phase 6) builds them; until then this section stays empty.
+</p>
+{% endif %}
+{% endblock %}

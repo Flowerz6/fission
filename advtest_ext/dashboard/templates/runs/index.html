@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}runs · advtest{% endblock %}
+{% block content %}
+<h1>Runs</h1>
+<p class="muted">Most recent first. {{ runs|length }} run(s) shown.</p>
+
+{% if runs %}
+<table>
+  <thead>
+    <tr>
+      <th>Run</th>
+      <th>Started</th>
+      <th>Strategy</th>
+      <th>Target</th>
+      <th>Traces</th>
+      <th>Successes</th>
+      <th>ASR</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for run in runs %}
+    <tr>
+      <td><a href="/runs/{{ run.id }}">{{ run.id }}</a></td>
+      <td class="muted">{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '-' }}</td>
+      <td>{{ run.strategy }}</td>
+      <td>{{ run.target_name }}</td>
+      <td>{{ run.summary.get('total_traces', 0) }}</td>
+      <td>{{ run.summary.get('successful_traces', 0) }}</td>
+      <td>{{ '%.2f'|format(run.summary.get('overall_asr', 0.0)) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No runs yet. Use <code>advtest run --config &lt;path&gt;.yaml</code> to start one.</p>
+{% endif %}
+{% endblock %}

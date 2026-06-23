@@ -1,0 +1,83 @@
+digraph FissionPipeline {
+  rankdir=TB;
+  graph [fontname="Helvetica", fontsize=18, labelloc="t",
+         label="Fission — Human-Seeded Adversarial Red-Team Pipeline", fontcolor="#111111",
+         splines=spline, nodesep=0.4, ranksep=0.75, pad=0.5, bgcolor="white"];
+  node  [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled", penwidth=1.2];
+  edge  [fontname="Helvetica", fontsize=9, color="#444444", arrowsize=0.8];
+
+  // ---------------- 1. SEED SOURCES ----------------
+  subgraph cluster_seed {
+    label="1 · Seed sources";
+    style="rounded,filled"; color="#1f6feb"; fillcolor="#eaf2ff"; fontcolor="#1f6feb"; penwidth=1.6;
+    human   [label="Human red-teamers (Platina)\nlive chats with Gemini", fillcolor="#cfe3ff"];
+    ext     [label="Chrome extension + Playwright\nextracts their conversations", fillcolor="#e3eeff", shape=note];
+    osint   [label="OSINT scrape\nReddit · Telegram · Discord · web", fillcolor="#cfe3ff"];
+    human -> ext [label="capture"];
+  }
+
+  // ---------------- 2. NORMALIZE ----------------
+  subgraph cluster_norm {
+    label="2 · Normalize → Guide";
+    style="rounded,filled"; color="#8957e5"; fillcolor="#f5efff"; fontcolor="#8957e5"; penwidth=1.6;
+    norm    [label="Convert to canonical format\n(single prompt OR full chat)", fillcolor="#e7dbff"];
+    guide   [label="ATTACK GUIDE\nintent · target effect · steps", fillcolor="#d8c4ff", shape=folder];
+    norm -> guide;
+  }
+
+  ext   -> norm [label="real chats"];
+  osint -> norm [label="raw posts"];
+
+  // ---------------- 3. ATTACK LOOP ----------------
+  subgraph cluster_attack {
+    label="3 · Attack loop  (parallel, browser farm)";
+    style="rounded,filled"; color="#bc4c00"; fillcolor="#fff3ea"; fontcolor="#bc4c00"; penwidth=1.6;
+    attacker [label="LLM ATTACKER\n• Tree-of-Attacks (TAP-Crescendo)\n• follows the guide\n• adapts to Gemini's last reply\n• drift-correction → steer back to guide", fillcolor="#ffd9bd", width=3.0];
+    target   [label="TARGET: Gemini\nGmail / Docs (Workspace)\nvia Playwright UI", fillcolor="#ffe7d4", shape=component];
+    attacker -> target [label="turn n prompt"];
+    target -> attacker [label="response", constraint=false, color="#bc4c00"];
+  }
+  guide -> attacker [label="steer"];
+
+  // ---------------- 4. JUDGMENT ----------------
+  subgraph cluster_judge {
+    label="4 · Multi-stage judge";
+    style="rounded,filled"; color="#1a7f37"; fillcolor="#eafbf0"; fontcolor="#1a7f37"; penwidth=1.6;
+    sig    [label="Deterministic signals / regex\n(criteria drawn from the guide)", fillcolor="#c8f0d6"];
+    score  [label="Scoring rubric\n(StrongREJECT / IPI-verdict)", fillcolor="#c8f0d6"];
+    agg    [label="Aggregate verdict", fillcolor="#aee6c2", shape=hexagon];
+    sig   -> agg;
+    score -> agg;
+  }
+  target -> sig   [label="transcript"];
+  target -> score [label="transcript"];
+
+  // ---------------- 5. DECISION ----------------
+  uncertain [label="confident?", shape=diamond, style="filled", fillcolor="#fff1b8", width=1.1];
+  agg -> uncertain;
+
+  hitl [label="HITL\nhuman resolves\nuncertain verdict", shape=box, style="rounded,filled", fillcolor="#ffe08a"];
+  uncertain -> hitl [label="no / uncertain"];
+
+  // ---------------- 6. OUTCOMES ----------------
+  subgraph cluster_out {
+    label="5 · Outcomes";
+    style="rounded,filled"; color="#57606a"; fillcolor="#f3f4f6"; fontcolor="#57606a"; penwidth=1.6;
+    dash   [label="Dashboard\nall runs + verdicts", fillcolor="#e2e5e9", shape=tab];
+    report [label="Periodic REPORTS\nto client companies", fillcolor="#e2e5e9", shape=note];
+    fail   [label="Failed attempts →\nhuman review & improve", fillcolor="#e2e5e9"];
+  }
+  uncertain -> dash  [label="yes (pass/fail)"];
+  hitl -> dash;
+  dash -> report [label="confirmed findings"];
+  dash -> fail   [label="failures"];
+
+  // ---------------- 7. FEEDBACK / FLYWHEEL ----------------
+  gold [label="Gold-set + human labels\n→ RLHF / fine-tune\nattacker & judge", shape=box, style="rounded,filled,bold", fillcolor="#ffd6d6", color="#cf222e", fontcolor="#cf222e", penwidth=1.6];
+  hitl -> gold [color="#cf222e", style=bold];
+  fail -> gold [color="#cf222e", style=bold];
+  gold -> attacker [label="improve attacker", color="#cf222e", style="bold,dashed", constraint=false];
+  gold -> score    [label="improve judge",    color="#cf222e", style="bold,dashed", constraint=false];
+
+  { rank=same; dash; hitl; }
+}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}transcript · {{ run.id }} · advtest{% endblock %}
+{% block content %}
+<h1>Multi-turn transcript</h1>
+<p class="muted">
+  Run <a href="/runs/{{ run.id }}">{{ run.id }}</a> ·
+  <a href="/runs/{{ run.id }}/tree">attack tree</a>
+</p>
+<p class="muted" style="font-size: 0.9em;">
+  Each turn's reply is the full assembled text from the intercepted
+  Workspace Gemini stream (falls back to the rendered side-panel capture
+  when no interception exists). tap_chain shows one conversation per
+  replay round, with the diagnoser's reason for that round.
+</p>
+
+{% if not groups %}
+<p class="muted">No turns to show for this run.</p>
+{% endif %}
+
+{% for g in groups %}
+<section style="margin: 1.5em 0; border-top: 2px solid #ddd; padding-top: 0.5em;">
+  <h2 style="margin-bottom: 0.2em;">{{ g.label }}</h2>
+  {% if g.reason %}
+  <p class="muted" style="font-size: 0.9em;">
+    <strong>Diagnosis driving this chain:</strong> {{ g.reason }}
+  </p>
+  {% endif %}
+
+  {% for turn in g.turns %}
+  <div style="margin: 1em 0; padding: 0.6em 0.9em; border-left: 3px solid #bbb;">
+    <p style="margin: 0 0 0.4em;">
+      <strong>Turn {{ turn.turn }}</strong>
+      {% if turn.verdict %}<span class="pill {{ turn.verdict }}">{{ turn.verdict }}</span>{% endif %}
+      {% if turn.score is not none %}
+      <span class="muted">score {{ '%.2f'|format(turn.score) }}</span>
+      {% endif %}
+      <a class="muted" style="font-size: 0.85em;" href="/traces/{{ turn.trace_id }}">trace ↗</a>
+    </p>
+
+    {% if turn.fired %}
+    <p style="margin: 0 0 0.4em;">
+      {% for name, hit in turn.fired.items() %}
+        {% if hit %}<span class="pill success">{{ name }}</span>{% endif %}
+      {% endfor %}
+    </p>
+    {% endif %}
+
+    <details open>
+      <summary class="muted">user prompt</summary>
+      <pre>{{ turn.prompt }}</pre>
+    </details>
+    <details open>
+      <summary class="muted">Gemini reply</summary>
+      <pre class="full-response">{{ turn.response }}</pre>
+    </details>
+  </div>
+  {% endfor %}
+</section>
+{% endfor %}
+{% endblock %}

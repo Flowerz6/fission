@@ -1,0 +1,26 @@
+# Example RunConfig for the orchestrator CLI.
+#
+# Invoke with:
+#   poetry run advtest run \
+#       --config configs/run_static_grid.yaml \
+#       --strategy grid \
+#       --output-dir out
+#
+# Drives StaticPayloadAttack (the sanity-floor baseline from
+# attacks/payloads/static.yaml) against a stub document target,
+# scored by the heuristic refusal/indicator judge. The run is
+# self-contained — no real LLM calls happen — so it's safe as a
+# smoke check that the wiring works end-to-end.
+#
+# Names map to the registries in advtest_ext/cli.py.
+
+target_name: stub
+attacks:
+  - static_payload
+behaviors: []          # empty = use the entire seed catalogue
+judges:
+  - heuristic
+budget:
+  max_queries: 20      # bound the run; remove for a full sweep
+output_dir: out
+max_concurrency: 1

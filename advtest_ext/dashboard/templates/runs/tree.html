@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}tree · run {{ run.id }} · Fission{% endblock %}
+
+{% block content %}
+<style>
+  /* Mermaid live-tree styling. Container gives the Mermaid SVG room
+     to breathe; nodes inherit colours from the classDef rules emitted
+     in the partial. */
+  .tree-cell { margin-bottom: 1.75rem; }
+  .tree-cell h2 { margin-bottom: 0.25rem; }
+  .tree-cell .mermaid {
+    background: #fafafa;
+    border: 1px solid #e2e2e6;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 0.4rem 0 0 0;
+    overflow-x: auto;
+  }
+  .tree-cell .mermaid svg { display: block; margin: 0 auto; }
+  /* Existing ASCII view (collapsed by default; available for
+     replay-bundle ops / debugging). */
+  .tree-pre {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    background: #f7f7f8;
+    border: 1px solid #e2e2e6;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 0;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .tree-pre a { text-decoration: none; }
+  .tree-pre a:hover .tid { text-decoration: underline; }
+  .tree-pre .tid { font-weight: 600; }
+  .tree-pre .verdict { padding: 0 6px; border-radius: 3px; margin-left: 6px; }
+  .tree-pre .verdict.success { background: #cfeacb; color: #1a531b; }
+  .tree-pre .verdict.partial { background: #f8e3a0; color: #6b4f0a; }
+  .tree-pre .verdict.refused { background: #f0c8c8; color: #6f1414; }
+  .tree-pre .verdict.error   { background: #ddd;    color: #444; }
+  .tree-pre .score { color: #555; margin-left: 4px; }
+  .tree-pre .draw  { color: #888; }
+</style>
+
+<h1>Attack tree · run <code>{{ run.id }}</code>
+  {% if not run.finished_at %}<span class="pill" style="font-size: 0.55em; vertical-align: middle; background: #ffedd5; color: #9a3412;">LIVE</span>{% endif %}
+</h1>
+<p class="muted">
+  <a href="/runs/{{ run.id }}">&larr; back to run</a>
+</p>
+<p>
+  One tree per <strong>(behaviour, technique)</strong> cell. Each node is
+  a persisted trace; edges are reconstructed from <code>Trace.parent_id</code>.
+  Node colour is the trace's verdict: <span class="pill success">success</span>
+  <span class="pill partial">partial</span>
+  <span class="pill refused">refused</span>. Click any node to jump to its
+  detail page (cover doc, hidden injection, Gemini's response).
+  {% if not run.finished_at %}This view refreshes every 2 seconds while the run is in flight.{% endif %}
+</p>
+
+{# Live Mermaid view — self-polling partial, replaced on every swap. #}
+{% include "runs/_tree_live.html" %}
+
+{# Existing ASCII tree, kept as a collapsible details panel for ops /
+   replay-bundle debugging. Doesn't auto-refresh. #}
+<details style="margin-top: 2rem;">
+  <summary class="muted">Raw tree (tree(1)-style)</summary>
+  {% set ns = namespace(any=false) %}
+  {% for phase in phases %}{% if phase.forest %}{% set ns.any = true %}{% endif %}{% endfor %}
+  {% if not ns.any %}
+  <p>No traces recorded for this run yet.</p>
+  {% else %}
+  {% for phase in phases %}
+  {% if phase.label %}<h3 style="margin-top:1.5rem;">Attack tree for {{ phase.label }}</h3>{% endif %}
+  {% for cell in phase.forest %}
+  <section class="tree-cell">
+    <h3>
+      <code>{{ cell.behavior_id }}</code>
+      &times;
+      <code>{{ cell.technique_id }}</code>
+      <span class="muted">
+        &mdash; {{ cell.n_success }}/{{ cell.n_traces }} success
+      </span>
+    </h3>
+<pre class="tree-pre">{% for line in cell.lines -%}
+{% set t = line.trace -%}
+{% set score = t.judge_scores[0].score if t.judge_scores else None -%}
+<span class="draw">{{ line.prefix }}{{ line.connector }}</span><a href="/traces/{{ t.id }}"><span class="tid">{{ t.id }}</span></a> <span class="verdict {{ t.verdict or 'refused' }}">{{ t.verdict or '-' }}</span>{% if score is not none %}<span class="score">score={{ '%.2f'|format(score) }}</span>{% endif %} <span class="muted">d={{ t.depth }}</span>
+{% endfor %}</pre>
+  </section>
+  {% endfor %}
+  {% endfor %}
+  {% endif %}
+</details>
+{% endblock %}

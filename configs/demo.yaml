@@ -1,0 +1,26 @@
+# Demo profile — headline run. Frontier attacker, paid judge, real
+# Gemini target.
+#
+# Start the frontier vLLM server with: scripts/start_vllm.sh demo
+# Set ANTHROPIC_API_KEY and GOOGLE_API_KEY in the environment.
+
+ATTACKER_MODEL:
+  provider_type: local_vllm_frontier
+  endpoint: http://localhost:8001/v1
+  model_id: deepseek-ai/DeepSeek-V3.2
+  max_tokens: 2048
+  temperature: 0.9
+
+JUDGE_MODEL:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-latest
+  max_tokens: 256
+  temperature: 0.0
+
+TARGET_MODEL:
+  provider_type: gemini
+  api_key_env: GOOGLE_API_KEY
+  model_id: gemini-2.0-flash
+  max_tokens: 2048
+  temperature: 0.7

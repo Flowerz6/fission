@@ -1,0 +1,48 @@
+{# Run header + hero stats. Self-polls every 3 s while the run is
+   still in flight; once ``run.finished_at`` is set, the rendered
+   partial omits the hx-trigger so HTMX stops polling on this id. #}
+<header class="run-header"
+        id="run-hero"
+        {% if not run.finished_at %}
+        hx-get="/runs/{{ run.id }}/_hero"
+        hx-trigger="every 3s"
+        hx-swap="outerHTML"
+        {% endif %}>
+  <div class="run-header-row">
+    <div>
+      <div class="muted" style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">Run</div>
+      <h1 style="margin: 0.15rem 0 0.4rem 0;"><code style="font-size: 0.95em; padding: 0;">{{ run.id }}</code>
+        {% if not run.finished_at %}<span class="pill" style="font-size: 0.6em; vertical-align: middle; background: #ffedd5; color: #9a3412;">LIVE</span>{% endif %}
+      </h1>
+      <p class="muted" style="margin: 0;">
+        Strategy <strong>{{ run.strategy }}</strong> &middot;
+        Target <strong>{{ run.target_name }}</strong> &middot;
+        {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}
+        {% if run.finished_at %}&rarr; {{ run.finished_at.strftime('%H:%M') }}{% endif %}
+      </p>
+    </div>
+    <div class="run-actions">
+      <a class="btn" href="/runs/{{ run.id }}/tree">Attack tree</a>
+      <a class="btn" href="/runs/{{ run.id }}/report">Report</a>
+      <a class="btn" href="/runs/{{ run.id }}/report.pdf">PDF</a>
+      <a class="btn" href="/runs/{{ run.id }}/transcript-report.pdf">Transcript PDF</a>
+    </div>
+  </div>
+
+  <div class="hero-stats">
+    {% set asr_pct = run.summary.get('overall_asr', 0.0) * 100 %}
+    <div class="hero-stat hero-asr">
+      <div class="label">Attack Success Rate</div>
+      <div class="value-xl">{{ '%.1f'|format(asr_pct) }}<span class="unit">%</span></div>
+      <div class="bar-wrap"><div class="bar-fill" style="width: {{ asr_pct }}%;"></div></div>
+    </div>
+    <div class="hero-stat">
+      <div class="label">Successful</div>
+      <div class="value">{{ run.summary.get('successful_traces', 0) }}<span class="unit"> / {{ run.summary.get('total_traces', 0) }}</span></div>
+    </div>
+    <div class="hero-stat">
+      <div class="label">Findings</div>
+      <div class="value">{{ findings|length }}</div>
+    </div>
+  </div>
+</header>

@@ -1,0 +1,144 @@
+[tool.poetry]
+name = "advtest-ext"
+version = "0.0.1"
+description = "advtest: document-centric extensions to PyRIT for productivity-AI vulnerability testing (IPI against Google Workspace surfaces)."
+authors = ["advtest contributors"]
+readme = "README.md"
+packages = [{ include = "advtest_ext" }]
+
+# Citations referenced from code/metadata are listed in references.bib.
+# Threat model and citation map: see docs/FOUNDATIONS.md.
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.15"
+pydantic = ">=2.7,<3"
+structlog = ">=24.1,<26"
+httpx = { version = ">=0.27,<1", extras = ["http2"] }
+pyyaml = ">=6.0,<7"
+tenacity = ">=9,<10"
+typer = { version = ">=0.12,<1", extras = ["all"] }
+# anthropic is required (CachedAnthropicProvider imports it at module
+# load to type its message builders). The other paid SDKs stay optional.
+anthropic = ">=0.40,<1"
+openai = { version = ">=2.2,<3", optional = true }
+google-genai = { version = ">=1.0,<2", optional = true }
+# Storage + dashboard. SQLAlchemy in sync mode (orchestrator's
+# write-on-completion path is non-latency-critical, and sync keeps
+# the call sites simple). Postgres is supported via the dialect URL;
+# default driver is the stdlib sqlite3 for dev. FastAPI + Jinja2
+# render the HTMX dashboard; weasyprint is the PDF renderer and
+# stays optional because of its native cairo/pango dependencies.
+sqlalchemy = ">=2.0,<3"
+fastapi = ">=0.110,<1"
+jinja2 = ">=3.1,<4"
+weasyprint = { version = ">=62,<70", optional = true }
+# reportlab renders the professional transcript-disclosure PDF
+# (dashboard /runs/{id}/transcript-report.pdf). Pure-Python, no native
+# deps, so it's a required dependency rather than an optional extra.
+reportlab = ">=4.0,<5"
+uvicorn = "^0.46.0"
+# Google Workspace adapters need the official client + an auth stack
+# that supports both service-account JSON keys (with optional
+# domain-wide delegation impersonation) and the OAuth2 installed-app
+# user flow. Required, not optional — Workspace coverage is the
+# headline contribution this tool ships.
+google-api-python-client = ">=2.130,<3"
+google-auth = ">=2.30,<3"
+google-auth-oauthlib = ">=1.2,<2"
+google-auth-httplib2 = ">=0.2,<1"
+# Playwright is the ui_mode driver: GoogleDocsTarget(mode="ui_mode")
+# delegates to advtest_ext.adapters.google_docs.ui_mode, which drives
+# a real Chromium against docs.google.com. Optional because the
+# in-session test path uses mocks; the demo path requires a
+# `poetry install --extras ui_mode` plus a one-time
+# `playwright install chromium`.
+playwright = { version = ">=1.49,<2", optional = true }
+# PyRIT (the upstream this project extends). Only consumed as a
+# TYPE_CHECKING import in document/target.py (PromptTarget type hint) and
+# for optional interop — nothing in advtest_ext imports it at runtime, so
+# it stays an OPTIONAL extra sourced straight from upstream. Default
+# installs do NOT pull it; `poetry install --extras pyrit` does.
+pyrit = { git = "https://github.com/microsoft/PyRIT.git", optional = true }
+
+[tool.poetry.extras]
+openai = ["openai"]
+gemini = ["google-genai"]
+pdf = ["weasyprint"]
+ui_mode = ["playwright"]
+pyrit = ["pyrit"]
+all = ["openai", "google-genai", "weasyprint", "playwright"]
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8,<10"
+pytest-asyncio = ">=0.23,<2"
+pytest-cov = ">=5,<7"
+respx = ">=0.21,<1"
+ruff = ">=0.6,<1"
+mypy = ">=1.10,<2"
+pre-commit = ">=3.7,<5"
+types-PyYAML = ">=6"
+
+[tool.poetry.scripts]
+advtest = "advtest_ext.cli:main"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
+
+# ----- pytest -----
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["--strict-markers", "-ra"]
+markers = [
+    "integration: requires real external API access (paid providers, vLLM server, etc.)",
+    "gpu: requires local GPU for model inference",
+]
+
+# ----- ruff -----
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["advtest_ext", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "RUF"]
+ignore = ["E501"]  # line length is enforced by formatter
+
+[tool.ruff.lint.isort]
+# Pin first-party explicitly so ruff produces the same import-block
+# layout whether it's invoked from advtest_ext/ (poetry run) or from
+# repo root (pre-commit). Without this, ruff infers from cwd and the
+# two contexts disagree on whether advtest_ext.* is first or third
+# party — causing autofix loops on commit.
+known-first-party = ["advtest_ext"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+# ----- mypy -----
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+# Default file set when invoked from advtest_ext/. From repo root,
+# pre-commit passes positional file args (which override `files` per
+# mypy docs), so this only kicks in for direct `poetry run mypy` use.
+files = ["advtest_ext", "tests"]
+# Don't follow imports into PyRIT internals. target.py has a
+# TYPE_CHECKING import of pyrit.prompt_target so concrete subclasses
+# can wrap a real PromptTarget; we don't want mypy crawling 80+
+# upstream files (and reporting errors against upstream's own
+# typing choices) every time we type-check our extension.
+exclude = ["^pyrit/"]
+
+[[tool.mypy.overrides]]
+module = "pyrit.*"
+follow_imports = "skip"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false

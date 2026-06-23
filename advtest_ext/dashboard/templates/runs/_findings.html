@@ -1,0 +1,56 @@
+{# Top-findings grid. Self-polls every 3 s while the run is in
+   flight. The wrapper element is always rendered (even when there
+   are no findings yet) so HTMX has a stable target to swap into. #}
+<section id="run-findings"
+         {% if not run.finished_at %}
+         hx-get="/runs/{{ run.id }}/_findings"
+         hx-trigger="every 3s"
+         hx-swap="outerHTML"
+         {% endif %}>
+  {% if top_findings %}
+  <div class="section-head">
+    <h2>Top findings</h2>
+    <a class="muted" href="/findings?run_id={{ run.id }}">View all {{ findings|length }} →</a>
+  </div>
+  <div class="finding-grid">
+    {% for f in top_findings %}
+    {% set t = f.trace %}
+    {% set score = t.judge_scores[0].score if t and t.judge_scores else 0.0 %}
+    {% set reasoning = t.judge_scores[0].reasoning if t and t.judge_scores else '' %}
+    <a class="finding-card" href="/traces/{{ t.id }}">
+      <div class="finding-card-head">
+        <div>
+          <div class="finding-card-tech">{{ t.technique_id or 'no technique' }}</div>
+          <div class="finding-card-behavior">{{ t.behavior_id }}</div>
+        </div>
+        <div class="finding-score">
+          <div class="finding-score-num">{{ '%.2f'|format(score) }}</div>
+          <span class="pill {{ t.verdict or 'refused' }}">{{ t.verdict or '-' }}</span>
+        </div>
+      </div>
+      <div class="finding-flow">
+        <div class="finding-flow-row">
+          <div class="finding-flow-label">PROMPT</div>
+          <div class="finding-flow-text">{{ (t.raw_request or '')[:240] }}{% if t.raw_request and t.raw_request|length > 240 %}…{% endif %}</div>
+        </div>
+        <div class="finding-flow-row">
+          <div class="finding-flow-label finding-flow-label-out">RESPONSE</div>
+          {% set full = full_responses.get(t.id) if full_responses else None %}
+          <div class="finding-flow-text" style="white-space: pre-wrap; max-height: 24em; overflow-y: auto;">{{ full or t.raw_response or '' }}</div>
+        </div>
+      </div>
+      {% if reasoning %}
+      <div class="finding-judge">
+        <span class="finding-judge-label">JUDGE</span> {{ reasoning[:200] }}{% if reasoning|length > 200 %}…{% endif %}
+      </div>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% elif not run.finished_at %}
+  <div class="section-head">
+    <h2>Top findings</h2>
+    <span class="muted">Waiting for a successful attack…</span>
+  </div>
+  {% endif %}
+</section>

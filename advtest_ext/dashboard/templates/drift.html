@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Fission — Drift{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Drift detection</h1>
+  <p class="sub">Workspace AI is a moving target. Fission tracks two kinds of
+     drift: the <strong>attacker</strong> wandering off the attack mechanism
+     mid-conversation, and the <strong>product surface</strong> shifting
+     under a run. A static, API-only harness handles neither.</p>
+</div>
+
+{% if d.total == 0 %}
+<div class="empty-state">
+  <div class="big">No drift events recorded yet</div>
+  Drift events are emitted by the adaptive attacks (attacker-goal drift, via the
+  per-turn intent check) and the UI adapter (platform/UI recovery). Run an
+  adaptive <code>tap_crescendo</code> attack against the live UI and they appear here.
+</div>
+{% else %}
+
+<div class="metric-grid">
+  <div class="metric is-drift">
+    <div class="label">Total drift events</div>
+    <div class="value">{{ d.total }}</div>
+    <div class="sub">across {{ d.runs_with_drift }} run(s)</div>
+  </div>
+  <div class="metric">
+    <div class="label">Attacker-goal drift</div>
+    <div class="value">{{ d.attacker_goal }}</div>
+    <div class="sub">{{ d.pruned }} branch(es) pruned off-mechanism</div>
+  </div>
+  <div class="metric is-good">
+    <div class="label">Platform / UI drift</div>
+    <div class="value">{{ d.platform_ui }}</div>
+    <div class="sub">{{ d.recovered }} recovered in-Run</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Attacker-goal drift</h2>
+    <p class="card-hint">The attacker LLM is told to escalate freely; left
+      unchecked it softens its own objective or drops the injection mechanism.
+      A per-turn intent check (separate from the success judge) flags
+      off-mechanism turns and prunes a branch after repeated drift — TAP's
+      off-topic prune, lifted to the conversation level.</p>
+    <div class="sev-row">
+      <span class="sev-name">Off-mech</span>
+      <span class="track"><span class="fill med"
+        style="width: {{ (d.by_kind.get('off_mechanism', 0) / d.total * 100) | round(1) }}%"></span></span>
+      <span class="n">{{ d.by_kind.get('off_mechanism', 0) }}</span>
+    </div>
+    <div class="sev-row">
+      <span class="sev-name">Pruned</span>
+      <span class="track"><span class="fill critical"
+        style="width: {{ (d.by_kind.get('pruned', 0) / d.total * 100) | round(1) }}%"></span></span>
+      <span class="n">{{ d.by_kind.get('pruned', 0) }}</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Platform / UI drift</h2>
+    <p class="card-hint">The deployed product moves: the side panel doesn't
+      mount, a "Resolve suggestions" modal blocks the composer, a streamed
+      reply renders late. The Replayer's observe–verify–re-act loop absorbs
+      these in-Run so a UI change slows a run rather than breaking it.</p>
+    {% for kind, label in [('recovered','Re-orient / retry'), ('dialog_cleared','Dialog cleared'), ('capture_retry','Capture retry')] %}
+    <div class="sev-row">
+      <span class="sev-name" style="width: 110px">{{ label }}</span>
+      <span class="track"><span class="fill low"
+        style="width: {{ (d.by_kind.get(kind, 0) / d.total * 100) | round(1) }}%"></span></span>
+      <span class="n">{{ d.by_kind.get(kind, 0) }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Drift event log</h2>
+  <p class="card-hint">Most recent first. Each event links to the trace where it fired.</p>
+  <table>
+    <thead><tr><th>Scope</th><th>Event</th><th>Detail</th><th>Node / turn</th><th>Run</th></tr></thead>
+    <tbody>
+      {% for e in d.events[:100] %}
+      <tr>
+        <td>
+          {% if e.scope == 'attacker_goal' %}
+          <span class="pill" style="background:#ede9fe;color:#6d28d9">attacker-goal</span>
+          {% else %}
+          <span class="pill" style="background:#dbeafe;color:#1d4ed8">platform/UI</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if e.kind == 'pruned' %}<span class="pill error">{{ e.kind }}</span>
+          {% elif e.kind == 'off_mechanism' %}<span class="pill partial">{{ e.kind }}</span>
+          {% else %}<span class="pill success">{{ e.kind }}</span>{% endif %}
+        </td>
+        <td class="muted">{{ e.detail }}</td>
+        <td><code>{{ e.node_id or '—' }}</code>{% if e.turn %} · t{{ e.turn }}{% endif %}</td>
+        <td><a href="/traces/{{ e.trace_id }}"><code>{{ e.run_id[:12] }}</code></a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endif %}
+{% endblock %}

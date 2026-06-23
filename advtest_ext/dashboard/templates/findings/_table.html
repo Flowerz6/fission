@@ -1,0 +1,46 @@
+{% if findings %}
+<table>
+  <thead>
+    <tr>
+      <th>Severity</th><th>Title</th><th>Run</th>
+      <th>Behaviour</th><th>Score</th><th>Promoted</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in findings %}
+    {%- set scores = f.trace.judge_scores if f.trace else [] -%}
+    {%- set top_score = (scores | map(attribute='score') | max) if scores else None -%}
+    {%- if top_score is not none and top_score >= 0.7 -%}
+      {%- set score_class = 'score-hot' -%}
+    {%- elif top_score is not none and top_score >= 0.3 -%}
+      {%- set score_class = 'score-warm' -%}
+    {%- else -%}
+      {%- set score_class = 'score-cool' -%}
+    {%- endif -%}
+    <tr>
+      <td><span class="pill severity-{{ f.severity }}">{{ f.severity }}</span></td>
+      <td><a href="/findings/{{ f.id }}">{{ f.title or '(untitled)' }}</a></td>
+      <td><a href="/runs/{{ f.run_id }}">{{ f.run_id }}</a></td>
+      <td>{{ f.trace.behavior_id }}</td>
+      <td>
+        {% if top_score is not none %}
+        <span class="score-cell {{ score_class }}">{{ '%.2f'|format(top_score) }}</span>
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
+      </td>
+      <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>
+        {% if f.replay_bundle_path %}
+        <a href="/findings/{{ f.id }}/replay">replay.zip</a>
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No findings match this filter.</p>
+{% endif %}

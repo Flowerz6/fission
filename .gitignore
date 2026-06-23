@@ -1,0 +1,53 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# ---- Tooling caches ----
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- Secrets / local env ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+client_secret*.json
+service_account*.json
+token*.json
+
+# ---- Run artifacts & data (never commit) ----
+out/
+**/out/
+*.db
+*.db.backup
+*.sqlite
+*.sqlite3
+*.jsonl
+
+# ---- Generated reports / media (regenerable) ----
+*.pdf
+*.png
+*.mp4
+*.zip
+!docs/**/*.png
+
+# ---- Playwright ----
+.advtest/
+playwright-profile/
+**/playwright-profile/
+
+# ---- OS / editor ----
+.DS_Store
+*.swp
+.idea/
+.vscode/

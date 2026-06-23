@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}finding {{ finding.id }} · advtest{% endblock %}
+{% block content %}
+<h1>
+  <span class="pill severity-{{ finding.severity }}">{{ finding.severity }}</span>
+  {{ finding.title or '(untitled)' }}
+</h1>
+<p class="muted">
+  Finding <code>{{ finding.id }}</code> in run
+  <a href="/runs/{{ finding.run_id }}">{{ finding.run_id }}</a>
+  · Trace <code>{{ finding.trace_id }}</code>
+  · Promoted {{ finding.promoted_at.strftime('%Y-%m-%d %H:%M') }}
+</p>
+
+{% if finding.replay_bundle_path %}
+<p><a href="/findings/{{ finding.id }}/replay">⤓ Download replay bundle (ZIP)</a></p>
+{% endif %}
+<p>
+  <a href="/findings/{{ finding.id }}/report.docx">⤓ Download report (DOCX)</a>
+  <span class="muted">— mirrors the Google Red Team Report shape; operator-editable.</span>
+</p>
+
+{% if finding.description %}
+<h2>Description</h2>
+<p>{{ finding.description }}</p>
+{% endif %}
+
+<h2>Trace summary</h2>
+<table>
+  <tr><th>Behaviour</th><td>{{ trace.behavior_id }}</td></tr>
+  <tr><th>Attack</th><td>{{ trace.attack_name }}</td></tr>
+  <tr><th>Technique</th><td>{{ trace.technique_id or '-' }}</td></tr>
+  <tr><th>Target</th><td>{{ trace.target_name }}</td></tr>
+  <tr><th>Verdict</th><td><span class="pill {{ trace.verdict or 'refused' }}">{{ trace.verdict or '-' }}</span></td></tr>
+  <tr><th>Depth</th><td>{{ trace.depth }}</td></tr>
+  <tr><th>Parent</th><td>{% if trace.parent_id %}<a href="/traces/{{ trace.parent_id }}"><code>{{ trace.parent_id }}</code></a>{% else %}—{% endif %}</td></tr>
+  <tr><th>Full trace</th><td><a href="/traces/{{ trace.id }}"><code>{{ trace.id }}</code></a></td></tr>
+</table>
+
+{% from "_doc_content_panel.html" import doc_content_panel, attacker_reasoning_block %}
+{{ doc_content_panel(trace) }}
+{{ attacker_reasoning_block(trace) }}
+
+<h2>User prompt typed in the Gemini side panel</h2>
+<pre>{{ trace.raw_request }}</pre>
+
+<h2>Gemini's response</h2>
+{% if full_response %}
+<pre class="full-response" style="white-space: pre-wrap;">{{ full_response }}</pre>
+<p class="muted" style="font-size: 0.85em;">
+  Source: intercepted Workspace Gemini API stream (longest prose
+  fragment across all streamGenerate responses captured for this
+  trace). The rendered side-panel text below may differ — it's
+  whatever Playwright managed to read before the response finished
+  streaming.
+</p>
+<details style="margin-top: 0.5em;">
+  <summary class="muted">Rendered side-panel capture (often truncated; for comparison)</summary>
+  <pre style="white-space: pre-wrap;">{{ trace.raw_response }}</pre>
+</details>
+{% else %}
+<pre style="white-space: pre-wrap;">{{ trace.raw_response }}</pre>
+<p class="muted" style="font-size: 0.85em;">
+  Source: rendered side-panel text only. No intercepted traffic
+  captured for this trace (api_mode, interception disabled, or
+  pre-2026-05-23 run). May be truncated mid-stream.
+</p>
+{% endif %}
+
+<h2>Judge scores</h2>
+<div class="judge-blurb">
+  <strong>Score direction:</strong> these are <em>compliance</em> scores, not <em>refusal</em> scores.
+  <strong>0.00</strong> means the model refused the attack (good for the model, bad for the attacker).
+  <strong>1.00</strong> means the model fully complied (attack landed). The judge name <code>strong_reject</code>
+  refers to the <a href="https://arxiv.org/abs/2402.10260" target="_blank" rel="noopener">StrongREJECT rubric</a>
+  used to compute the score — it does <em>not</em> mean the attack was rejected.
+</div>
+{% if trace.judge_scores %}
+<table>
+  <thead><tr><th>Judge (rubric)</th><th>Compliance</th><th>Flagged</th><th>Reasoning</th></tr></thead>
+  <tbody>
+    {% for js in trace.judge_scores %}
+    {% if js.score >= 0.6 %}{% set tone = 'hot' %}{% elif js.score >= 0.2 %}{% set tone = 'warm' %}{% else %}{% set tone = 'cool' %}{% endif %}
+    <tr>
+      <td>
+        {% if js.judge_name == 'strong_reject' %}StrongREJECT rubric{% else %}{{ js.judge_name }}{% endif %}
+      </td>
+      <td><span class="score-cell score-{{ tone }}">{{ '%.3f'|format(js.score) }}</span></td>
+      <td>{{ 'yes' if js.flagged else 'no' }}</td>
+      <td class="muted">{{ js.reasoning }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No judge scores recorded for this trace.</p>
+{% endif %}
+{% endblock %}
