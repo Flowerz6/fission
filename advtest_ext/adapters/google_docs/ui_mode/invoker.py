@@ -32,6 +32,7 @@ demo audience can follow each step on screen.
 from __future__ import annotations
 
 import asyncio
+import re
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -88,6 +89,24 @@ _DOC_BODY_SELECTORS = (
 
 def _doc_url(document_id: str) -> str:
     return f"https://docs.google.com/document/d/{document_id}"
+
+
+# Pull the doc id out of a Docs URL's ``/document/d/<id>`` path segment so we
+# can compare it for EQUALITY (not substring). The id stops at the next
+# ``/``, ``?`` or ``#``.
+_DOC_ID_IN_URL = re.compile(r"/document/d/([^/?#]+)")
+
+
+def _url_is_on_doc(current_url: str, document_id: str) -> bool:
+    """True iff ``current_url`` is already viewing ``document_id``.
+
+    Compares the URL's path doc-id segment for equality. A plain
+    ``document_id in current_url`` substring test would false-positive when the
+    id rides in a query/fragment or is a prefix of a different doc's id —
+    skipping navigation and leaving the session on the WRONG document.
+    """
+    match = _DOC_ID_IN_URL.search(current_url)
+    return match is not None and match.group(1) == document_id
 
 
 async def _panel_is_open(page: Any) -> bool:
@@ -792,11 +811,12 @@ async def ui_mode_invoke(
                 # closes the Gemini side panel and wipes any
                 # in-flight conversation, which kills multi-turn
                 # Recipe chains (V3/V4 progressive-disclosure).
-                # ``document_id in page.url`` is the right check:
-                # the URL carries suffixes (``?usp=...``, ``#...``)
-                # but the doc id is always in the path.
+                # Compare the URL's /document/d/<id> segment for EQUALITY
+                # (see _url_is_on_doc): a substring test would wrongly skip
+                # navigation when the id appears in a query/fragment or as a
+                # prefix of another doc's id, stranding us on the wrong doc.
                 current_url = getattr(page, "url", "") or ""
-                if document_id not in current_url:
+                if not _url_is_on_doc(current_url, document_id):
                     await page.goto(_doc_url(document_id), timeout=timeout)
                     # Wait for the Doc body to actually paint before
                     # doing anything else. Skipping this races the
