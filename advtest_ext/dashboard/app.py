@@ -47,13 +47,7 @@ from sqlalchemy.orm import Session
 
 from advtest_ext.dashboard.registry import list_adapters, list_attacks
 from advtest_ext.dashboard.tree import (
-    ascii_tree_lines as _ascii_tree_lines,  # noqa: F401 — kept aliased for backward compat with tests
-)
-from advtest_ext.dashboard.tree import (
     build_phase_forests as _build_phase_forests,
-)
-from advtest_ext.dashboard.tree import (
-    build_tree_forest as _build_tree_forest,  # noqa: F401 — kept for tests/back-compat
 )
 from advtest_ext.dashboard.tree import (
     collapse_conversations as _collapse_conversations,
