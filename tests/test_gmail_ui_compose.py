@@ -80,6 +80,11 @@ class _FakeKeyboard:
     async def type(self, text: str, **kwargs: Any) -> None:
         self._page.calls.append(("keyboard.type", text))
 
+    async def press(self, key: str, **kwargs: Any) -> None:
+        # compose.py presses Enter after the recipient to commit the
+        # peoplekit chip and close the autocomplete dropdown.
+        self._page.calls.append(("keyboard.press", key))
+
 
 class _FakePage:
     """Minimal Page double — just records the Compose call sequence."""
