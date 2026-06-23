@@ -242,7 +242,7 @@ def build_tree_forest(traces: list[object]) -> list[dict[str, object]]:
     return forest
 
 
-def _trace_phase(trace: object) -> dict[str, object] | None:
+def _trace_phase(trace: object) -> dict[str, Any] | None:
     """Read a trace's phase tag from ``extra_metadata['phase']``.
     Returns ``None`` for single-phase runs (no tag)."""
     meta = getattr(trace, "extra_metadata", None)
