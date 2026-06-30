@@ -169,6 +169,37 @@ class TextBoxOffscreen(HidingTechniqueImpl):
         return out
 
 
+class HiddenSpanCarrier(HidingTechniqueImpl):
+    """OpenRAG-Soc 'hidden span' carrier: payload inside a display:none span.
+
+    Distinct from white-text — the text is removed from the visual flow
+    entirely rather than rendered same-colour, so a detector keyed on
+    colour/contrast misses it while the model still ingests it."""
+
+    id: ClassVar[str] = "hidden_span"
+    name: ClassVar[str] = "CSS hidden span (display:none)"
+    description: ClassVar[str] = (
+        "Add a TextBlock whose formatting sets css_display='none' so an HTML "
+        "target renders it inside a display:none span — gone from the visual "
+        "flow, still present in the DOM / model context."
+    )
+    references: ClassVar[list[str]] = ["openrag_soc_2026"]
+    attack_class: ClassVar[AttackClass] = "white_text"
+    applies_to: ClassVar[list[str]] = ["body_blocks"]
+    requires_capability: ClassVar[list[str]] = ["formatting"]
+
+    def apply(self, document: AbstractDocument, payload: Payload) -> AbstractDocument:
+        out = _clone(document)
+        out.body_blocks.append(
+            TextBlock(
+                text=payload.text,
+                formatting=Formatting(css_display="none", hidden=True),
+                hidden=self._marker(payload),
+            )
+        )
+        return out
+
+
 # ======================================================================
 # Invisible-character encoding
 # ======================================================================
@@ -457,6 +488,35 @@ class ImageAltText(HidingTechniqueImpl):
                 src="https://example-org.com/q2-chart.png",
                 alt_text=payload.text,
                 caption="Q2 performance chart",
+                hidden=self._marker(payload),
+            )
+        )
+        return out
+
+
+class AriaLabelCarrier(HidingTechniqueImpl):
+    """OpenRAG-Soc 'ARIA' carrier: payload in an aria-label attribute on a
+    benign visible element. Unseen by a sighted reader; surfaced to the
+    model (and screen readers) via the accessibility tree."""
+
+    id: ClassVar[str] = "aria_label"
+    name: ClassVar[str] = "ARIA-label payload"
+    description: ClassVar[str] = (
+        "Add a TextBlock with benign visible text whose formatting sets "
+        "aria_label=<payload>, so an HTML target emits aria-label='<payload>' "
+        "— read by the model, invisible to a sighted reader."
+    )
+    references: ClassVar[list[str]] = ["openrag_soc_2026"]
+    attack_class: ClassVar[AttackClass] = "structural"
+    applies_to: ClassVar[list[str]] = ["body_blocks"]
+    requires_capability: ClassVar[list[str]] = ["formatting"]
+
+    def apply(self, document: AbstractDocument, payload: Payload) -> AbstractDocument:
+        out = _clone(document)
+        out.body_blocks.append(
+            TextBlock(
+                text="Q2 summary",
+                formatting=Formatting(aria_label=payload.text),
                 hidden=self._marker(payload),
             )
         )
@@ -863,7 +923,7 @@ class ImageRenderingExfil(HidingTechniqueImpl):
 
 
 def build_default_techniques() -> dict[str, HidingTechniqueImpl]:
-    """Build the canonical 25-technique registry. Returns a fresh
+    """Build the canonical 27-technique registry. Returns a fresh
     dict on each call so callers can mutate without poisoning a
     module-level shared registry."""
     techniques: list[HidingTechniqueImpl] = [
@@ -871,6 +931,7 @@ def build_default_techniques() -> dict[str, HidingTechniqueImpl]:
         TinyFont(),
         FontColorNearBackground(),
         TextBoxOffscreen(),
+        HiddenSpanCarrier(),
         ZeroWidthChars(),
         UnicodeTagChars(),
         UnicodeHomoglyph(),
@@ -881,6 +942,7 @@ def build_default_techniques() -> dict[str, HidingTechniqueImpl]:
         SuggestedEditCarrier(),
         TableCellHidden(),
         ImageAltText(),
+        AriaLabelCarrier(),
         DocumentMetadata(),
         CitationBlockCarrier(),
         TableOfContentsCarrier(),
@@ -897,6 +959,7 @@ def build_default_techniques() -> dict[str, HidingTechniqueImpl]:
 
 
 __all__ = [
+    "AriaLabelCarrier",
     "CitationBlockCarrier",
     "CommentReplyThread",
     "CommentThread",
@@ -906,6 +969,7 @@ __all__ = [
     "FontColorNearBackground",
     "FootnoteCarrier",
     "HeaderFooterCarrier",
+    "HiddenSpanCarrier",
     "ImageAltText",
     "ImageRenderingExfil",
     "LinkedContentCarrier",

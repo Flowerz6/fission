@@ -115,10 +115,10 @@ def _walk_collect_techniques(doc: AbstractDocument) -> set[str]:
 # ----------------------------------------------------------------------
 
 
-def test_registry_has_exactly_25_techniques() -> None:
+def test_registry_has_exactly_27_techniques() -> None:
     registry = build_default_techniques()
-    assert len(registry) == 25, (
-        f"expected 25 techniques (FOUNDATIONS.md catalogue), got {len(registry)}"
+    assert len(registry) == 27, (
+        f"expected 27 techniques (FOUNDATIONS.md catalogue), got {len(registry)}"
     )
 
 
@@ -149,6 +149,8 @@ def test_registry_ids_match_canonical_set() -> None:
         "comment_reply_thread",
         "font_color_near_background",
         "unicode_homoglyph",
+        "hidden_span",
+        "aria_label",
     }
     assert set(build_default_techniques().keys()) == expected
 
@@ -541,8 +543,8 @@ def test_indirect_injection_filters_techniques_by_target_caps() -> None:
         t.id for t in build_default_techniques().values() if technique_supported(t, caps)
     ]
     assert "tool_format_mimicry" not in supported_ids
-    # Only tool_format_mimicry requires tool_use among the default 25.
-    assert len(supported_ids) == 24
+    # Only tool_format_mimicry requires tool_use among the default 27.
+    assert len(supported_ids) == 26
 
 
 async def test_indirect_injection_yields_expected_count() -> None:
@@ -555,7 +557,7 @@ async def test_indirect_injection_yields_expected_count() -> None:
         attempts.append(a)
 
     n_payloads = len(_payloads_for_behavior(behavior.id))
-    n_techniques = 24  # tool_format_mimicry filtered (StubDocumentTarget has tool_use=False)
+    n_techniques = 26  # 27 default - tool_format_mimicry (StubDocumentTarget has tool_use=False)
     assert n_payloads >= 1
     assert len(attempts) == n_payloads * n_techniques
 
