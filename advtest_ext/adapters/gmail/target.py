@@ -376,10 +376,16 @@ class GmailTarget(DocumentTarget):
         if not text:
             return ""
         style = self._formatting_to_inline_style(block.formatting)
+        # OpenRAG-Soc ARIA carrier: an aria-label attribute carries the
+        # payload (invisible to a sighted reader, read by the model).
+        aria = ""
+        fmt = block.formatting
+        if fmt is not None and fmt.aria_label:
+            aria = f' aria-label="{self._escape(fmt.aria_label)}"'
         if block.type == "heading":
             level = max(1, min(6, getattr(block, "level", 1) or 1))
-            return f'<h{level} style="{style}">{self._escape(text)}</h{level}>'
-        return f'<p style="{style}">{self._escape(text)}</p>'
+            return f'<h{level} style="{style}"{aria}>{self._escape(text)}</h{level}>'
+        return f'<p style="{style}"{aria}>{self._escape(text)}</p>'
 
     def _link_to_html(self, link: Any) -> str:
         url = self._escape(link.url)
@@ -402,6 +408,11 @@ class GmailTarget(DocumentTarget):
             bits.append(f"font-size:{formatting.font_size}pt")
         if formatting.font_family:
             bits.append(f"font-family:{formatting.font_family}")
+        # OpenRAG-Soc hidden-span carrier: display:none removes the text from
+        # the visual flow entirely (distinct from white-text, which stays in
+        # the DOM as same-colour text).
+        if formatting.css_display:
+            bits.append(f"display:{formatting.css_display}")
         return ";".join(bits)
 
     @staticmethod
