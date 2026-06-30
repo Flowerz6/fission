@@ -468,6 +468,22 @@ class AsrBreakdownRow(BaseModel):
     asr: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class CarrierAsrRow(BaseModel):
+    """Per-carrier ASR rollup: one row per hiding technique (carrier),
+    aggregated across all attacks and behaviours in a run. ``attack_class``
+    is the carrier family (white_text / structural / zero_width / encoded /
+    role_mimicry / rendering_exfil). This is the OpenRAG-Soc 'which carrier
+    actually lands' view — direct-prompt traces (no technique) are excluded."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    carrier_id: str
+    attack_class: str | None = None
+    successes: int = 0
+    attempts: int = 0
+    asr: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class SummaryStats(BaseModel):
     """Aggregate metrics for a run. ``judge_agreement_rates`` is keyed
     by ``"judgeA|judgeB"`` (sorted alphabetically) so the dict is
@@ -480,6 +496,8 @@ class SummaryStats(BaseModel):
     successful_traces: int = 0
     overall_asr: float = Field(default=0.0, ge=0.0, le=1.0)
     asr_breakdown: list[AsrBreakdownRow] = Field(default_factory=list)
+    # Per-carrier (hiding-technique) ASR, sorted most-effective first.
+    asr_by_carrier: list[CarrierAsrRow] = Field(default_factory=list)
     judge_agreement_rates: dict[str, float] = Field(default_factory=dict)
 
 
@@ -526,6 +544,7 @@ __all__ = [
     "Behavior",
     "BehaviorCategory",
     "Budget",
+    "CarrierAsrRow",
     "HidingTechnique",
     "JudgeScore",
     "Payload",

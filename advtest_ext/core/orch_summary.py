@@ -5,7 +5,12 @@ re-exported there for back-compat.
 
 from __future__ import annotations
 
-from advtest_ext.core.models import AsrBreakdownRow, AttackTrace, SummaryStats
+from advtest_ext.core.models import (
+    AsrBreakdownRow,
+    AttackTrace,
+    CarrierAsrRow,
+    SummaryStats,
+)
 
 
 def summarise(traces: list[AttackTrace]) -> SummaryStats:
@@ -20,6 +25,7 @@ def summarise(traces: list[AttackTrace]) -> SummaryStats:
     successes = 0
     counted = 0  # non-error attempts
     by_judge: dict[str, list[bool]] = {}
+    carriers: dict[str, CarrierAsrRow] = {}  # per hiding-technique rollup
     for trace in traces:
         is_error = trace.verdict == "error"
         is_success = trace.verdict == "success"
@@ -40,12 +46,30 @@ def summarise(traces: list[AttackTrace]) -> SummaryStats:
             if is_success:
                 row.successes += 1
                 successes += 1
+            # Per-carrier rollup — only traces that actually used a hiding
+            # technique (direct-prompt attacks have no carrier).
+            if trace.technique is not None:
+                crow = carriers.setdefault(
+                    trace.technique.id,
+                    CarrierAsrRow(
+                        carrier_id=trace.technique.id,
+                        attack_class=trace.technique.attack_class,
+                    ),
+                )
+                crow.attempts += 1
+                if is_success:
+                    crow.successes += 1
         for s in trace.judge_scores:
             by_judge.setdefault(s.judge_name, []).append(s.flagged)
 
     for row in rows.values():
         row.asr = (row.successes / row.attempts) if row.attempts else 0.0
     overall = (successes / counted) if counted else 0.0
+
+    for crow in carriers.values():
+        crow.asr = (crow.successes / crow.attempts) if crow.attempts else 0.0
+    # Most-effective carrier first; tie-break by id for a stable order.
+    carrier_rows = sorted(carriers.values(), key=lambda c: (-c.asr, c.carrier_id))
 
     # Pairwise judge agreement on flagged-vs-not.
     agreement: dict[str, float] = {}
@@ -64,5 +88,6 @@ def summarise(traces: list[AttackTrace]) -> SummaryStats:
         successful_traces=successes,
         overall_asr=overall,
         asr_breakdown=list(rows.values()),
+        asr_by_carrier=carrier_rows,
         judge_agreement_rates=agreement,
     )
