@@ -675,6 +675,31 @@ async def test_gmail_render_sends_message_and_replies(
     assert "white_text" in rendered["applied_techniques"]
 
 
+def test_gmail_renders_openrag_carriers_distinctly() -> None:
+    """The two OpenRAG-Soc carriers must render as distinct HTML: hidden_span
+    as a display:none span, aria_label as an aria-label attribute on visible
+    benign text — both carrying the payload, neither shown to a sighted reader."""
+    from advtest_ext.attacks.indirect_injection.techniques import (
+        AriaLabelCarrier,
+        HiddenSpanCarrier,
+    )
+    from advtest_ext.core.models import Payload
+    from advtest_ext.document import AbstractDocument
+
+    target = GmailTarget(gemini_provider=_ScriptedGemini())
+    payload = Payload(id="p1", text="SECRET-INJECT-XYZ", modality="text", generator_name="t")
+    base = AbstractDocument(id="d", title="t", body_blocks=[])
+
+    span_html = target._build_html_body(HiddenSpanCarrier().apply(base, payload))
+    assert "display:none" in span_html
+    assert "SECRET-INJECT-XYZ" in span_html
+
+    aria_html = target._build_html_body(AriaLabelCarrier().apply(base, payload))
+    assert 'aria-label="SECRET-INJECT-XYZ"' in aria_html
+    # The visible text is the benign cover, not the payload.
+    assert ">Q2 summary<" in aria_html
+
+
 async def test_gmail_invoke_linearises_thread_for_gemini(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -69,6 +69,13 @@ class Formatting(BaseModel):
     hidden: bool = False
     position: Position | None = None
     language: str | None = None
+    # OpenRAG-Soc web-native carriers (emitted by HTML-rendering targets).
+    # ``css_display`` adds ``display:<value>`` inline style (e.g. "none") for
+    # the hidden-span carrier; ``aria_label`` adds an aria-label attribute
+    # carrying the payload for the ARIA carrier. Both are invisible to a
+    # sighted reader but ingested by the model. None → not emitted.
+    css_display: str | None = None
+    aria_label: str | None = None
 
 
 class _BlockBase(BaseModel):
