@@ -569,6 +569,58 @@ def test_summarise_excludes_error_traces_from_asr() -> None:
     assert stats.overall_asr == pytest.approx(2 / 3)
 
 
+def test_summarise_rolls_up_asr_per_carrier() -> None:
+    from advtest_ext.core.models import AttackTrace, HidingTechnique, Verdict
+
+    payload = Payload(id="p", text="x", modality="text", generator_name="ii")
+
+    def _tech(tid: str, ac: str) -> HidingTechnique:
+        return HidingTechnique(
+            id=tid,
+            name=tid,
+            description="",
+            references=[],
+            attack_class=ac,  # type: ignore[arg-type]
+            applies_to=[],
+            requires_capability=[],
+        )
+
+    def _trace(i: int, tech: HidingTechnique | None, v: Verdict) -> AttackTrace:
+        return AttackTrace(
+            id=f"t{i}",
+            run_id="r",
+            behavior_id="b1",
+            payload=payload,
+            technique=tech,
+            target_name="stub",
+            raw_request="x",
+            raw_response="y",
+            verdict=v,
+        )
+
+    wt = _tech("white_text", "white_text")
+    hs = _tech("hidden_span", "white_text")
+    traces = [
+        _trace(0, wt, "success"),
+        _trace(1, wt, "refused"),
+        _trace(2, hs, "success"),
+        _trace(3, hs, "error"),  # error → excluded from the denominator
+        _trace(4, None, "success"),  # direct prompt (no carrier) → not rolled up
+    ]
+    stats = summarise(traces)
+    by_id = {c.carrier_id: c for c in stats.asr_by_carrier}
+
+    assert set(by_id) == {"white_text", "hidden_span"}  # the None-technique trace is excluded
+    assert (by_id["white_text"].successes, by_id["white_text"].attempts) == (1, 2)
+    assert by_id["white_text"].asr == pytest.approx(0.5)
+    assert by_id["white_text"].attack_class == "white_text"
+    # the error trace is excluded → hidden_span counts 1 attempt, not 2
+    assert (by_id["hidden_span"].successes, by_id["hidden_span"].attempts) == (1, 1)
+    assert by_id["hidden_span"].asr == pytest.approx(1.0)
+    # most-effective carrier sorts first
+    assert stats.asr_by_carrier[0].carrier_id == "hidden_span"
+
+
 # ----------------------------------------------------------------------
 # Validation
 # ----------------------------------------------------------------------
