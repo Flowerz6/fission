@@ -93,6 +93,22 @@
     {{ findings|length }} attempts were promoted to findings.
   </p>
   {% include "_heatmap.html" %}
+  {% if summary.get('asr_by_carrier') %}
+  <h3>ASR by carrier (hiding technique)</h3>
+  <table class="heatmap">
+    <tr>
+      <th class="row">Carrier</th><th>Family</th><th>ASR</th><th>Successes / Attempts</th>
+    </tr>
+    {% for c in summary.get('asr_by_carrier', []) %}
+    <tr>
+      <td style="text-align:left">{{ c.carrier_id }}</td>
+      <td>{{ c.attack_class or '—' }}</td>
+      <td>{{ '%.2f'|format(c.asr) }}</td>
+      <td>{{ c.successes }} / {{ c.attempts }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
 </section>
 
 <section>
