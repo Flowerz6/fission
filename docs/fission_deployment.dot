@@ -1,0 +1,84 @@
+digraph FissionDeployment {
+  rankdir=TB;
+  graph [fontname="Helvetica", fontsize=18, labelloc="t",
+         label="Fission — Deployment Topology (continuous UI-mode red-team)",
+         fontcolor="#111111", splines=spline, nodesep=0.4, ranksep=0.7, pad=0.5, bgcolor="white"];
+  node  [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled", penwidth=1.2];
+  edge  [fontname="Helvetica", fontsize=9, color="#555555", arrowsize=0.8];
+
+  // ---------- Users ----------
+  subgraph cluster_users {
+    label="Users"; style="rounded,filled"; color="#1f6feb"; fillcolor="#eaf2ff"; fontcolor="#1f6feb"; penwidth=1.6;
+    ops    [label="Operators\n(red-team)", fillcolor="#cfe3ff", shape=oval];
+    google [label="Google\n(client)", fillcolor="#cfe3ff", shape=oval];
+  }
+
+  // ---------- App services ----------
+  subgraph cluster_app {
+    label="App services  (GCP)";
+    style="rounded,filled"; color="#8957e5"; fillcolor="#f5efff"; fontcolor="#8957e5"; penwidth=1.6;
+    dash  [label="Dashboard / API\n(FastAPI + auth)", fillcolor="#e7dbff", shape=component];
+    sched [label="Scheduler / control plane\ncoverage map · budget", fillcolor="#d8c4ff", shape=hexagon];
+    queue [label="Job queue\n(Redis)", fillcolor="#e7dbff", shape=cylinder];
+    sched -> queue [label="enqueue\nregression + frontier jobs"];
+  }
+  ops -> dash [label="operate / review"];
+  dash -> google [label="digest\nNEW·REGRESSED·FIXED", style=bold, color="#1a7f37"];
+
+  // ---------- Browser farm ----------
+  subgraph cluster_farm {
+    label="Browser farm  (UI-mode workers)";
+    style="rounded,filled"; color="#bc4c00"; fillcolor="#fff3ea"; fontcolor="#bc4c00"; penwidth=1.6;
+    w1 [label="Browser worker\nPlaywright + Chrome", fillcolor="#ffd9bd"];
+    w2 [label="Browser worker\nPlaywright + Chrome", fillcolor="#ffd9bd"];
+    wn [label="… × N", fillcolor="#ffe7d4", shape=box, style="rounded,filled,dashed"];
+    accts [label="Account / session pool\n(profiles · rotation · health)", fillcolor="#ffeede", shape=folder];
+    accts -> w1 [style=dashed, color="#bc4c00", dir=none];
+    accts -> w2 [style=dashed, color="#bc4c00", dir=none];
+  }
+  queue -> w1 [label="pull job"]; queue -> w2; queue -> wn;
+
+  // ---------- State ----------
+  subgraph cluster_state {
+    label="State  (managed)";
+    style="rounded,filled"; color="#57606a"; fillcolor="#f3f4f6"; fontcolor="#57606a"; penwidth=1.6;
+    pg    [label="Postgres\nruns · traces · findings\n· coverage map", fillcolor="#e2e5e9", shape=cylinder];
+    obj   [label="Object storage (GCS)\nreplay bundles · screenshots\n· intercepted JSONL", fillcolor="#e2e5e9", shape=cylinder];
+    vault [label="Secrets manager\nprovider keys · Google creds", fillcolor="#e2e5e9", shape=box3d];
+  }
+
+  // ---------- External ----------
+  subgraph cluster_ext {
+    label="External";
+    style="rounded,filled"; color="#1a7f37"; fillcolor="#eafbf0"; fontcolor="#1a7f37"; penwidth=1.6;
+    gemini [label="Google Workspace Gemini\nDocs · Gmail · Sheets\n(test tenants)", fillcolor="#c8f0d6", shape=component];
+    llms   [label="Attacker / Judge LLM APIs\n(Anthropic · Gemini)", fillcolor="#c8f0d6", shape=component];
+  }
+
+  // worker data flows
+  w1 -> gemini [label="drive side panel", color="#1a7f37"];
+  w2 -> gemini [color="#1a7f37"];
+  w1 -> llms   [label="attacker + judge", color="#1a7f37"];
+  w1 -> pg     [label="traces / verdicts"];
+  w2 -> pg;
+  w1 -> obj    [label="artifacts"];
+  w2 -> obj;
+
+  // dashboard + scheduler read/write state
+  dash  -> pg   [dir=both];
+  dash  -> obj  [label="serve replays"];
+  sched -> pg   [label="read coverage", dir=both];
+
+  // secrets
+  vault -> w1   [style=dashed, color="#57606a", label="creds"];
+  vault -> dash [style=dashed, color="#57606a"];
+
+  // ---------- Observability ----------
+  obs [label="Observability\nlogs · metrics · alerts\n(harness health · ASR trend\n· account health)",
+       fillcolor="#fff1b8", color="#b58b00", shape=note, penwidth=1.4];
+  w1   -> obs [style=dotted, color="#b58b00"];
+  sched-> obs [style=dotted, color="#b58b00"];
+  dash -> obs [style=dotted, color="#b58b00"];
+
+  { rank=same; pg; obj; vault; }
+}
