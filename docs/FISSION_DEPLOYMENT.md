@@ -110,8 +110,11 @@ Each is a small, independent branch. None blocks the others except where noted.
 - [ ] **`chore/dockerize`** — a Dockerfile with Python + Poetry + Playwright Chromium
       (`playwright install --with-deps chromium`); a `docker-compose.yml` for local
       dashboard+Postgres+Redis; `.dockerignore`.
-- [ ] **`feat/dashboard-auth`** — put the FastAPI dashboard behind auth (OIDC/Google SSO or a
-      reverse-proxy auth layer); no anonymous access to findings.
+- [x] **`feat/dashboard-auth`** — ✅ done (PR #14). Bearer-token gate on every route except
+      the probes/static, via `create_app(auth_token=…)` or env `ADVTEST_DASHBOARD_TOKEN`
+      (unset ⇒ open, dev/CI default); constant-time compare. For prod, prefer fronting with an
+      identity-aware proxy (GCP IAP / Cloud Run auth) — the token is the built-in fallback so
+      the dashboard is never anonymously exposed.
 - [ ] **`chore/secrets-config`** — remove creds from `.env`-in-image; load provider keys +
       Google creds from a secrets manager (GCP Secret Manager) at runtime; document the env
       contract.
