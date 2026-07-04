@@ -123,6 +123,20 @@ def empty_client() -> Iterator[TestClient]:
         yield c
 
 
+def test_healthz_liveness(empty_client: TestClient) -> None:
+    resp = empty_client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
+
+
+def test_readyz_reports_db_ok(empty_client: TestClient) -> None:
+    resp = empty_client.get("/readyz")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ready"
+    assert body["db"] == "ok"
+
+
 # ----------------------------------------------------------------------
 # Page-level smoke tests: every required URL returns 200
 # ----------------------------------------------------------------------

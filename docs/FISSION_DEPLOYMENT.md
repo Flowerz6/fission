@@ -115,8 +115,10 @@ Each is a small, independent branch. None blocks the others except where noted.
 - [ ] **`chore/secrets-config`** — remove creds from `.env`-in-image; load provider keys +
       Google creds from a secrets manager (GCP Secret Manager) at runtime; document the env
       contract.
-- [ ] **`feat/healthcheck-endpoints`** — `/healthz` + `/readyz` on the dashboard; a worker
-      liveness heartbeat row so the scheduler (Stage 3) can see dead workers.
+- [x] **`feat/healthcheck-endpoints`** — ✅ done (PR #13). Dashboard `/healthz` (liveness, no
+      deps) + `/readyz` (readiness — runs `SELECT 1`, returns 503 when the DB is unreachable so
+      a load balancer / k8s gate holds traffic). *Worker liveness heartbeat deferred to when
+      the worker service exists (Stage 2/3).*
 - [ ] **`chore/cd-pipeline`** — extend the GitHub Actions CI into CD: on merge to `main`, build
       + push the image (to Artifact Registry), deploy to a staging target.
 

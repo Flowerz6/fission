@@ -38,11 +38,13 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
+    JSONResponse,
     PlainTextResponse,
     Response,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from advtest_ext.dashboard.registry import list_adapters, list_attacks
@@ -161,6 +163,27 @@ def create_app(
     # ------------------------------------------------------------------
     # Routes
     # ------------------------------------------------------------------
+
+    @app.get("/healthz")
+    def healthz() -> dict[str, str]:
+        """Liveness probe: the process is up and serving. No dependencies —
+        a failing /healthz means the container should be restarted."""
+        return {"status": "ok"}
+
+    @app.get("/readyz")
+    def readyz() -> JSONResponse:
+        """Readiness probe: can we actually serve traffic? Checks database
+        connectivity so a load balancer / k8s readiness gate holds traffic
+        (503) while the DB is unreachable, instead of serving errors."""
+        try:
+            with factory() as session:
+                session.execute(text("SELECT 1"))
+        except Exception as exc:  # pragma: no cover - exercised via a broken engine
+            return JSONResponse(
+                {"status": "not_ready", "db": f"error: {type(exc).__name__}"},
+                status_code=503,
+            )
+        return JSONResponse({"status": "ready", "db": "ok"})
 
     @app.get("/", response_class=HTMLResponse)
     @app.get("/runs", response_class=HTMLResponse)
