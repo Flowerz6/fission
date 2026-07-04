@@ -137,6 +137,25 @@ def test_readyz_reports_db_ok(empty_client: TestClient) -> None:
     assert body["db"] == "ok"
 
 
+def test_dashboard_auth_token_gate() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    app = create_app(engine=engine, auth_token="s3cr3t")
+    with TestClient(app) as c:
+        # A normal route is gated: no header / wrong token → 401.
+        assert c.get("/runs").status_code == 401
+        assert c.get("/runs", headers={"Authorization": "Bearer nope"}).status_code == 401
+        # Correct bearer token → allowed.
+        assert c.get("/runs", headers={"Authorization": "Bearer s3cr3t"}).status_code == 200
+        # Probes stay open so the orchestrator / LB can reach them unauthenticated.
+        assert c.get("/healthz").status_code == 200
+        assert c.get("/readyz").status_code == 200
+
+
+def test_dashboard_no_auth_by_default(empty_client: TestClient) -> None:
+    # No token configured (fixture) → routes are open (dev/CI default).
+    assert empty_client.get("/runs").status_code == 200
+
+
 # ----------------------------------------------------------------------
 # Page-level smoke tests: every required URL returns 200
 # ----------------------------------------------------------------------
