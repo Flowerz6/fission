@@ -156,18 +156,27 @@ Both want a small `tap_crescendo` change; deferred until a run needs them.
 
 ## Still to do
 
-- **Slice 3 — orchestrator wiring:** a CLI/run path that takes a guide id,
-  selects the adapter from `plan.target`, and feeds `plan.behavior` +
-  `plan.signals` + the attack into the existing run loop end-to-end.
+- **Live end-to-end run:** execute `scripts/run_guide.py` against a real
+  Workspace target with credentials — the one step the unit tests can't cover.
+- **Multi-turn sheets/gmail adapters:** `tap_crescendo` needs a multi-turn
+  target; today only `google_docs_multiturn` qualifies, so a sheets/gmail guide
+  needs an explicit `--target-name` (or a new multi-turn adapter).
 - `GuideRow` table + dashboard browsing, once a run references guides.
 - Map the two deferred fields (`seed_prompts` → root openers; `strategy` → a
   per-node strategy seed), which need a small `tap_crescendo` change.
+- Optional: a first-class `advtest run-guide` CLI subcommand (today it's the
+  `run_guide` library fn + `scripts/run_guide.py`).
 
 ## Done
 
 - **Slice 1:** `Guide` schema + `guides/` JSON corpus + normalizers +
   content-hashing.
 - **Slice 2:** the `Guide → tap_crescendo` mapper (`to_tap_crescendo.py`).
+- **Slice 3 — orchestrator wiring** (`guides/run.py`): `build_guide_run(...)`
+  assembles the guide's `Behavior` + configured `TapCrescendoAttack` + signal
+  stack into the same `Orchestrator` the CLI uses (pure, unit-tested);
+  `run_guide(...)` resolves live providers/target/judges and runs;
+  `scripts/run_guide.py` is the manual driver.
 - **Normalizer validated** against a real Gemini Sheets transcript with live
   keys — hardened for truncation, missing `id`/`provenance`, structured-turn
   and boolean shape variance, and model-invented signal kinds.
