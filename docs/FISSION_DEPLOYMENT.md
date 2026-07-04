@@ -119,9 +119,13 @@ Each is a small, independent branch. None blocks the others except where noted.
       (unset ⇒ open, dev/CI default); constant-time compare. For prod, prefer fronting with an
       identity-aware proxy (GCP IAP / Cloud Run auth) — the token is the built-in fallback so
       the dashboard is never anonymously exposed.
-- [ ] **`chore/secrets-config`** — remove creds from `.env`-in-image; load provider keys +
-      Google creds from a secrets manager (GCP Secret Manager) at runtime; document the env
-      contract.
+- [x] **`chore/secrets-config`** — ✅ done (PR #16). `.env.example` documents the full env
+      contract (secrets: API keys, dashboard token, Google SA/OAuth creds; infra: DB URL,
+      artifact backend/bucket; config: provider YAML, playwright, account profiles, run params).
+      `.env` is git- + docker-ignored; `.env.example` is the template. **No secret-manager
+      *code* needed** — the app is 12-factor (reads only env), so the platform maps GCP Secret
+      Manager → env vars (Cloud Run `--set-secrets`, GKE `envFrom: secretRef`). Nothing is baked
+      into the image.
 - [x] **`feat/healthcheck-endpoints`** — ✅ done (PR #13). Dashboard `/healthz` (liveness, no
       deps) + `/readyz` (readiness — runs `SELECT 1`, returns 503 when the DB is unreachable so
       a load balancer / k8s gate holds traffic). *Worker liveness heartbeat deferred to when
