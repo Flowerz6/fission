@@ -1,9 +1,11 @@
 # Fission — Attack Guide format
 
-**Status: first slice implemented** in `advtest_ext/guides/` (the `Guide` schema +
-`guides/` JSON corpus + normalizers + content-hashing, all tested). **Not yet
-wired to the attacker** — the `Guide → tap_crescendo` mapper and the optional
-`GuideRow` DB table are later slices. The `Guide` is the normalized steering
+**Status: wired to the attacker.** Implemented in `advtest_ext/guides/`: the
+`Guide` schema + `guides/` JSON corpus + normalizers + content-hashing (slice 1),
+and the `Guide → tap_crescendo` mapper `to_tap_crescendo.py` (slice 2) — all
+tested. The `LlmNormalizer` has been validated against a real Gemini Sheets
+transcript with live keys. The optional `GuideRow` DB table (dashboard browsing)
+is the remaining slice. The `Guide` is the normalized steering
 doc the LLM attacker consumes. Heterogeneous source datasets (human transcripts,
 single prompts, red-team reports, OSINT threads, CSVs) are converted *into* this
 one shape by **normalizers** — the attacker never sees raw dataset variance.
@@ -109,17 +111,26 @@ toward the objective; the tree search does the rest.
 ## Guide → attacker mapping
 
 A Guide is essentially a serialization of the inputs `tap_crescendo` already
-takes, so a thin `Guide → params` mapper is all the new attacker code needed:
+takes, so a thin `Guide → params` mapper was all the new attacker code needed.
+Implemented in `advtest_ext/guides/to_tap_crescendo.py`: `map_guide(guide)`
+returns a pure `GuidePlan` (`behavior`, `signals`, `target`, `attack_kwargs`);
+`plan.build_attack(attacker=…, judge=…, confirm_judge=…, **overrides)`
+constructs the configured `TapCrescendoAttack`. Providers, judges, and the live
+target come from the run environment, not the guide.
 
-| Guide field | Existing param |
+| Guide field | Run input |
 |---|---|
-| `objective` | `Behavior.description` (+ `success.rubric` → `success_criteria`) |
-| `target` | adapter selection |
-| `success.signals` | deterministic signal stack + `confirm_judge` |
-| `strategy` | node/`_propose_strategy` seed |
-| `exemplar_turns` | `seed_chain` (replay-then-adapt — already implemented) |
-| `seed_prompts` | opener candidates for the root nodes |
-| `entity` / `canary` / `focus` | same-named `tap_crescendo` params |
+| `objective` (+ `strategy`, `key_moves`) | `Behavior.description` |
+| `success.rubric` | `Behavior.success_criteria` (synthesized from signal names if rubric-less) |
+| `success.signals` | a built `Signal` stack (validated via `build_signal` at map time) |
+| `threat_class` | `Behavior.category` (keyword-mapped onto the closed taxonomy) |
+| `target` | `GuidePlan.target`, passed through for adapter selection |
+| `exemplar_turns` | `seed_chain` (user turns only, role prefixes stripped) |
+| `entity` / `canary` / `focus` | same-named `tap_crescendo` params (`entity` falls back to `id`) |
+
+Not yet mapped: `seed_prompts` → root-node openers, and `strategy` as a
+per-node `_propose_strategy` seed (today it's folded into the goal instead).
+Both want a small `tap_crescendo` change; deferred until a run needs them.
 
 ---
 
@@ -145,8 +156,18 @@ takes, so a thin `Guide → params` mapper is all the new attacker code needed:
 
 ## Still to do
 
-- **Slice 2:** the `Guide → tap_crescendo` mapper (objective→Behavior,
-  exemplar_turns→seed_chain, signals→signal stack, …) so guides run.
-- **Validate the LLM normalizer against real transcripts** with live keys — its
-  extraction quality is the one thing the fake-provider tests can't prove.
+- **Slice 3 — orchestrator wiring:** a CLI/run path that takes a guide id,
+  selects the adapter from `plan.target`, and feeds `plan.behavior` +
+  `plan.signals` + the attack into the existing run loop end-to-end.
 - `GuideRow` table + dashboard browsing, once a run references guides.
+- Map the two deferred fields (`seed_prompts` → root openers; `strategy` → a
+  per-node strategy seed), which need a small `tap_crescendo` change.
+
+## Done
+
+- **Slice 1:** `Guide` schema + `guides/` JSON corpus + normalizers +
+  content-hashing.
+- **Slice 2:** the `Guide → tap_crescendo` mapper (`to_tap_crescendo.py`).
+- **Normalizer validated** against a real Gemini Sheets transcript with live
+  keys — hardened for truncation, missing `id`/`provenance`, structured-turn
+  and boolean shape variance, and model-invented signal kinds.
