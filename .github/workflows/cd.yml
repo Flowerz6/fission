@@ -1,0 +1,76 @@
+name: CD
+
+# On every merge to main: build the app image and push it to the GitHub
+# Container Registry (ghcr.io), then optionally deploy. Build+push needs only
+# the built-in GITHUB_TOKEN. The deploy job is GATED — it stays skipped until a
+# GCP target is configured (repo variable DEPLOY_ENABLED=true + a GCP_SA_KEY
+# secret), so this workflow is green from day one.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lowercases the image name (ghcr requires it) and builds the tag list.
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    # GATED: only runs once you set the repo variable DEPLOY_ENABLED=true and add
+    # the secrets/vars below. Until then it's skipped (no red X). Template only —
+    # adapt the service/region and how secrets reach the service.
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    permissions:
+      contents: read
+      id-token: write # for keyless GCP auth via Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Deploy dashboard to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: fission-dashboard
+          image: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+          region: ${{ vars.GCP_REGION }}
+          # Secrets/config reach the service via Cloud Run's own
+          #   --set-secrets ADVTEST_DB_URL=...:latest,ANTHROPIC_API_KEY=...:latest
+          # mapped from GCP Secret Manager (see .env.example for the full contract).
