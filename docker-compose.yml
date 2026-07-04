@@ -1,0 +1,52 @@
+# Local Fission stack: Postgres + the dashboard, built from the Dockerfile.
+# This is the runnable demo — `docker compose up` and open http://localhost:8000.
+#
+#   docker compose up --build
+#   curl -s localhost:8000/healthz    # {"status":"ok"}
+#   curl -s localhost:8000/readyz     # {"status":"ready","db":"ok"}
+#
+# The browser-farm worker + Redis queue join in Stage 2/3; they're intentionally
+# absent here so this stack stays a fast, credential-free local demo.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: fission
+      POSTGRES_DB: fission
+    ports:
+      - "5433:5432" # host 5433 (avoid clashing a local pg on 5432)
+    volumes:
+      - fission-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fission"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  dashboard:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # In-cluster Postgres (service name `postgres`, internal port 5432).
+      ADVTEST_DB_URL: "postgresql+psycopg://postgres:fission@postgres:5432/fission"
+      # Uncomment to require a bearer token on every route except the probes:
+      # ADVTEST_DASHBOARD_TOKEN: "change-me"
+      # Artifacts: default is local disk; set these for GCS in a real deploy:
+      # ADVTEST_ARTIFACT_BACKEND: "gcs"
+      # ADVTEST_ARTIFACT_BUCKET: "my-bucket"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"
+      interval: 5s
+      timeout: 4s
+      retries: 15
+
+volumes:
+  fission-pg:
