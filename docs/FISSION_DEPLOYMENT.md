@@ -107,9 +107,13 @@ Each is a small, independent branch. None blocks the others except where noted.
       locator (local path or `gs://` URI); default local is behaviour-preserving. `gcs`
       optional extra (`google-cloud-storage`). *Follow-up: route screenshots + intercepted
       JSONL through the same store (they still write to local disk today).*
-- [ ] **`chore/dockerize`** — a Dockerfile with Python + Poetry + Playwright Chromium
-      (`playwright install --with-deps chromium`); a `docker-compose.yml` for local
-      dashboard+Postgres+Redis; `.dockerignore`.
+- [x] **`chore/dockerize`** — ✅ done (PR #15), **build-verified locally**. Slim `Dockerfile`
+      (python:3.12-slim + Poetry 2.2.1 + `poetry install --only main --extras "postgres gcs"`,
+      non-root, `uvicorn …:create_app --factory`) — *no browser; the Stage-2 worker image
+      extends it with `playwright install --with-deps chromium`*. `docker-compose.yml` = Postgres
+      + dashboard; `.dockerignore`. Verified: `docker compose up` → `/healthz` 200, `/readyz`
+      `{"db":"ok"}` against the compose Postgres, `/runs` + `/references` 200.
+      Run it: `docker compose up --build` → http://localhost:8000. *(Redis + worker join Stage 2/3.)*
 - [x] **`feat/dashboard-auth`** — ✅ done (PR #14). Bearer-token gate on every route except
       the probes/static, via `create_app(auth_token=…)` or env `ADVTEST_DASHBOARD_TOKEN`
       (unset ⇒ open, dev/CI default); constant-time compare. For prod, prefer fronting with an

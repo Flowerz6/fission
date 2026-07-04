@@ -1,0 +1,25 @@
+# Keep the build context small + reproducible (we COPY explicitly anyway).
+.git
+.github
+.venv
+venv
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+# Local data / artifacts — never bake into an image.
+out/
+**/out/
+*.db
+*.db.backup
+*.sqlite*
+# Docs, tests, generated media — not needed at runtime.
+tests/
+docs/
+*.pdf
+*.png
+*.mp4
+*.zip
+.env
+.env.*
