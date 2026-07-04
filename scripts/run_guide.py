@@ -83,6 +83,15 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="disable the LLM confirm-judge (heuristic-only convergence)",
     )
+    # Multi-turn UI-target options (google_docs_multiturn): keep the run fully
+    # UI/no-OAuth by minting the host doc through the browser, or ground on an
+    # existing doc you prepared.
+    p.add_argument(
+        "--browser-mint",
+        action="store_true",
+        help="mint the host doc through the logged-in browser (no Docs API / OAuth)",
+    )
+    p.add_argument("--doc-id", help="ground on an existing Doc/Sheet id (no API create)")
     return p.parse_args()
 
 
@@ -114,12 +123,23 @@ def main() -> None:
         if v is not None
     }
 
+    # Target adapter options (multi-turn UI targets). Only set what the operator
+    # asked for so the factory defaults hold.
+    target_options: dict[str, object] = {}
+    if args.browser_mint:
+        target_options["browser_mint"] = True
+    if args.doc_id:
+        target_options["doc_id"] = args.doc_id
+    if args.output_dir:
+        target_options["ui_output_dir"] = str(args.output_dir)
+
     print(f"running guide {guide.id!r} against {args.target_name or guide.target.app} …")
     result = asyncio.run(
         run_guide(
             guide,
             provider_config=args.provider_config,
             target_name=args.target_name,
+            target_options=target_options or None,
             confirm_with_llm_judge=not args.no_confirm,
             output_dir=args.output_dir,
             **overrides,

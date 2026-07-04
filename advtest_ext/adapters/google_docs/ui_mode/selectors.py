@@ -30,7 +30,9 @@ because those drift less than class names.
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import TypedDict, cast
+
+from advtest_ext.adapters._ui_mode_common.selector_overlay import resolve_selectors
 
 
 class SidePanelSelectors(TypedDict):
@@ -111,8 +113,9 @@ class SidePanelSelectors(TypedDict):
 # Snapshot taken against the live Docs DOM. Confirmed by DevTools
 # inspection — selectors target the ``appsElementsSidekick…``
 # component classes that Docs renders for the Gemini side panel.
-# Re-validate before each pitch (see TODO_BEFORE_PITCH.md item 4).
-SELECTORS: SidePanelSelectors = {
+# Re-validate before each pitch (see TODO_BEFORE_PITCH.md item 4), or run
+# ``scripts/heal_selectors.py`` to auto-repair drift into the overlay.
+_BASE_SELECTORS: SidePanelSelectors = {
     "side_panel_button": (
         # Toolbar entry-point. Confirmed accessible name is
         # exactly "Ask Gemini". If Docs starts A/B-testing the
@@ -198,6 +201,14 @@ SELECTORS: SidePanelSelectors = {
         'button[aria-label*="Send" i]:not([disabled]):not([aria-disabled="true"])'
     ),
 }
+
+
+# Apply any ``ADVTEST_SELECTOR_OVERLAY`` entries for this app on top of the
+# baked-in defaults, so a healed selector takes effect without a code edit.
+# An empty/absent overlay leaves the base registry unchanged.
+SELECTORS: SidePanelSelectors = cast(
+    "SidePanelSelectors", resolve_selectors(_BASE_SELECTORS, "google_docs")
+)
 
 
 EXPECTED_KEYS: frozenset[str] = frozenset(
