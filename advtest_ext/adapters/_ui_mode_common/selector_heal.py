@@ -44,6 +44,15 @@ _SINGLETON_KEYS = frozenset(
     }
 )
 
+# Keys that must resolve to a *button*, not an input. Without this, an LLM can
+# propose the composer combobox for ``side_panel_send`` — it matches exactly one
+# element (so count-validation passes) but is the wrong element, and clicking it
+# would defeat the invoker's Enter-submit fallback. Shape-checking rejects it.
+_BUTTON_KEYS = frozenset(
+    {"side_panel_button", "side_panel_send", "side_panel_close", "side_panel_new_conversation"}
+)
+_INPUT_LIKE_ROLES = frozenset({"combobox", "textbox", "searchbox"})
+
 # Runs in the page: the elements a selector author (human or LLM) needs to see.
 _PROBE_JS = r"""
 () => {
@@ -64,7 +73,13 @@ _PROBE_JS = r"""
   const sidekick = Array.from(new Set(
     q('[class*="appsElementsSidekick"]').map(el => (el.className || '').toString())
   )).slice(0, 40);
-  return { labelled, complementary, editables, sidekickClasses: sidekick };
+  // Every clickable inside the panel — the send arrow is often an icon button
+  // with no "Send" aria-label, so the labelled filter above can miss it.
+  const panelButtons = q(
+    '[role="complementary"][aria-label="Gemini"] button, ' +
+    '[role="complementary"][aria-label="Gemini"] [role="button"]'
+  ).map(desc);
+  return { labelled, complementary, editables, sidekickClasses: sidekick, panelButtons };
 }
 """
 
@@ -159,14 +174,49 @@ async def propose_fixes(
     return {k: v for k, v in proposed.items() if k in wanted and isinstance(v, str) and v.strip()}
 
 
+async def _first_shape(page: Any, selector: str) -> dict[str, Any]:
+    """``{tag, role, contenteditable}`` of the first element ``selector`` matches
+    (empty on any error, so shape-checking is skipped rather than failing when a
+    fake/stubbed page can't introspect)."""
+    try:
+        loc = page.locator(selector).first
+        tag = await loc.evaluate("el => el.tagName.toLowerCase()")
+        return {
+            "tag": (tag or "").lower(),
+            "role": (await loc.get_attribute("role") or "").lower(),
+            "contenteditable": await loc.get_attribute("contenteditable"),
+        }
+    except Exception:
+        return {}
+
+
+def _shape_ok(key: str, shape: Mapping[str, Any]) -> bool:
+    """Whether the matched element's shape fits what ``key`` should point at.
+    Guards the button-vs-input confusion; content keys are unconstrained."""
+    tag = str(shape.get("tag") or "")
+    role = str(shape.get("role") or "")
+    editable = shape.get("contenteditable") == "true"
+    if key in _BUTTON_KEYS:
+        if editable or role in _INPUT_LIKE_ROLES:  # a combobox/textbox is not a button
+            return False
+        return tag == "button" or role == "button"
+    if key == "side_panel_input":
+        return editable or role in _INPUT_LIKE_ROLES
+    return True
+
+
 async def validate_fix(page: Any, key: str, selector: str) -> bool:
     """Accept ``selector`` only if it resolves on the live page — and, for a
-    singleton key, resolves to *exactly one* element (so a proposal that
-    over-matches the whole panel is rejected)."""
+    singleton key, resolves to *exactly one* element — AND the matched element's
+    shape fits the key (a button key must hit a button, not the composer input).
+    The shape check is what stops a matching-but-wrong proposal."""
     count = await _count(page, selector)
     if count == 0:
         return False
     if key in _SINGLETON_KEYS and count != 1:
+        return False
+    shape = await _first_shape(page, selector)
+    if shape and not _shape_ok(key, shape):
         return False
     return True
 

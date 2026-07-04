@@ -54,21 +54,56 @@ def test_malformed_overlay_degrades_to_base(tmp_path: Path) -> None:
 # ---- heal loop -----------------------------------------------------------
 
 
-class _FakePage:
-    """Duck-typed page: ``locator(sel).count()`` returns a scripted count, and
-    ``evaluate`` returns scripted candidates."""
+class _FakeLocator:
+    """Supports ``.count()`` and ``.first`` element introspection
+    (``.evaluate`` for the tag, ``.get_attribute`` for role/contenteditable)."""
 
-    def __init__(self, counts: dict[str, int], candidates: dict[str, Any] | None = None) -> None:
+    def __init__(self, selector: str, counts: dict[str, int], shapes: dict[str, Any]) -> None:
+        self._sel = selector
+        self._counts = counts
+        self._shapes = shapes
+
+    async def count(self) -> int:
+        if self._sel not in self._counts:
+            raise RuntimeError("selector not found")
+        return self._counts[self._sel]
+
+    @property
+    def first(self) -> _FakeLocator:
+        return self
+
+    async def evaluate(self, _js: str) -> str:
+        return str(self._shapes.get(self._sel, {}).get("tag", "div"))
+
+    async def get_attribute(self, name: str) -> Any:
+        return self._shapes.get(self._sel, {}).get(name)
+
+
+class _FakePage:
+    """Duck-typed page. Without ``shapes`` the locator is count-only (no
+    ``.first``), so shape-checking is skipped — for the count/uniqueness tests.
+    With ``shapes`` the locator introspects element tag/role for shape tests."""
+
+    def __init__(
+        self,
+        counts: dict[str, int],
+        candidates: dict[str, Any] | None = None,
+        shapes: dict[str, Any] | None = None,
+    ) -> None:
         self._counts = counts
         self._candidates = candidates or {}
+        self._shapes = shapes
 
     def locator(self, selector: str) -> Any:
-        async def _count() -> int:
-            if selector not in self._counts:
-                raise RuntimeError("selector not found")
-            return self._counts[selector]
+        if self._shapes is None:
 
-        return SimpleNamespace(count=_count)
+            async def _count() -> int:
+                if selector not in self._counts:
+                    raise RuntimeError("selector not found")
+                return self._counts[selector]
+
+            return SimpleNamespace(count=_count)
+        return _FakeLocator(selector, self._counts, self._shapes)
 
     async def evaluate(self, _js: str) -> dict[str, Any]:
         return self._candidates
@@ -95,6 +130,23 @@ async def test_validate_fix_rejects_non_unique_singleton() -> None:
     assert await validate_fix(page, "side_panel_button", "none") is False
     # A non-singleton (response bubble) may match many.
     assert await validate_fix(page, "side_panel_response", "many") is True
+
+
+async def test_validate_fix_rejects_button_key_that_resolves_to_an_input() -> None:
+    # The real failure: an LLM proposes the composer combobox for 'send'. It
+    # matches exactly one element (count ok) but is the WRONG shape — clicking
+    # an input would defeat the Enter-submit fallback. Shape-check must reject it.
+    page = _FakePage(
+        counts={"combo": 1, "btn": 1},
+        shapes={
+            "combo": {"tag": "div", "role": "combobox", "contenteditable": "true"},
+            "btn": {"tag": "button", "role": None, "contenteditable": None},
+        },
+    )
+    assert await validate_fix(page, "side_panel_send", "combo") is False  # input != button
+    assert await validate_fix(page, "side_panel_send", "btn") is True  # a real button
+    # The input key, conversely, DOES accept the combobox.
+    assert await validate_fix(page, "side_panel_input", "combo") is True
 
 
 async def test_propose_fixes_returns_only_requested_string_keys() -> None:

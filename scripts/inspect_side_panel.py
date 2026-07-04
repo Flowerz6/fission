@@ -29,29 +29,7 @@ import asyncio
 import json
 from pathlib import Path
 
-# JS that runs in the page: collect the elements a selector author needs.
-_PROBE_JS = r"""
-() => {
-  const q = (sel) => Array.from(document.querySelectorAll(sel));
-  const desc = (el) => ({
-    tag: el.tagName.toLowerCase(),
-    role: el.getAttribute('role'),
-    ariaLabel: el.getAttribute('aria-label'),
-    contenteditable: el.getAttribute('contenteditable'),
-    className: (el.className && el.className.toString ? el.className.toString() : '').slice(0, 160),
-    text: (el.innerText || '').trim().slice(0, 80),
-  });
-  const labelled = q('[aria-label]')
-    .filter(el => /gemini|send|new conversation|close|ask/i.test(el.getAttribute('aria-label') || ''))
-    .map(desc);
-  const complementary = q('[role="complementary"]').map(desc);
-  const editables = q('[contenteditable="true"]').map(desc);
-  const sidekick = Array.from(new Set(
-    q('[class*="appsElementsSidekick"]').map(el => (el.className || '').toString())
-  )).slice(0, 40);
-  return { labelled, complementary, editables, sidekickClasses: sidekick };
-}
-"""
+from advtest_ext.adapters._ui_mode_common.selector_heal import capture_candidates
 
 
 async def _run(url: str, out_dir: Path) -> None:
@@ -75,7 +53,7 @@ async def _run(url: str, out_dir: Path) -> None:
         html = await page.content()
         (out_dir / "page.html").write_text(html, encoding="utf-8")
 
-        probe = await page.evaluate(_PROBE_JS)
+        probe = await capture_candidates(page)
         (out_dir / "candidates.json").write_text(
             json.dumps(probe, indent=2, ensure_ascii=False), encoding="utf-8"
         )
