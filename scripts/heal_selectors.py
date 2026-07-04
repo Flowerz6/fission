@@ -95,7 +95,20 @@ async def _acquire_page_auto(session: Any, out_dir: Path, probe: str) -> Any:
         await target.invoke(ctx, probe)
     except Exception as exc:  # a drifted read selector may fail; heal the DOM anyway
         print(f"(probe turn raised {type(exc).__name__}: {exc}; healing whatever opened)")
-    return await session.ensure_page()
+    page = await session.ensure_page()
+    # Leave UNSENT draft text in the composer so the send button is present to
+    # validate — it only renders when the composer is non-empty. Real keystrokes
+    # (type, not fill) so Google's JS fires the events that reveal the button.
+    # No manual typing needed; the run captures reply + composer-with-text at once.
+    try:
+        from advtest_ext.adapters.google_docs.ui_mode.selectors import SELECTORS
+
+        composer = page.locator(SELECTORS["side_panel_input"]).first
+        await composer.click()
+        await composer.type("draft — heal probe, do not send")
+    except Exception as exc:
+        print(f"(couldn't seed composer draft for the send selector: {exc})")
+    return page
 
 
 async def _acquire_page_manual(session: Any, url: str) -> Any:
