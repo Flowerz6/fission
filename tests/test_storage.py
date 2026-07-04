@@ -266,8 +266,9 @@ def test_replay_bundle_contains_canonical_files(tmp_path: Path) -> None:
         output_dir=tmp_path,
         severity="high",
     )
-    assert bundle.exists()
-    assert bundle.parent.name == "replays"
+    # build_replay_bundle returns a locator string (local path here).
+    assert Path(bundle).exists()
+    assert Path(bundle).parent.name == "replays"
     contents = read_replay_bundle(bundle)
     expected_files = {
         "manifest.json",

@@ -100,9 +100,13 @@ Each is a small, independent branch. None blocks the others except where noted.
       compatibility:
       `ADVTEST_TEST_DB_URL=postgresql+psycopg://user:pw@host/db poetry run pytest tests/test_db_integration.py::test_storage_round_trip_on_postgres`
       (skips when unset, so CI/dev stay on SQLite).
-- [ ] **`feat/object-store-artifacts`** — abstract the artifact sink (replay bundles,
-      screenshots, intercepted JSONL) behind a small interface with `local` + `gcs` backends;
-      default `local` (tests unchanged), `gcs` in prod via env.
+- [x] **`feat/object-store-artifacts`** — ✅ done (PR #12). `storage/artifacts.py` adds an
+      `ArtifactStore` interface with `LocalArtifactStore` + `GcsArtifactStore` and an
+      env-driven factory (`ADVTEST_ARTIFACT_BACKEND=local|gcs`, `+_BUCKET`/`_PREFIX`).
+      Replay bundles now write via the store (built in memory → put_bytes), returning a
+      locator (local path or `gs://` URI); default local is behaviour-preserving. `gcs`
+      optional extra (`google-cloud-storage`). *Follow-up: route screenshots + intercepted
+      JSONL through the same store (they still write to local disk today).*
 - [ ] **`chore/dockerize`** — a Dockerfile with Python + Poetry + Playwright Chromium
       (`playwright install --with-deps chromium`); a `docker-compose.yml` for local
       dashboard+Postgres+Redis; `.dockerignore`.

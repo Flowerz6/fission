@@ -27,6 +27,8 @@ import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from advtest_ext.storage.artifacts import ArtifactStore, LocalArtifactStore
+
 if TYPE_CHECKING:  # pragma: no cover
     from advtest_ext.core.models import AttackTrace
     from advtest_ext.document import AbstractDocument
@@ -92,17 +94,21 @@ def build_replay_bundle(
     document: AbstractDocument | None,
     output_dir: Path,
     severity: str = "med",
-) -> Path:
-    """Materialise the replay ZIP under
-    ``<output_dir>/replays/<finding_id>.zip`` and return the path.
+    store: ArtifactStore | None = None,
+) -> str:
+    """Build the replay ZIP and hand it to ``store``; return the locator.
 
-    Idempotent: re-running with the same ``finding_id`` overwrites
-    the existing ZIP rather than failing — matches the
-    promote-finding "upsert" semantics on the SQL side.
+    With the default (``store=None``) this writes to
+    ``<output_dir>/replays/<finding_id>.zip`` and returns that path string —
+    the pre-existing behaviour. Pass a :class:`GcsArtifactStore` (or one from
+    :func:`artifact_store_from_env`) to write to object storage instead, in
+    which case the locator is a ``gs://`` URI.
+
+    Idempotent: re-running with the same ``finding_id`` overwrites the existing
+    object rather than failing — matches the promote-finding "upsert" semantics.
     """
-    replays_dir = output_dir / "replays"
-    replays_dir.mkdir(parents=True, exist_ok=True)
-    target = replays_dir / f"{finding_id}.zip"
+    if store is None:
+        store = LocalArtifactStore(output_dir)
 
     manifest: dict[str, Any] = {
         "finding_id": finding_id,
@@ -155,11 +161,10 @@ def build_replay_bundle(
         if screenshot_bytes is not None:
             zf.writestr("screenshot.png", screenshot_bytes)
 
-    target.write_bytes(buffer.getvalue())
-    return target
+    return store.put_bytes(f"replays/{finding_id}.zip", buffer.getvalue())
 
 
-def read_replay_bundle(zip_path: Path) -> dict[str, str | bytes]:
+def read_replay_bundle(zip_path: str | Path) -> dict[str, str | bytes]:
     """Read a replay ZIP back into ``{filename: content}`` so tests
     (and a future "import a finding from somewhere else" CLI) can
     introspect without assuming the bundle is unpacked. Binary
