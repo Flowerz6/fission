@@ -63,6 +63,10 @@ pyrit = { git = "https://github.com/microsoft/PyRIT.git", optional = true }
 # an OPTIONAL extra. psycopg[binary] bundles libpq → no system package needed in
 # containers. `poetry install --extras postgres` + ADVTEST_DB_URL=postgresql+psycopg://…
 psycopg = { version = ">=3.1,<4", extras = ["binary"], optional = true }
+# Object storage for replay bundles / screenshots / captures in a deployed
+# browser farm (workers don't share a local disk). Optional 'gcs' extra;
+# ADVTEST_ARTIFACT_BACKEND=gcs + ADVTEST_ARTIFACT_BUCKET selects it at runtime.
+google-cloud-storage = { version = ">=2.14,<4", optional = true }
 
 [tool.poetry.extras]
 openai = ["openai"]
@@ -71,6 +75,7 @@ pdf = ["weasyprint"]
 ui_mode = ["playwright"]
 pyrit = ["pyrit"]
 postgres = ["psycopg"]
+gcs = ["google-cloud-storage"]
 all = ["openai", "google-genai", "weasyprint", "playwright"]
 
 [tool.poetry.group.dev.dependencies]
