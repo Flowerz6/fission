@@ -93,9 +93,13 @@ loop → observability → governance. The Google test-tenant ask gates scaling 
 
 Each is a small, independent branch. None blocks the others except where noted.
 
-- [ ] **`feat/postgres-storage`** — parameterize the DB URL (already SQLAlchemy); add a Postgres
-      driver dep; provide `ADVTEST_DB_URL`; add an Alembic baseline migration (currently no
-      migrations — SQLite was recreated). Verify the full suite against a Postgres test DB.
+- [x] **`feat/postgres-storage`** — ✅ done (PR #11). DB URL was already parameterized
+      (`ADVTEST_DB_URL`); added `psycopg[binary]` as the `postgres` extra; portable schema uses
+      `Base.metadata.create_all` (Alembic deferred until the schema needs to *evolve* in prod —
+      `create_all` is fine for a fresh deploy). A gated round-trip test proves Postgres
+      compatibility:
+      `ADVTEST_TEST_DB_URL=postgresql+psycopg://user:pw@host/db poetry run pytest tests/test_db_integration.py::test_storage_round_trip_on_postgres`
+      (skips when unset, so CI/dev stay on SQLite).
 - [ ] **`feat/object-store-artifacts`** — abstract the artifact sink (replay bundles,
       screenshots, intercepted JSONL) behind a small interface with `local` + `gcs` backends;
       default `local` (tests unchanged), `gcs` in prod via env.

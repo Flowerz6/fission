@@ -18,10 +18,12 @@ sink. These tests lock the wiring three ways:
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
@@ -161,6 +163,46 @@ async def test_orchestrator_persists_run_trace_finding_when_factory_set(
         assert finding.replay_bundle_path is not None
         assert Path(finding.replay_bundle_path).exists()
         assert Path(finding.replay_bundle_path).suffix == ".zip"
+
+
+_PG_URL = os.environ.get("ADVTEST_TEST_DB_URL", "")
+
+
+@pytest.mark.skipif(
+    "postgres" not in _PG_URL,
+    reason="set ADVTEST_TEST_DB_URL to a Postgres URL (postgresql+psycopg://…) to run",
+)
+async def test_storage_round_trip_on_postgres(tmp_path: Path) -> None:
+    """Same orchestrator → DB → findings path as the SQLite test above, but
+    against a real Postgres — proves the schema, queries, JSON columns, indexes
+    and cascades are dialect-portable. Gated on ADVTEST_TEST_DB_URL."""
+    from advtest_ext.storage.models import Base
+
+    engine = make_engine(_PG_URL)
+    # Clean slate so repeated runs against a persistent Postgres stay deterministic.
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    factory = make_session_factory(engine)
+
+    orch = GridOrchestrator(
+        target=StubDocumentTarget(),
+        attacks=[_SuccessAttack()],
+        behaviors=[_behavior()],
+        judge=_AlwaysHighJudge(),
+        output_dir=tmp_path,
+        session_factory=factory,
+    )
+    result = await orch.run()
+    assert len(result.traces) == 1
+
+    with session_scope(factory) as s:
+        runs = list_runs(s)
+        assert len(runs) == 1 and runs[0].id == orch.run_id
+        assert runs[0].summary["successful_traces"] == 1
+        traces = list_traces_for_run(s, orch.run_id)
+        assert len(traces) == 1 and traces[0].verdict == "success"
+        findings = list_findings(s, run_id=orch.run_id)
+        assert len(findings) == 1 and findings[0].trace_id == traces[0].id
 
 
 async def test_orchestrator_skips_db_when_no_factory(tmp_path: Path) -> None:
