@@ -59,6 +59,10 @@ playwright = { version = ">=1.49,<2", optional = true }
 # it stays an OPTIONAL extra sourced straight from upstream. Default
 # installs do NOT pull it; `poetry install --extras pyrit` does.
 pyrit = { git = "https://github.com/microsoft/PyRIT.git", optional = true }
+# Postgres driver for production deployments. Dev/CI default is SQLite, so it's
+# an OPTIONAL extra. psycopg[binary] bundles libpq → no system package needed in
+# containers. `poetry install --extras postgres` + ADVTEST_DB_URL=postgresql+psycopg://…
+psycopg = { version = ">=3.1,<4", extras = ["binary"], optional = true }
 
 [tool.poetry.extras]
 openai = ["openai"]
@@ -66,6 +70,7 @@ gemini = ["google-genai"]
 pdf = ["weasyprint"]
 ui_mode = ["playwright"]
 pyrit = ["pyrit"]
+postgres = ["psycopg"]
 all = ["openai", "google-genai", "weasyprint", "playwright"]
 
 [tool.poetry.group.dev.dependencies]
