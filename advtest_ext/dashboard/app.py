@@ -30,6 +30,8 @@ points share the same factory.
 
 from __future__ import annotations
 
+import hmac
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -123,13 +125,20 @@ def create_app(
     db_url: str | None = None,
     output_dir: Path | None = None,
     engine: Engine | None = None,
+    auth_token: str | None = None,
 ) -> FastAPI:
     """Construct the FastAPI dashboard app.
 
     Tests pass an in-memory SQLite engine; the CLI / production
     entrypoints pass ``db_url`` and let the factory build a
     file-backed one. ``output_dir`` is the run-artefact root used
-    when a Finding's replay-bundle path is relative to a known root."""
+    when a Finding's replay-bundle path is relative to a known root.
+
+    ``auth_token`` (or env ``ADVTEST_DASHBOARD_TOKEN``) gates every route
+    except the probes behind a ``Authorization: Bearer <token>`` header. Unset
+    (dev/CI default) → no auth. For production, prefer fronting this with an
+    identity-aware proxy (GCP IAP / Cloud Run auth); the token is a simple
+    built-in fallback so the dashboard is never anonymously exposed."""
     app = FastAPI(
         title="advtest dashboard",
         description="Browse runs, findings, HITL queue, and references.",
@@ -137,6 +146,21 @@ def create_app(
     if engine is None:
         engine = make_engine(db_url)
     factory = make_session_factory(engine)
+
+    token = auth_token if auth_token is not None else os.environ.get("ADVTEST_DASHBOARD_TOKEN")
+    if token:
+
+        @app.middleware("http")
+        async def _require_token(request: Request, call_next: Any) -> Any:
+            # Probes + static assets stay open — the orchestrator / load
+            # balancer hit /healthz and /readyz unauthenticated.
+            path = request.url.path
+            if path in ("/healthz", "/readyz") or path.startswith("/static"):
+                return await call_next(request)
+            provided = request.headers.get("Authorization", "")
+            if not hmac.compare_digest(provided, f"Bearer {token}"):
+                return JSONResponse({"detail": "unauthorized"}, status_code=401)
+            return await call_next(request)
 
     templates = Jinja2Templates(directory=_TEMPLATE_DIR)
 
