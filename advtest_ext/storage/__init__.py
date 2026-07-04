@@ -16,6 +16,12 @@ Reproducibility infrastructure is one of our headline contributions —
 every Finding ships a self-contained replay bundle.
 """
 
+from advtest_ext.storage.artifacts import (
+    ArtifactStore,
+    GcsArtifactStore,
+    LocalArtifactStore,
+    artifact_store_from_env,
+)
 from advtest_ext.storage.database import (
     make_engine,
     make_session_factory,
@@ -66,17 +72,21 @@ from advtest_ext.storage.repository import (
 __citations__: list[str] = []  # original infrastructure work
 
 __all__ = [
+    "ArtifactStore",
     "Base",
     "Finding",
+    "GcsArtifactStore",
     "HitlItem",
     "JsonlTraceWriter",
     "JudgeScore",
+    "LocalArtifactStore",
     "RecipeRow",
     "RecipeStepRow",
     "Run",
     "SeedRow",
     "SignalRecord",
     "Trace",
+    "artifact_store_from_env",
     "asr_heatmap",
     "asr_heatmap_formatted",
     "build_replay_bundle",

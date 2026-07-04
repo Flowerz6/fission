@@ -719,17 +719,20 @@ class Orchestrator:
 
         bundle_path: str | None = None
         if self._output_dir is not None:
-            from advtest_ext.storage import build_replay_bundle
+            from advtest_ext.storage import artifact_store_from_env, build_replay_bundle
 
-            zip_path = build_replay_bundle(
+            # Local by default (writes under output_dir, unchanged); GCS when
+            # ADVTEST_ARTIFACT_BACKEND=gcs. The locator (local path or gs:// URI)
+            # is stored as the finding's replay_bundle_path.
+            bundle_path = build_replay_bundle(
                 finding_id=f"finding-from-{trace.id}",
                 run_id=self.run_id,
                 trace=trace,
                 document=None,
                 output_dir=self._output_dir,
                 severity="med",
+                store=artifact_store_from_env(self._output_dir),
             )
-            bundle_path = str(zip_path)
 
         if self._session_factory is None:
             return
