@@ -130,8 +130,12 @@ Each is a small, independent branch. None blocks the others except where noted.
       deps) + `/readyz` (readiness — runs `SELECT 1`, returns 503 when the DB is unreachable so
       a load balancer / k8s gate holds traffic). *Worker liveness heartbeat deferred to when
       the worker service exists (Stage 2/3).*
-- [ ] **`chore/cd-pipeline`** — extend the GitHub Actions CI into CD: on merge to `main`, build
-      + push the image (to Artifact Registry), deploy to a staging target.
+- [x] **`chore/cd-pipeline`** — ✅ done (PR #17). `.github/workflows/cd.yml`: on merge to `main`,
+      **build the image + push to GHCR** (`ghcr.io/flowerz6/fission:latest` + `:sha-…`) using the
+      built-in `GITHUB_TOKEN` (no external creds → runs green day one). A **gated** `deploy` job
+      (Cloud Run template) stays skipped until you set repo var `DEPLOY_ENABLED=true` + `GCP_SA_KEY`.
+      *Note: this pushes to Artifact-Registry equivalent GHCR; switch to GCP Artifact Registry when
+      the GCP project exists.*
 
 **Deferred to later stages (do NOT start in Stage 1):** the scheduler/control-plane service,
 the multi-worker queue fan-out, account-pool productionization, and the browser farm itself —
