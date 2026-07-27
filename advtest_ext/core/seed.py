@@ -49,6 +49,8 @@ SourceFormat = Literal[
     "agentdojo_jsonl",
     "jailbreakbench_jsonl",
     "strongreject_csv",
+    "safemtdata_jsonl",  # SafeMTData / ActorAttack multi-turn escalation
+    "mcptox_jsonl",  # MCPTox MCP tool-poisoning benchmark
 ]
 
 

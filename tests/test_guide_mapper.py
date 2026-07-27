@@ -143,6 +143,17 @@ def test_no_seed_chain_key_when_no_exemplar_turns() -> None:
     assert "seed_chain" not in map_guide(_guide(_MINIMAL)).attack_kwargs
 
 
+def test_strategy_brief_carries_guide_approach_for_the_branch_strategist() -> None:
+    brief = map_guide(_guide(_FULL)).attack_kwargs["strategy_brief"]
+    assert "QA-assessment framing" in brief
+    assert "Key moves:" in brief
+    assert "consistency instinct" in brief
+
+
+def test_no_strategy_brief_when_guide_has_no_strategy_or_moves() -> None:
+    assert "strategy_brief" not in map_guide(_guide(_MINIMAL)).attack_kwargs
+
+
 # ---- seed_chain extraction (role-prefixed transcripts) -------------------
 
 

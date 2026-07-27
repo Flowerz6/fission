@@ -125,6 +125,14 @@ class Trace(Base):
     """Free-form metadata blob (BoN augmentation chains, MSJ shot
     counts, attacker reasoning, etc.). Renamed away from ``metadata``
     to avoid colliding with SQLAlchemy's reserved attribute."""
+    uncertainty: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    """Measurement-spine review-priority score in [0, 1]
+    (``core.uncertainty``). Indexed so the stratified sampler can
+    ``ORDER BY uncertainty DESC`` to pull the top-K disagreement slice.
+    0.0 for runs with no signal stack / no judge score."""
+    uncertainty_reason: Mapped[str] = mapped_column(Text, default="")
+    """Human-readable axis that drove ``uncertainty`` (shown in the
+    review UI so the expert sees *why* a trace was surfaced)."""
 
     run: Mapped[Run] = relationship(back_populates="traces")
     judge_scores: Mapped[list[JudgeScore]] = relationship(
@@ -247,12 +255,161 @@ class HitlItem(Base):
     enqueued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     reason: Mapped[str] = mapped_column(Text, default="")
     judge_disagreement: Mapped[float] = mapped_column(Float, default=0.0)
+    sample_reason: Mapped[str] = mapped_column(String(32), default="", index=True)
+    """Which stratified slice put this in the queue: ``uniform`` |
+    ``disagreement`` (``core.sampling``). Empty for legacy/ensemble
+    enqueues. Flows into the eventual ``GoldLabel.sample_reason`` so PPI
+    can keep the uniform slice identifiable for its unbiased estimate."""
+    uncertainty: Mapped[float] = mapped_column(Float, default=0.0)
+    """The trace's review-priority score at enqueue time (``core.uncertainty``)."""
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     """``pending`` | ``confirmed`` | ``rejected``."""
     resolution: Mapped[str] = mapped_column(Text, default="")
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     run: Mapped[Run] = relationship(back_populates="hitl_items")
+
+
+class GoldLabel(Base):
+    """One immutable expert-labelled example — the measurement spine's
+    ground truth (see ``docs/FISSION_MEASUREMENT_SPINE.md`` §2).
+
+    Each reviewed trace becomes ONE row that serves double duty:
+    calibration ground truth for the PPI metric (ASR ± CI) AND future
+    training data for the flywheel's L1/L2. Two invariants make it
+    trustworthy:
+
+    * **Frozen predictor.** ``oracle_verdict`` / ``oracle_score`` /
+      ``oracle_layers_fired`` capture what the oracle said *at sample
+      time*. The flywheel changes the oracle between runs, so PPI must
+      score each run with the predictor that actually labelled it —
+      hence these are snapshotted here, never recomputed.
+    * **Self-contained + permanent.** ``response_snapshot`` and
+      ``behavior_id`` are denormalised so the label stays valid even if
+      the source Trace is later mutated, and ``trace_id`` / ``run_id``
+      are ``ON DELETE SET NULL`` (not CASCADE) so deleting a run never
+      destroys the ground truth it produced. A gold label outlives its
+      source by design.
+
+    ``sample_reason`` records *why* the trace was drawn for review
+    (``disagreement`` vs ``uniform``); PPI needs the uniform slice to
+    stay identifiable to make an unbiased population estimate.
+    """
+
+    __tablename__ = "gold_labels"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    trace_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("traces.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    run_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    behavior_id: Mapped[str] = mapped_column(String(128), index=True)
+    """Denormalised from the source Trace for per-behaviour calibration
+    and so the label survives the Trace being deleted."""
+
+    # --- Oracle prediction, frozen at sample time ---
+    oracle_verdict: Mapped[str] = mapped_column(String(32))
+    """success | partial | refused | error - what L0-L2 said when sampled."""
+    oracle_score: Mapped[float] = mapped_column(Float, default=0.0)
+    oracle_layers_fired: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    """Which signals / judge fired (for the frozen L0↔expert audit that
+    catches reward-hacking when L1/L2 later train)."""
+    response_snapshot: Mapped[str] = mapped_column(Text, default="")
+    """The exact scored text, frozen — the label stays valid even if the
+    Trace's ``raw_response`` is later overwritten."""
+
+    # --- Sampling provenance (load-bearing for unbiased PPI) ---
+    sample_reason: Mapped[str] = mapped_column(String(32), index=True)
+    """disagreement | uniform. The uniform slice is what makes the ASR
+    estimate an honest population claim."""
+
+    # --- Expert label (the ground truth) ---
+    expert_verdict: Mapped[str] = mapped_column(String(32), index=True)
+    """success | partial | refused — the human's decision."""
+    expert_confidence: Mapped[int] = mapped_column(Integer, default=3)
+    """1-5; down-weights shaky labels."""
+    reviewer_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    """For inter-rater agreement (κ) and accountability."""
+    review_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    """Tracks the ≤30s review budget."""
+    reason: Mapped[str] = mapped_column(Text, default="")
+    """Why the expert confirmed/overruled — sharpens judge prompts later."""
+    blind: Mapped[bool] = mapped_column(Boolean, default=False)
+    """True when the oracle verdict was hidden during review (the
+    anchoring-bias guard — compare blind vs pre-labelled override rates)."""
+
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    frozen: Mapped[bool] = mapped_column(Boolean, default=True)
+    """Immutable once reviewed (audit integrity)."""
+
+
+class CalibrationExample(Base):
+    """One labelled example from a PUBLIC adversarial benchmark, used as
+    the oracle's cold-start calibration/validation set
+    (``docs/FISSION_MEASUREMENT_SPINE.md`` §7, refinement 2).
+
+    Distinct from :class:`GoldLabel`: a gold label is an in-house trace
+    an expert reviewed (it carries a frozen *oracle prediction* to
+    compare against), whereas a calibration example is an *external*
+    input with a known ground-truth verdict but no oracle prediction
+    yet — you run your oracle over it to measure agreement (F1 / ECE)
+    before you have spent any in-house labelling budget.
+
+    ``expected_verdict`` is the source's ground-truth label mapped onto
+    Fission's verdict vocabulary; ``label_raw`` keeps the original value
+    for audit, and ``label_meta`` carries source-specific context
+    (guard, level, target model) so slices can be calibrated per stratum.
+    """
+
+    __tablename__ = "calibration_examples"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dataset: Mapped[str] = mapped_column(String(64), index=True)
+    """Registry slug (configs/calibration_datasets.yaml), e.g. ``lakera_gandalf_rct``."""
+    attack_type: Mapped[str] = mapped_column(String(32), index=True)
+    """direct_pi | indirect_pi | jailbreak | evasion."""
+    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    """Row id in the source dataset, when it has one (for dedup/traceback)."""
+    input_text: Mapped[str] = mapped_column(Text)
+    """The adversarial prompt / injected content the oracle will score."""
+    response_text: Mapped[str] = mapped_column(Text, default="")
+    """The model response, when the source ships one (e.g. JailbreakBench)."""
+    expected_verdict: Mapped[str] = mapped_column(String(32), index=True)
+    """Ground truth mapped to success | refused | partial."""
+    label_raw: Mapped[str] = mapped_column(String(128), default="")
+    """The original source label value, kept verbatim for audit."""
+    label_meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    """Source-specific strata (guard, level, target model, ...)."""
+    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class CalibrationResult(Base):
+    """One oracle prediction over a :class:`CalibrationExample`, written by
+    the offline calibration runner (``scripts/run_calibration.py``).
+
+    Persisting predictions (rather than re-running the LLM judge on every
+    dashboard load) lets the Calibration view render F1 / ECE from stored
+    rows. ``batch`` groups a single run of the runner so successive
+    oracle versions can be compared. ``correct`` is denormalised from
+    ``predicted_verdict`` vs the example's ground truth for fast rollups.
+    """
+
+    __tablename__ = "calibration_results"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    example_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("calibration_examples.id", ondelete="CASCADE"), index=True
+    )
+    batch: Mapped[str] = mapped_column(String(64), default="", index=True)
+    judge_name: Mapped[str] = mapped_column(String(64), index=True)
+    judge_version: Mapped[str] = mapped_column(String(64), default="")
+    predicted_verdict: Mapped[str] = mapped_column(String(32), index=True)
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    """The judge's P(success) in [0, 1] — feeds the calibration (ECE) curve."""
+    correct: Mapped[bool] = mapped_column(Boolean, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
 
 # ----------------------------------------------------------------------
@@ -354,7 +511,10 @@ class RecipeStepRow(Base):
 
 __all__ = [
     "Base",
+    "CalibrationExample",
+    "CalibrationResult",
     "Finding",
+    "GoldLabel",
     "HitlItem",
     "JudgeScore",
     "RecipeRow",

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}playbooks · advtest{% endblock %}
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">Catalogue</p>
+  <h1>Playbooks</h1>
+  <p>Attack playbooks the LLM attacker runs against the live Workspace side panel — grounded in real seeder sessions. Each maps to a tap_crescendo run.</p>
+</div>
+
+{% if playbooks %}
+<div class="tbl-wrap"><table class="tbl">
+  <thead>
+    <tr><th>Playbook</th><th>Target surface</th><th>Seed author</th><th class="num">Signals</th><th class="num">Steps</th></tr>
+  </thead>
+  <tbody>
+    {% for p in playbooks %}
+    <tr>
+      <td>
+        <a href="/playbooks/{{ p.id }}"><strong>{{ p.title }}</strong></a>
+        <div class="muted" style="font-size: 0.78rem; margin-top: 0.15rem; max-width: 60ch;">{{ p.objective[:120] }}{% if p.objective|length > 120 %}…{% endif %}</div>
+      </td>
+      <td class="mono">{{ p.surface }}</td>
+      <td>{{ p.author }}</td>
+      <td class="num">{{ p.n_signals }}</td>
+      <td class="num">{{ p.n_steps or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+{% else %}
+<div class="empty-state">No playbooks in the corpus (<code>guides/*.json</code>).</div>
+{% endif %}
+{% endblock %}

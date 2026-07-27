@@ -27,7 +27,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from advtest_ext.core.models import AttackTrace, JudgeScore
-from advtest_ext.providers.base import ChatMessage
+from advtest_ext.providers.base import ChatMessage, ChatResponse
 
 if TYPE_CHECKING:  # pragma: no cover - typing-only
     from advtest_ext.core.models import Behavior, Payload
@@ -120,13 +120,45 @@ class LlmJudgeBase(JudgeBase):
         self,
         *,
         provider: Provider,
-        max_tokens: int,
+        max_tokens: int | None = None,
         temperature: float = 0.0,
     ) -> None:
+        """``max_tokens=None`` inherits the provider's configured budget.
+
+        That is the default because the alternative silently ignored
+        operator configuration: judges used to carry their own hardcoded
+        default (256 for the IPI judges), no factory passed the value
+        through, and so raising ``max_tokens`` on the judge role in the
+        provider YAML changed nothing at all.
+
+        Harmless while models answered immediately. Not harmless once
+        thinking is on by default: thinking and the answer share the
+        budget, so a 256-token ceiling was consumed by thinking and the
+        reply came back EMPTY — surfacing as an unparseable verdict with
+        ``stop_reason='max_tokens'``, several layers away from the cause.
+        An explicit integer still wins, for callers that genuinely want
+        to cap one judge independently of the role.
+        """
         self._provider = provider
-        self._max_tokens = max_tokens
+        self._max_tokens = max_tokens if max_tokens is not None else provider.config.max_tokens
         self._temperature = temperature
         super().__init__()
+
+    async def _complete(self, prompt: str) -> ChatResponse:
+        """Send ``prompt`` as a single user message and return the FULL
+        response.
+
+        Judges that only need the text should use :meth:`_call_llm`.
+        Reach for this one when a failure has to be explained: an empty
+        ``text`` is ambiguous on its own — the model may have been cut
+        off mid-answer, declined the request outright, or simply
+        returned nothing — and only ``raw['stop_reason']`` tells those
+        apart. Diagnosing that from the text alone is guesswork."""
+        return await self._provider.complete(
+            [ChatMessage(role="user", content=prompt)],
+            max_tokens=self._max_tokens,
+            temperature=self._temperature,
+        )
 
     async def _call_llm(self, prompt: str) -> str:
         """Send ``prompt`` to the provider as a single user message and
@@ -134,12 +166,7 @@ class LlmJudgeBase(JudgeBase):
         ``[ChatMessage(role="user", content=prompt)]`` /
         ``provider.complete(max_tokens, temperature)`` boilerplate that
         was identical across every LLM judge."""
-        resp = await self._provider.complete(
-            [ChatMessage(role="user", content=prompt)],
-            max_tokens=self._max_tokens,
-            temperature=self._temperature,
-        )
-        return resp.text
+        return (await self._complete(prompt)).text
 
     def _judge_version(self) -> str:
         """``<version>/<model_id>`` string for persisted

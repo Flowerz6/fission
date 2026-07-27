@@ -1,0 +1,11 @@
+{# Slide-over panel body for a run: a compact meta line + the interactive
+   attack tree. Loaded by openRunPanel() (base.html) into #p-body and mounted
+   via window.AttackTree.boot(). #}
+<div class="run-panel-meta">
+  <span><span class="rp-strong">{{ run.strategy }}</span> &middot; {{ run.target_name }}</span>
+  <span>{{ run.summary.get('successful_traces', 0) }}/{{ run.summary.get('total_traces', 0) }} success
+    &middot; ASR {{ '%.0f'|format(run.summary.get('overall_asr', 0.0) * 100) }}%</span>
+  <a class="rp-link" href="/runs/{{ run.id }}/transcript">Full transcript &rarr;</a>
+  <a class="rp-link" href="/runs/{{ run.id }}">Open full run &rarr;</a>
+</div>
+{% include "runs/_tree_live.html" %}

@@ -201,6 +201,40 @@ def test_asr_heatmap_aggregates_per_technique_and_behaviour() -> None:
         assert cell["asr"] == pytest.approx(2 / 3)
 
 
+def test_make_engine_backfills_columns_on_a_preexisting_db(tmp_path: Path) -> None:
+    """A dev DB created before a column was added must self-heal: create_all
+    makes missing TABLES but not missing COLUMNS, so make_engine also runs an
+    additive back-fill (no ``no such column: traces.uncertainty`` on old DBs)."""
+    from sqlalchemy import create_engine, inspect, text
+
+    db = tmp_path / "old.db"
+    url = f"sqlite:///{db}"
+    # Simulate an OLD schema: a traces table missing this session's columns.
+    old = create_engine(url)
+    with old.begin() as c:
+        c.execute(text("CREATE TABLE traces (id VARCHAR(64) PRIMARY KEY, run_id VARCHAR(64))"))
+    old.dispose()
+
+    engine = make_engine(url)  # should back-fill columns + create new tables
+    insp = inspect(engine)
+    cols = {c["name"] for c in insp.get_columns("traces")}
+    assert "uncertainty" in cols
+    assert "uncertainty_reason" in cols
+    assert "verdict" in cols  # every model column is present
+    assert "gold_labels" in insp.get_table_names()  # new tables created too
+
+    # Idempotent: a second make_engine on the now-current DB doesn't error.
+    make_engine(url)
+
+    # And it actually works end-to-end: an insert-then-read round-trips.
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:
+        upsert_run(s, run_id="run-mig", target_name="stub", strategy="grid")
+        insert_trace(s, run_id="run-mig", trace=_domain_trace("tm1"))
+    with session_scope(factory) as s:
+        assert list_traces_for_run(s, "run-mig")[0].uncertainty == 0.0
+
+
 def test_hitl_queue_round_trips() -> None:
     engine = make_engine("sqlite:///:memory:")
     factory = make_session_factory(engine)

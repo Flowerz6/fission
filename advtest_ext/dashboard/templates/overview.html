@@ -1,122 +1,304 @@
 {% extends "base.html" %}
-{% block title %}Fission — Overview{% endblock %}
+{% block title %}Overview · Fission{% endblock %}
 {% block content %}
+<style>
+  .ov-head { margin-bottom: 1.25rem; }
+  .ov-head h1 { margin: 0.3rem 0 0.2rem; }
+  .ov-head .sub { color: var(--muted); font-family: var(--sans); font-size: 0.85rem; }
 
-<div class="page-head">
-  <h1>Adversarial testing overview</h1>
-  <p class="sub">Live posture across all runs against Gemini for Workspace —
-     coverage, findings, attack effectiveness, and drift detection.</p>
+  .ov-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .ov-kpis { grid-template-columns: 1.7fr 1fr 1fr; }
+  @media (max-width: 960px) { .ov-kpis { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .ov-kpis { grid-template-columns: 1fr; } }
+  .cell { background: var(--surface); padding: 1rem 1.15rem; min-width: 0; }
+  .cell .ch { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; padding-bottom: 0.7rem; margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); }
+  .cell .ch h3 { margin: 0; font-size: 0.9rem; }
+  .num { font-family: var(--sans); font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -0.01em; }
+
+  .hero { grid-row: span 2; display: flex; flex-direction: column; }
+  .hero .big { font-size: 2.9rem; line-height: 1; margin-top: 0.5rem; }
+  .hero .big .u { font-size: 1.2rem; color: var(--muted); }
+  .hero .big .pm { font-size: 1rem; color: var(--fg-soft); font-weight: 500; }
+
+  /* calibration scale */
+  .scale svg { width: 100%; height: 58px; display: block; margin-top: 1rem; }
+  .scale .tick { stroke: var(--border-strong); } .scale .tickmaj { stroke: var(--muted); }
+  .scale .fill { stroke: var(--partial); stroke-width: 6; }
+  .scale .cap { stroke: var(--accent); stroke-width: 1.5; }
+  .scale .oracle { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; }
+  .scale text { font-family: var(--font-mono); fill: var(--muted); font-size: 8px; }
+
+  .dl { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem 1.2rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .dl .k { font-family: var(--sans); font-size: 0.75rem; text-transform: none; letter-spacing: normal; color: var(--muted); font-weight: 600; }
+  .dl .v { font-family: var(--sans); font-size: 1rem; font-weight: 600; margin-top: 0.15rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .kbig { font-size: 1.7rem; margin-top: 0.4rem; }
+  .kmini { font-family: var(--sans); font-size: 0.76rem; color: var(--muted); margin-top: 0.4rem; }
+  .split { display: flex; height: 7px; margin: 0.85rem 0 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .split .u { background: var(--accent); } .split .d { background: var(--partial); }
+  .keys { display: flex; gap: 1rem; font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
+  .keys .sw { display: inline-block; width: 8px; height: 8px; margin-right: 0.3rem; vertical-align: middle; }
+  .tagline { font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600; letter-spacing: 0.04em; padding: 0.08rem 0.4rem; border: 1px solid currentColor; border-radius: var(--radius-sm); }
+  .tagline.acc { color: var(--accent); } .tagline.warm { color: var(--error); } .tagline.cool { color: var(--success); }
+
+  .ov-2 { grid-template-columns: 1.4fr 1fr; margin-top: 1rem; }
+  @media (max-width: 820px) { .ov-2 { grid-template-columns: 1fr; } }
+
+  .trend svg { width: 100%; height: 120px; display: block; }
+  .trend .axis { stroke: var(--border); } .trend .line { fill: none; stroke: var(--accent); stroke-width: 2; } .trend .end { fill: var(--accent); }
+  .trend .foot { display: flex; justify-content: space-between; font-family: var(--sans); font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; font-variant-numeric: tabular-nums; }
+
+  .diffs { display: flex; font-family: var(--font-mono); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .diffs > div { padding: 0.55rem 0.8rem; border-right: 1px solid var(--border); flex: 1; }
+  .diffs > div:last-child { border-right: none; }
+  .diffs .n { font-size: 1.1rem; font-weight: 700; }
+  .diffs .new .n { color: var(--error); } .diffs .fix .n { color: var(--success); } .diffs .per .n { color: var(--partial); }
+  .diffs .k { color: var(--muted); font-size: 0.72rem; text-transform: none; letter-spacing: normal; font-family: var(--sans); }
+
+  .rows { font-size: 0.84rem; }
+  .r { display: grid; grid-template-columns: 3px 1fr auto; gap: 0.7rem; align-items: center; padding: 0.5rem 0; border-top: 1px solid var(--border); }
+  .r:first-child { border-top: none; }
+  .r .stripe { align-self: stretch; }
+  .stripe.critical { background: var(--error); } .stripe.high { background: var(--partial); } .stripe.med { background: var(--muted); } .stripe.acc { background: var(--accent); }
+  .r .t { font-size: 0.86rem; }
+  .r .m { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); margin-top: 0.1rem; }
+  .r .s { font-family: var(--font-mono); font-weight: 650; }
+
+  .sevbars { display: grid; gap: 0.55rem; }
+  .sevbar { display: grid; grid-template-columns: 74px 1fr 32px; gap: 0.6rem; align-items: center; font-family: var(--font-mono); font-size: 0.76rem; }
+  .sevbar .track { height: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .sevbar .f { height: 100%; }
+  .act { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 1rem; padding: 0.5rem 0.85rem; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; text-decoration: none; }
+  .act:hover { background: var(--accent-hover); color: #fff; text-decoration: none; }
+
+  .heat { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-x: auto; margin-top: 0.6rem; }
+  .hrow { display: grid; gap: 1px; }
+  .hh { font-family: var(--sans); font-size: 0.68rem; color: var(--muted); text-transform: none; letter-spacing: normal; text-align: center; padding: 0.4rem 0; background: var(--surface); }
+  .hl { font-family: var(--font-mono); font-size: 0.68rem; color: var(--fg-soft); text-align: right; padding: 0 0.5rem; background: var(--surface); display: flex; align-items: center; justify-content: flex-end; }
+  .hc { height: 30px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; color: #fff; }
+
+  .pipe { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: 0.6rem; }
+  @media (max-width: 600px) { .pipe { grid-template-columns: 1fr 1fr; } }
+  .tier { background: var(--surface); padding: 0.7rem 0.8rem; }
+  .tier .tt { font-family: var(--sans); font-size: 0.78rem; font-weight: 600; color: var(--ink); }
+  .tier .td { font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; }
+  .tier .ts { font-family: var(--sans); font-size: 0.74rem; margin-top: 0.5rem; color: var(--fg-soft); display: flex; align-items: center; gap: 0.35rem; }
+  .sq { width: 7px; height: 7px; background: var(--success); flex: none; } .sq.warn { background: var(--partial); }
+
+  .empty { border: 1px solid var(--border); border-radius: var(--radius); padding: 2.5rem 2rem; text-align: center; color: var(--muted); }
+  .empty .big { font-family: var(--font-mono); font-size: 1.2rem; color: var(--fg); margin-bottom: 0.5rem; }
+</style>
+
+<div class="ov-head">
+  <div class="eyebrow">Command center</div>
+  {% if latest %}
+  <h1>{{ latest.target_name }}</h1>
+  <div class="sub">latest run <a href="/runs/{{ latest.id }}">{{ latest.id }}</a> ·
+    {{ s.total_runs }} runs · {{ s.total_traces }} traces</div>
+  {% else %}
+  <h1>Overview</h1>
+  <div class="sub">no runs yet</div>
+  {% endif %}
 </div>
 
-{% if s.total_runs == 0 %}
-<div class="empty-state">
-  <div class="big">No runs yet</div>
-  Once a run executes, this page summarises coverage, findings by severity,
-  attack-success rate over time, and drift events. Start a run, then refresh.
+{% if not latest %}
+<div class="empty">
+  <div class="big">No runs to summarise</div>
+  Execute a run and this page reports the calibrated ASR ± CI, run-over-run trend,
+  findings by severity, the review queue, and the oracle pipeline.
 </div>
 {% else %}
 
-{# ---- headline metric tiles ---- #}
-<div class="metric-grid">
-  <div class="metric">
-    <div class="label">Runs</div>
-    <div class="value">{{ s.total_runs }}</div>
-    <div class="sub">{{ s.total_traces }} attempts executed</div>
-  </div>
-  <div class="metric is-good">
-    <div class="label">Mean attack-success rate</div>
-    <div class="value">{{ '%.0f'|format(s.overall_asr * 100) }}<span class="unit">%</span></div>
-    <div class="sub">across executed runs</div>
-  </div>
-  <div class="metric is-critical">
-    <div class="label">Findings</div>
-    <div class="value">{{ s.total_findings }}</div>
-    <div class="sub">
-      {{ s.findings_by_severity.get('critical', 0) }} critical ·
-      {{ s.findings_by_severity.get('high', 0) }} high
+{# KPI row #}
+<div class="ov-grid ov-kpis">
+  <div class="cell hero">
+    <div class="ch">
+      <h3>Attack success rate</h3>
+      {% if ppi.method == 'ppi' %}<span class="tagline acc">PPI · calibrated</span>
+      {% else %}<span class="tagline warm">oracle · uncalibrated</span>{% endif %}
     </div>
-  </div>
-  <div class="metric is-drift">
-    <div class="label">Drift events detected</div>
-    <div class="value">{{ s.drift_events }}</div>
-    <div class="sub">
-      {{ s.drift_pruned }} attacker-goal · {{ s.drift_recovered }} platform recovered
+    <div class="num big">{{ '%.1f'|format(ppi.asr * 100) }}<span class="u">%</span>
+      {% if ppi.method == 'ppi' %}<span class="pm">± {{ '%.1f'|format(ppi.ci_half_width * 100) }}</span>{% endif %}
     </div>
+
+    {% if ppi.method == 'ppi' %}
+    {% set x = (ppi.asr * 520)|round(1) %}
+    {% set lo = (ppi.ci_low * 520)|round(1) %}
+    {% set hi = (ppi.ci_high * 520)|round(1) %}
+    {% set orc = (ppi.oracle_asr * 520)|round(1) %}
+    <div class="scale">
+      <svg viewBox="0 0 520 58" preserveAspectRatio="none" role="img"
+           aria-label="ASR {{ '%.1f'|format(ppi.asr*100) }} percent with 95 percent CI">
+        {% for gx in [0, 52, 104, 156, 208, 260, 312, 364, 416, 468, 519] %}
+        <line class="{{ 'tickmaj' if loop.index0 % 2 == 0 else 'tick' }}" x1="{{ gx }}" y1="{{ 34 if loop.index0 % 2 == 0 else 36 }}" x2="{{ gx }}" y2="42"/>
+        {% endfor %}
+        <text x="0" y="54">0</text><text x="240" y="54">50</text><text x="500" y="54">100</text>
+        <line class="fill" x1="0" y1="24" x2="{{ x }}" y2="24"/>
+        <line class="oracle" x1="{{ orc }}" y1="8" x2="{{ orc }}" y2="30"/>
+        <text x="{{ (orc + 4)|round(1) }}" y="14">oracle {{ '%.0f'|format(ppi.oracle_asr*100) }}</text>
+        <line class="cap" x1="{{ lo }}" y1="14" x2="{{ lo }}" y2="34"/>
+        <line class="cap" x1="{{ hi }}" y1="14" x2="{{ hi }}" y2="34"/>
+        <line class="cap" x1="{{ lo }}" y1="24" x2="{{ hi }}" y2="24" stroke-dasharray="1 2"/>
+        <line class="cap" x1="{{ x }}" y1="4" x2="{{ x }}" y2="30" stroke-width="2"/>
+      </svg>
+    </div>
+    <div class="dl">
+      <div><div class="k">Oracle ASR</div><div class="v">{{ '%.1f'|format(ppi.oracle_asr*100) }}%</div></div>
+      <div><div class="k">Rectifier</div><div class="v">{{ '%+.1f'|format(-ppi.rectifier*100) }}%</div></div>
+      <div><div class="k">Partial</div><div class="v">{{ n_partial }}</div></div>
+      <div><div class="k">Gold labels</div><div class="v">{{ ppi.n_labeled }}</div></div>
+      <div><div class="k">95% CI</div><div class="v">{{ '%.0f'|format(ppi.ci_low*100) }}–{{ '%.0f'|format(ppi.ci_high*100) }}</div></div>
+    </div>
+    {% else %}
+    <div class="kmini" style="margin-top:1rem">Uncalibrated — <a href="/hitl">label the review queue</a> for a rectified CI.</div>
+    <div class="dl">
+      <div><div class="k">Traces</div><div class="v">{{ ppi.n_total }}</div></div>
+      <div><div class="k">Partial</div><div class="v">{{ n_partial }}</div></div>
+      <div><div class="k">Gold labels</div><div class="v">{{ queue.gold }}</div></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="cell">
+    <div class="ch"><h3>Findings</h3>
+      <span class="tagline warm">{{ s.findings_by_severity.get('critical', 0) }} critical</span></div>
+    <div class="num kbig">{{ s.total_findings }}</div>
+    <div class="kmini">{{ s.findings_by_severity.get('high', 0) }} high · {{ s.findings_by_severity.get('med', 0) }} med</div>
+  </div>
+
+  <div class="cell">
+    <div class="ch"><h3>Review queue</h3><span class="kmini">{{ queue.pending }} pending</span></div>
+    {% if queue.pending %}
+    {% set utot = queue.uniform + queue.disagreement %}
+    <div class="split">
+      <div class="u" style="width: {{ (queue.uniform / utot * 100) if utot else 0 }}%"></div>
+      <div class="d" style="width: {{ (queue.disagreement / utot * 100) if utot else 0 }}%"></div>
+    </div>
+    <div class="keys"><span><span class="sw" style="background:var(--accent)"></span>uniform {{ queue.uniform }}</span><span><span class="sw" style="background:var(--partial)"></span>disagreement {{ queue.disagreement }}</span></div>
+    {% else %}<div class="kmini">Queue empty.</div>{% endif %}
+  </div>
+
+  <div class="cell">
+    <div class="ch"><h3>Gold set</h3></div>
+    <div class="num kbig">{{ queue.gold }}</div>
+    <div class="kmini">expert labels · feeds PPI</div>
+  </div>
+
+  <div class="cell">
+    <div class="ch"><h3>Drift</h3><span class="sq {{ 'warn' if s.drift_events else '' }}"></span></div>
+    <div class="num kbig">{{ s.drift_recovered }}<span style="font-size:0.8rem;color:var(--muted)"> recovered</span></div>
+    <div class="kmini">{{ s.drift_pruned }} off-mechanism pruned</div>
   </div>
 </div>
 
-<div class="grid-2">
-  {# ---- ASR trend ---- #}
-  <div class="card">
-    <h2>Attack-success rate over time</h2>
-    <p class="card-hint">Per run, oldest to newest. Each bar is one run's ASR;
-       a sustained drop can signal target-model drift (a Gemini safety update).</p>
-    {% if s.asr_trend %}
-    <div class="spark">
-      {% for pt in s.asr_trend %}
-      <div class="bar" style="height: {{ (pt.asr * 100) | round(0, 'floor') | int }}%"
-           title="{{ pt.run_id }} — {{ '%.0f'|format(pt.asr * 100) }}% ({{ pt.traces }} attempts)"></div>
+{# Trend + diff #}
+<div class="ov-grid ov-2">
+  <div class="cell trend">
+    <div class="ch"><h3>ASR · last {{ trend|length }} runs</h3><span class="eyebrow">oracle ASR per run</span></div>
+    {% if trend|length > 1 %}
+    <svg viewBox="0 0 {{ trend_svg.w }} {{ trend_svg.h }}" preserveAspectRatio="none" role="img" aria-label="ASR trend across runs">
+      <line class="axis" x1="0" y1="{{ trend_svg.h * 0.25 }}" x2="{{ trend_svg.w }}" y2="{{ trend_svg.h * 0.25 }}"/>
+      <line class="axis" x1="0" y1="{{ trend_svg.h * 0.5 }}" x2="{{ trend_svg.w }}" y2="{{ trend_svg.h * 0.5 }}"/>
+      <line class="axis" x1="0" y1="{{ trend_svg.h * 0.75 }}" x2="{{ trend_svg.w }}" y2="{{ trend_svg.h * 0.75 }}"/>
+      <polyline class="line" points="{{ trend_svg.points }}"/>
+      {% if trend_svg.end %}<circle class="end" cx="{{ trend_svg.end.split(',')[0] }}" cy="{{ trend_svg.end.split(',')[1] }}" r="3"/>{% endif %}
+    </svg>
+    <div class="foot"><span>oldest · {{ '%.0f'|format(trend_svg.first_asr*100) }}%</span><span>latest · {{ '%.0f'|format(trend_svg.last_asr*100) }}%</span></div>
+    {% else %}
+    <div class="empty-state">Not enough history yet — the ASR trend appears once a second run completes.</div>
+    {% endif %}
+  </div>
+
+  <div class="cell">
+    <div class="ch"><h3>Changed this run</h3>{% if prev %}<span class="eyebrow">vs {{ prev.id }}</span>{% endif %}</div>
+    {% if diff %}
+    <div class="diffs">
+      <div class="new"><div class="n">+{{ diff.new }}</div><div class="k">new</div></div>
+      <div class="fix"><div class="n">−{{ diff.fixed }}</div><div class="k">fixed</div></div>
+      <div class="per"><div class="n">{{ diff.persisting }}</div><div class="k">persisting</div></div>
+    </div>
+    <div class="kmini" style="margin-top:0.7rem">Vulnerable (behaviour × technique) cells vs the previous run.</div>
+    {% else %}
+    <div class="kmini">No previous run to diff against yet.</div>
+    {% endif %}
+    <div class="rows" style="margin-top:0.85rem">
+      {% for f in top_findings %}
+      <div class="r">
+        <span class="stripe {{ f.severity }}"></span>
+        <div><div class="t">{{ f.title or 'Finding' }}</div><div class="m">{{ f.trace.behavior_id if f.trace else '—' }}</div></div>
+        <span class="s pill {{ 'error' if f.severity in ('critical','high') else 'partial' }}">{{ f.severity }}</span>
+      </div>
       {% endfor %}
     </div>
-    <div class="spark-axis"><span>oldest</span><span>0–100% ASR</span><span>newest</span></div>
-    {% else %}
-    <p class="muted">No executed runs yet.</p>
-    {% endif %}
+  </div>
+</div>
+
+{# Severity + review widget #}
+<div class="ov-grid ov-2">
+  <div class="cell">
+    <div class="ch"><h3>Findings by severity</h3><span class="eyebrow">all runs</span></div>
+    {% set maxsev = [s.findings_by_severity.get('critical',0), s.findings_by_severity.get('high',0), s.findings_by_severity.get('med',0), s.findings_by_severity.get('low',0), 1]|max %}
+    <div class="sevbars">
+      {% for name, col in [('critical','var(--error)'), ('high','var(--partial)'), ('med','var(--muted)'), ('low','var(--refused)')] %}
+      {% set c = s.findings_by_severity.get(name, 0) %}
+      <div class="sevbar">
+        <span>{{ name }}</span>
+        <span class="track"><span class="f" style="width: {{ (c / maxsev * 100)|round(0) }}%; background: {{ col }}"></span></span>
+        <span style="text-align:right">{{ c }}</span>
+      </div>
+      {% endfor %}
+    </div>
   </div>
 
-  {# ---- findings by severity ---- #}
-  <div class="card">
-    <h2>Findings by severity</h2>
-    <p class="card-hint">Confirmed vulnerabilities, graded. Click through to
-       <a href="/findings">Findings</a> for evidence and replay bundles.</p>
-    {% set total = s.total_findings if s.total_findings > 0 else 1 %}
-    {% for key, label in [('critical','Critical'), ('high','High'), ('med','Medium'), ('low','Low')] %}
-    {% set n = s.findings_by_severity.get(key, 0) %}
-    <div class="sev-row">
-      <span class="sev-name">{{ label }}</span>
-      <span class="track"><span class="fill {{ key }}" style="width: {{ (n / total * 100) | round(1) }}%"></span></span>
-      <span class="n">{{ n }}</span>
+  <div class="cell">
+    <div class="ch"><h3>Label the queue</h3><span class="eyebrow">≤30s · keyboard</span></div>
+    {% if queue.pending %}
+    <div class="rows">
+      {% for it in queue.top %}
+      <div class="r">
+        <span class="stripe {{ 'acc' if it.sample_reason == 'disagreement' else 'med' }}"></span>
+        <div><div class="t mono" style="font-size:0.78rem">{{ it.trace_id[:14] if it.trace_id else '—' }}</div><div class="m">uncertainty {{ '%.2f'|format(it.uncertainty) }}</div></div>
+        <span class="s pill {{ 'partial' if it.sample_reason == 'disagreement' else 'success' }}">{{ it.sample_reason or 'sample' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <a class="act" href="/hitl/{{ queue.top[0].id }}">Start reviewing →</a>
+    {% else %}
+    <div class="kmini">Nothing pending. Run with <code>review_sample_budget</code> set to populate the queue.</div>
+    {% endif %}
+  </div>
+</div>
+
+{# Heatmap #}
+{% if not heatmap.is_empty %}
+<div class="cell" style="border:1px solid var(--border); border-radius:var(--radius); margin-top:1rem">
+  <div class="ch"><h3>ASR · technique × payload family</h3><span class="eyebrow">latest run · darker = higher</span></div>
+  <div class="heat">
+    <div class="hrow" style="grid-template-columns: 150px repeat({{ heatmap.families|length }}, minmax(52px, 1fr))">
+      <span class="hh"></span>
+      {% for fam in heatmap.families %}<span class="hh">{{ fam }}</span>{% endfor %}
+    </div>
+    {% for row in heatmap.rows %}
+    <div class="hrow" style="grid-template-columns: 150px repeat({{ heatmap.families|length }}, minmax(52px, 1fr))">
+      <span class="hl">{{ row.technique }}</span>
+      {% for cell in row.cells %}
+      {% set a = cell.asr %}
+      <span class="hc" style="background: {{ 'var(--error)' if a >= 0.66 else ('var(--partial)' if a >= 0.33 else ('#7d8f8a' if a > 0 else 'var(--surface-2)')) }}; {{ 'color:var(--muted)' if a == 0 else '' }}">{{ '%.2f'|format(a) }}</span>
+      {% endfor %}
     </div>
     {% endfor %}
   </div>
 </div>
+{% endif %}
 
-<div class="grid-2">
-  {# ---- attack effectiveness ---- #}
-  <div class="card">
-    <h2>Attack effectiveness</h2>
-    <p class="card-hint">Which techniques land most often. Bar = success rate;
-       count = successes / attempts.</p>
-    {% if s.attack_breakdown %}
-    {% for a in s.attack_breakdown[:8] %}
-    <div class="hbar-row">
-      <span class="nm" title="{{ a.attack }}">{{ a.attack }}</span>
-      <span class="track"><span class="fill" style="width: {{ (a.asr * 100) | round(1) }}%"></span></span>
-      <span class="meta">{{ '%.0f'|format(a.asr * 100) }}% · {{ a.successes }}/{{ a.total }}</span>
-    </div>
-    {% endfor %}
-    {% else %}
-    <p class="muted">No attempts recorded yet.</p>
-    {% endif %}
-  </div>
-
-  {# ---- recent runs ---- #}
-  <div class="card">
-    <h2>Recent runs</h2>
-    <p class="card-hint">Most recent executions. <a href="/runs">View all →</a></p>
-    <table>
-      <thead><tr><th>Run</th><th>Target</th><th>ASR</th><th>Started</th></tr></thead>
-      <tbody>
-        {% for r in s.recent_runs %}
-        <tr>
-          <td><a href="/runs/{{ r.id }}"><code>{{ r.id[:16] }}</code></a></td>
-          <td>{{ r.target_name }}</td>
-          <td>{{ '%.0f'|format((r.summary.get('overall_asr', 0.0) or 0.0) * 100) }}%</td>
-          <td class="muted">{{ (r.started_at|string)[:16] if r.started_at else '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+{# Oracle pipeline #}
+<div class="cell" style="border:1px solid var(--border); border-radius:var(--radius); margin-top:1rem">
+  <div class="ch"><h3>Layered oracle · verdict pipeline</h3><span class="eyebrow">confidence-gated escalation</span></div>
+  <div class="pipe">
+    <div class="tier"><div class="tt">L0 · signals</div><div class="td">canary / beacon / tool-call assert</div><div class="ts"><span class="sq"></span> {{ s.total_traces }} evaluated</div></div>
+    <div class="tier"><div class="tt">L1 · classifier</div><div class="td">calibrated success prob.</div></div>
+    <div class="tier"><div class="tt">L2 · llm judge</div><div class="td">decomposed rubric, disjoint</div></div>
+    <div class="tier"><div class="tt">L3 · human</div><div class="td">disagreement-routed</div><div class="ts"><span class="sq"></span> {{ queue.gold }} labelled</div></div>
   </div>
 </div>
 

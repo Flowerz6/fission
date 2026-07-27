@@ -1,0 +1,58 @@
+<div class="field"><div class="fl">Target class</div><div class="fv">{{ region }}</div></div>
+<div class="field"><div class="fl">Coverage</div><div class="fv">{{ attempts }} attempt{{ '' if attempts == 1 else 's' }} · {{ runs }} run{{ '' if runs == 1 else 's' }} · {{ n_success }} scored success · {{ findings|length }} finding{{ '' if findings|length == 1 else 's' }}</div></div>
+{% if strategies %}<div class="field"><div class="fl">Strategies</div><div class="fv">{{ strategies|join(' · ') }}</div></div>{% endif %}
+{% if behaviors %}<div class="field"><div class="fl">Behaviours exercised</div><div class="fv">{{ behaviors|join(' · ') }}</div></div>{% endif %}
+
+<div class="field">
+  <div class="fl">Oracle layer map — how this surface is judged</div>
+  <div class="oracle-map">
+    <div class="om-head"><span class="t">Layered oracle</span><span class="sub">L0 signals → L2 judge</span></div>
+    {% if signals %}
+      {% for sig in signals %}
+      <div class="layer">
+        <span class="lx">L0</span>
+        <div class="lbox"><span class="ln">{{ sig.name }}</span>
+          <span class="lv {{ 'fire' if sig.fired else 'skip' }}">{{ sig.fired }} / {{ sig.total }} fired</span></div>
+      </div>
+      {% if not loop.last %}<div class="connector"></div>{% endif %}
+      {% endfor %}
+      <div class="connector"></div>
+    {% endif %}
+    <div class="layer">
+      <span class="lx">L2</span>
+      <div class="lbox"><span class="ln">LLM judge — decomposed (attended / complied / harmful)</span>
+        <span class="lv {{ 'pass' if n_success else 'skip' }}">{{ n_judged }} scored · {{ n_success }} success</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="field">
+  <div class="fl">Findings{% if findings %} · {{ findings|length }}{% endif %}</div>
+  {% if findings %}
+    {% for f in findings %}
+    <div class="finding open">
+      <button type="button" onclick="this.parentElement.classList.toggle('open')">
+        <span class="f-title">{{ f.title or f.trace.behavior_id }}</span>
+        <span class="verdict-count"><span class="vc unsafe">{{ f.severity }}</span></span>
+        <span class="caret">&#9656;</span>
+      </button>
+      <div class="finding-body">
+        {% if f.description %}
+        <div class="detail-label">Description</div>
+        <p class="detail-text">{{ f.description }}</p>
+        {% endif %}
+        <div class="detail-label">Trace</div>
+        <p class="detail-text"><a href="/findings/{{ f.id }}">{{ f.id }}</a> · behaviour <span style="font-family:var(--mono)">{{ f.trace.behavior_id }}</span></p>
+        {% if f.replay_bundle_path %}
+        <div class="replay">
+          <a class="dl" href="/findings/{{ f.id }}/replay">Download bundle</a>
+          <span class="hash">verifies offline · replay bundle on disk</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="detail-text" style="color:var(--muted)">No findings yet.</p>
+  {% endif %}
+</div>

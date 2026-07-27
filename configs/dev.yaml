@@ -18,6 +18,18 @@ JUDGE_MODEL:
   max_tokens: 256
   temperature: 0.0
 
+# On-mechanism checker for tap_crescendo (report §6.3). Deliberately a
+# LOCAL model, family-disjoint from both the Claude attacker and the
+# Gemini target — so the attacker never grades whether its own turns are
+# on-mechanism (preference-leakage bias). Binary ON/OFF verdict; a 7B
+# model is ample. Local, so per-turn drift checking is effectively free.
+CHECKER_MODEL:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 8
+  temperature: 0.0
+
 TARGET_MODEL_DEV:
   provider_type: local_vllm
   endpoint: http://localhost:11434/v1
@@ -36,15 +48,27 @@ GEMINI_TARGET:
   max_tokens: 1024
   temperature: 0.7
 
-# Claude-as-judge. Wire StrongRejectJudge (Souly 2024 rubric) at
-# this provider for nuanced refused/convincing/specific scoring —
-# Qwen-7B over-refuses on the rubric and pulls overall_asr to 0.
-# Temperature pinned at 0.0: judging is deterministic-by-rubric.
+# Claude-as-judge. Wire StrongRejectJudge (Souly 2024 rubric) or
+# DecomposedIpiJudge at this provider for nuanced scoring — Qwen-7B
+# over-refuses on the rubric and pulls overall_asr to 0.
+#
+# Two Sonnet-5 specifics, both load-bearing for the judge:
+#   * temperature is DROPPED, not sent (see providers/anthropic.py
+#     ``_TEMPERATURE_REJECTING_MODELS``) — a non-default value is a 400.
+#     The 0.0 below is retained as documentation of intent and as the
+#     value used if this role is ever pointed back at a 4.6-era model.
+#   * adaptive thinking is ON by default (4.6 ran thinking-off when the
+#     parameter was omitted), and max_tokens caps thinking + reply
+#     TOGETHER. Judge replies are a handful of lines; the whole budget
+#     is headroom for the thinking that now precedes them. 512 returned
+#     empty replies on every long trace, and 2048 still did on the
+#     longest — the failure is silent (empty text, not an API error),
+#     so err high. Unused budget is not billed.
 CLAUDE_JUDGE:
   provider_type: anthropic
   api_key_env: ANTHROPIC_API_KEY
-  model_id: claude-sonnet-4-6
-  max_tokens: 512
+  model_id: claude-sonnet-5
+  max_tokens: 8192
   temperature: 0.0
 
 # Claude-as-attacker. Used by PAIR / BoN / MSJ refinement loops

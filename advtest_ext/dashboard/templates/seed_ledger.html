@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Fission — Seed ledger{% endblock %}
+{% block content %}
+<style>
+  /* Right-align + tabular numerals so per-seed counts line up — a
+     measurement table with ragged digits undercuts the claim. */
+  table td.num, table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="page-head">
+  <h1>Seed ledger</h1>
+  <p class="sub">Every attack outcome, aggregated <strong>by seed</strong> across
+     all runs. Seeds that fail, get refused, or land just short surface here
+     for triage.</p>
+</div>
+
+{% if ledger.total_seeds == 0 %}
+<div class="empty-state">
+  <div class="big">No seeds have run yet</div>
+  Each attack trace is tagged with the seed it came from. Once a run completes,
+  its seeds appear here with their conversion rate, near-misses, refusals and
+  drift — and a triage recommendation for the ones that need a human.
+</div>
+{% else %}
+
+<div class="metric-grid">
+  <div class="metric">
+    <div class="label">Seeds tracked</div>
+    <div class="value">{{ ledger.total_seeds }}</div>
+    <div class="sub">across every run</div>
+  </div>
+  <div class="metric is-good">
+    <div class="label">Converging</div>
+    <div class="value">{{ ledger.converging }}</div>
+    <div class="sub">landing — no action needed</div>
+  </div>
+  <div class="metric is-drift">
+    <div class="label">Triage queue</div>
+    <div class="value">{{ ledger.triage_queue }}</div>
+    <div class="sub">candidates for a human between runs</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Per-seed effectiveness</h2>
+  <p class="card-hint">Ordered for triage: <strong>near-miss first</strong>, then
+    refused, drifting, no-traction; converging last.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Seed</th><th>Status</th>
+        <th class="num">Attempts</th><th class="num">Conv.</th>
+        <th class="num">Best</th><th class="num">Near-miss</th>
+        <th class="num">Refused</th><th class="num">Drift</th>
+        <th class="num">Runs</th>
+        <th>Recommendation</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in ledger.near_miss_first %}
+      <tr>
+        <td><code>{{ r.seed_id }}</code></td>
+        <td>
+          {% if r.status == 'converging' %}<span class="pill success">converging</span>
+          {% elif r.status == 'near-miss' %}<span class="pill partial">near-miss</span>
+          {% elif r.status == 'refused' %}<span class="pill error">refused</span>
+          {% elif r.status == 'drifting' %}<span class="pill teal">drifting</span>
+          {% else %}<span class="pill">no-traction</span>{% endif %}
+        </td>
+        <td class="num">{{ r.attempts }}</td>
+        <td class="num">{{ r.conversions }}</td>
+        <td class="num">{{ '%.2f'|format(r.best_score) }}</td>
+        <td class="num">{{ r.near_misses }}</td>
+        <td class="num">{{ r.refusals }}</td>
+        <td class="num">{{ r.drift_events }}</td>
+        <td class="num">{{ r.runs }}</td>
+        <td class="muted">{{ r.recommendation }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Triage actions</h2>
+    <p class="card-hint">Fixes land between runs and flow into the next run's
+      seeds as a new versioned playbook.</p>
+    <div class="sev-row"><span class="sev-name" style="width:110px">Near-miss</span>
+      <span class="muted">a human adds the move the LLM couldn't find</span></div>
+    <div class="sev-row"><span class="sev-name" style="width:110px">Refused</span>
+      <span class="muted">craft a bypass; harvest the refusal phrasings for L0</span></div>
+    <div class="sev-row"><span class="sev-name" style="width:110px">Drifting</span>
+      <span class="muted">the playbook doesn't fit — rework strategy / exemplars</span></div>
+    <div class="sev-row"><span class="sev-name" style="width:110px">Converging</span>
+      <span class="muted">promote the winning angle back into the catalogue</span></div>
+  </div>
+  <div class="card">
+    <h2>Refusal counting</h2>
+    <p class="card-hint">Refusals are counted via the L0 refusal-marker set,
+      currently tuned to the retrieval campaign and under-detecting on newer
+      surfaces.</p>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

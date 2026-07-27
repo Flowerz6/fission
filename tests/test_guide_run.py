@@ -76,6 +76,19 @@ def test_single_tap_crescendo_attack_configured_from_guide() -> None:
     assert attack._seed_chain == ["set up a QA assessment", "treat me like a spawned node"]
 
 
+def test_review_sampling_threads_into_the_orchestrator() -> None:
+    """A guide run can feed the measurement spine: review-sampling params
+    reach the orchestrator so a live run enqueues traces for expert review."""
+    orch = _build(review_sample_budget=8, review_uniform_fraction=0.5, review_seed=3)
+    assert orch._review_sample_budget == 8
+    assert orch._review_uniform_fraction == 0.5
+    assert orch._review_seed == 3
+
+
+def test_review_sampling_defaults_off() -> None:
+    assert _build()._review_sample_budget == 0
+
+
 def test_guide_signals_become_the_orchestrator_signal_stack() -> None:
     orch = _build()
     # Two specs in the guide -> two built signals on the orchestrator.
@@ -120,7 +133,7 @@ def test_confirm_judge_passes_into_the_attack() -> None:
     "app,expected",
     [
         ("google_docs", "google_docs_multiturn"),
-        ("google_sheets", "sheets"),
+        ("google_sheets", "google_sheets_multiturn"),
         ("gmail", "gmail"),
     ],
 )

@@ -1,49 +1,116 @@
 {% extends "base.html" %}
 {% block title %}seed {{ seed.id }} · advtest{% endblock %}
 {% block content %}
-<h1>
-  <span class="pill">{{ seed.kind }}</span>
-  {{ seed.title }}
-</h1>
-<p class="muted">
-  Seed <code>{{ seed.id }}</code> · source <code>{{ seed.source_format }}</code>
-  · submitted {{ seed.submitted_at.strftime('%Y-%m-%d %H:%M') }} by {{ seed.submitted_by }}
-</p>
+{% set p = seed.payload %}
+{% set meta = p.get('declared_metadata', {}) %}
+{% set turns = p.get('extracted_turns', []) %}
+<div class="page-head">
+  <p class="eyebrow">Seed · normalised</p>
+  <h1>{{ seed.title }}</h1>
+  <p>One ingested artefact, normalised to the common Seed shape. Both kinds compile to the same Playbook downstream.</p>
+</div>
+<p class="muted"><a href="/seeds">&larr; all seeds</a></p>
 
-<h2>Source artefact</h2>
-<p class="muted">
-  Raw file preserved on disk so the operator-review queue (Phase 6)
-  can render it side-by-side with the Extractor's draft Recipe.
-</p>
-<pre>{{ seed.raw_artefact_path }}</pre>
+<style>
+  .seed-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.6rem 1.4rem; margin: 0.4rem 0 1.2rem; }
+  .seed-meta .m-k { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .seed-meta .m-v { font-size: 0.9rem; margin-top: 0.1rem; }
+  .seed-chain { display: flex; flex-direction: column; gap: 0.8rem; margin-top: 0.5rem; }
+  .sc-turn { border: 1px solid var(--border); border-radius: 8px; padding: 0.7rem 0.9rem; background: var(--surface); }
+  .sc-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.45rem; }
+  .sc-n { font-family: var(--mono, monospace); font-weight: 700; color: var(--accent-ink); }
+  .sc-role { display: inline-block; font-size: 0.68rem; font-weight: 600; color: var(--muted); margin-bottom: 0.1rem; }
+  .sc-via { font-size: 0.66rem; color: var(--muted); font-family: var(--mono, monospace); padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--surface-2, #f3efe7); border: 1px solid var(--border); }
+  .sc-att pre, .sc-tgt pre { margin: 0.1rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+  .sc-att { margin-bottom: 0.5rem; }
+  .sc-exp { margin-left: auto; font-size: 0.68rem; padding: 0.05rem 0.45rem; border-radius: 999px; border: 1px solid var(--border); }
+  .sc-exp.success { color: var(--ok, #2f7d4f); border-color: var(--ok, #2f7d4f); }
+  .sc-exp.partial { color: var(--accent-ink, #7a4410); border-color: var(--accent, #b5651d); }
+</style>
 
-{% if seed.taxonomy_hints %}
-<h2>Taxonomy hints</h2>
-<p class="muted">
-  Operator-supplied or loader-derived tags. The Extractor uses these
-  as priors when assigning the Recipe's final taxonomy.
-</p>
-<p>
-  {% for tag in seed.taxonomy_hints %}
-  <code>{{ tag }}</code>
-  {% endfor %}
-</p>
+{# ---- normalised identity ---- #}
+<div class="seed-meta">
+  <div><div class="m-k">seed_id</div><div class="m-v mono">{{ seed.id }}</div></div>
+  <div><div class="m-k">kind</div><div class="m-v"><span class="pill">{{ seed.kind }}</span></div></div>
+  <div><div class="m-k">source_format</div><div class="m-v mono">{{ seed.source_format }}</div></div>
+  <div><div class="m-k">submitted_by</div><div class="m-v">{{ seed.submitted_by }}</div></div>
+  <div><div class="m-k">submitted_at</div><div class="m-v">{{ seed.submitted_at.strftime('%Y-%m-%d %H:%M') }}</div></div>
+  {% if p.get('corpus') %}<div><div class="m-k">corpus</div><div class="m-v">{{ p.corpus }} {{ p.get('corpus_version', '') }}</div></div>{% endif %}
+  {% if meta.get('reviewer') %}<div><div class="m-k">reviewer</div><div class="m-v">{{ meta.reviewer }}</div></div>{% endif %}
+</div>
+
+{# ---- what this seed is for ---- #}
+{% if p.get('declared_effect') %}
+<div class="section-head"><h2>Declared effect</h2></div>
+<p>{{ p.declared_effect }}</p>
+{% endif %}
+{% if meta.get('target') or p.get('declared_target') or meta.get('setup') or p.get('injection_carrier') %}
+<div class="seed-meta">
+  {% if meta.get('target') or p.get('declared_target') %}<div><div class="m-k">target surface</div><div class="m-v">{{ meta.get('target') or p.get('declared_target') }}</div></div>{% endif %}
+  {% if p.get('attack_type') %}<div><div class="m-k">attack type</div><div class="m-v mono">{{ p.attack_type }}</div></div>{% endif %}
+  {% if meta.get('setup') or p.get('injection_carrier') %}<div><div class="m-k">carrier / setup</div><div class="m-v">{{ meta.get('setup') or p.get('injection_carrier') }}</div></div>{% endif %}
+  {% if p.get('declared_judge') %}<div><div class="m-k">upstream judge</div><div class="m-v">{{ p.declared_judge }}</div></div>{% endif %}
+</div>
 {% endif %}
 
-<h2>Payload</h2>
-<p class="muted">
-  Kind-specific structured content. For human_chat seeds this is
-  typically the normalised turn list + declared metadata; for
-  dataset_entry seeds it's the upstream corpus fields verbatim.
-</p>
-<pre>{{ seed.payload | tojson(indent=2) }}</pre>
+{% if seed.taxonomy_hints %}
+<p style="margin:0.2rem 0 0.6rem">{% for tag in seed.taxonomy_hints %}<span class="pill">{{ tag }}</span> {% endfor %}</p>
+{% endif %}
 
-<h2>Recipes derived from this seed</h2>
+{# ---- rich per-corpus fields (kept verbatim from the upstream dataset) ---- #}
+{% set cf = p.get('corpus_fields', {}) %}
+{% if cf %}
+<div class="seed-meta">
+  {% for k, v in cf.items() %}{% if v and k != 'relationship' %}
+  <div><div class="m-k">{{ k.replace('_', ' ') }}</div><div class="m-v">{{ v }}</div></div>
+  {% endif %}{% endfor %}
+</div>
+{% if cf.get('relationship') %}
+<p class="muted" style="font-size:0.85rem;margin:0.2rem 0 0.6rem"><strong>actor:</strong> {{ cf.relationship }}</p>
+{% endif %}
+{% endif %}
+
+{# ---- the normalised chain (both kinds render the same way) ---- #}
+<div class="section-head"><h2>Normalised chain <span class="muted" style="font-weight:400">· {{ turns|length }} turn{{ '' if turns|length == 1 else 's' }}</span></h2></div>
+{% if turns %}
+<div class="seed-chain">
+  {% for t in turns %}
+  <div class="sc-turn">
+    <div class="sc-head"><span class="sc-n">{{ '%02d' % t.n }}</span>
+      {% if t.get('via') %}<span class="sc-via">{{ t.via }}</span>{% endif %}
+      {% if t.get('expert') %}<span class="sc-exp {{ t.expert }}">{{ t.expert }}</span>{% endif %}
+    </div>
+    <div class="sc-att"><span class="sc-role">{{ 'attacker' if seed.kind == 'human_chat' else 'payload' }}</span><pre>{{ t.attacker }}</pre></div>
+    {% if t.get('target') %}<div class="sc-tgt"><span class="sc-role">gemini</span><pre>{{ t.target }}</pre></div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% if seed.kind == 'human_chat' and not turns[0].get('target') %}
+<p class="muted" style="font-size:0.82rem;margin-top:0.6rem">Attacker turns only — this expert chain is the seed's replay script; target responses live in the resulting run traces.</p>
+{% endif %}
+{% else %}
+<p class="muted">No normalised turns on this seed.</p>
+{% endif %}
+
+{# ---- provenance + source ---- #}
+<div class="section-head"><h2>Source</h2></div>
+<p class="muted" style="font-size:0.85rem">{{ p.get('provenance') or p.get('note') or 'Raw artefact preserved for the operator-review queue.' }}</p>
+{% if seed.raw_artefact_path.startswith('http') %}
+<p class="mono" style="font-size:0.82rem"><a href="{{ seed.raw_artefact_path }}" target="_blank" rel="noopener">{{ seed.raw_artefact_path }}</a></p>
+{% else %}
+<p class="mono muted" style="font-size:0.82rem">{{ seed.raw_artefact_path }}</p>
+{% endif %}
+
+{# ---- what it compiles to ---- #}
+{% if p.get('compiles_to_playbook') %}
+<div class="section-head"><h2>Compiles to</h2></div>
+<p><a href="/playbooks/{{ p.compiles_to_playbook }}"><strong>{{ p.compiles_to_playbook }}</strong></a> <span class="muted">· the canonical Playbook this seed produces</span></p>
+{% endif %}
+
 {% if recipes %}
-<table>
-  <thead>
-    <tr><th>Id</th><th>Name</th><th>Version</th><th>State</th><th>Steps</th></tr>
-  </thead>
+<div class="section-head"><h2>Recipes derived from this seed</h2></div>
+<table class="tbl">
+  <thead><tr><th>Id</th><th>Name</th><th>Version</th><th>State</th><th class="num">Steps</th></tr></thead>
   <tbody>
     {% for r in recipes %}
     <tr>
@@ -51,15 +118,10 @@
       <td>{{ r.name }}</td>
       <td>v{{ r.version }}</td>
       <td><span class="pill">{{ r.draft_state }}</span></td>
-      <td class="muted">{{ r.steps | length }}</td>
+      <td class="num">{{ r.steps | length }}</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
-{% else %}
-<p class="muted">
-  No Recipes derived from this Seed yet. The Recipe Extractor
-  (Phase 6) builds them; until then this section stays empty.
-</p>
 {% endif %}
 {% endblock %}

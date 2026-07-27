@@ -16,7 +16,10 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import case, desc, func, select
 
 from advtest_ext.storage.models import (
+    CalibrationExample,
+    CalibrationResult,
     Finding,
+    GoldLabel,
     HitlItem,
     JudgeScore,
     RecipeRow,
@@ -26,6 +29,11 @@ from advtest_ext.storage.models import (
     SignalRecord,
     Trace,
 )
+
+# Allowed enum values, validated at the insert boundary (fail loudly
+# rather than let a typo'd verdict silently corrupt the gold set).
+_VERDICTS = frozenset({"success", "partial", "refused", "error"})
+_SAMPLE_REASONS = frozenset({"disagreement", "uniform"})
 
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.orm import Session
@@ -144,6 +152,23 @@ def update_trace_verdict(session: Session, *, trace_id: str, verdict: str) -> No
         row.verdict = verdict
 
 
+def update_trace_uncertainty(
+    session: Session,
+    *,
+    trace_id: str,
+    uncertainty: float,
+    reason: str = "",
+) -> None:
+    """Persist the measurement-spine review-priority score onto an
+    already-inserted trace row (computed after the signal fan-out, so
+    it lands as a follow-up UPDATE like the verdict upgrade). No-op if
+    the row doesn't exist."""
+    row = session.get(Trace, trace_id)
+    if row is not None:
+        row.uncertainty = uncertainty
+        row.uncertainty_reason = reason
+
+
 def insert_signal_records(
     session: Session,
     *,
@@ -219,6 +244,19 @@ def promote_finding(
     return finding
 
 
+def delete_finding_for_trace(session: Session, *, trace_id: str) -> bool:
+    """Drop the Finding promoted from ``trace_id``, if any. Returns True
+    when a row was removed. Used by the re-score path to retract a stale
+    Finding whose trace no longer grades as ``success`` (e.g. a
+    loose-regex-only win re-graded to ``partial``), so the Findings table
+    never keeps a promotion the current verdict no longer supports."""
+    finding = session.scalar(select(Finding).where(Finding.trace_id == trace_id))
+    if finding is None:
+        return False
+    session.delete(finding)
+    return True
+
+
 def enqueue_hitl(
     session: Session,
     *,
@@ -226,13 +264,47 @@ def enqueue_hitl(
     trace_id: str | None,
     reason: str,
     disagreement: float,
+    sample_reason: str = "",
+    uncertainty: float = 0.0,
 ) -> HitlItem:
+    # Idempotent on (run_id, trace_id) while an item is still PENDING.
+    # Re-scoring a run is a normal, repeatable operation, and without
+    # this each pass stacked another copy of the same trace onto the
+    # queue — five re-scores meant a reviewer met the same trace five
+    # times. The compounding harm is in the gold set rather than the
+    # wasted clicks: repeat labels on one trace look like independent
+    # raters to the agreement maths, so the human ceiling ends up
+    # measuring one person agreeing with themselves.
+    #
+    # Resolved items are deliberately NOT deduplicated against: once a
+    # trace has been reviewed, re-queueing it is a real request for a
+    # second opinion (which is how the ceiling gets computed at all).
+    existing = session.scalars(
+        select(HitlItem)
+        .where(
+            HitlItem.run_id == run_id,
+            HitlItem.trace_id == trace_id,
+            HitlItem.status == "pending",
+        )
+        .limit(1)
+    ).first()
+    if existing is not None:
+        # Refresh the sampling metadata — the newest pass has the most
+        # current uncertainty score — but do not mint a second row.
+        existing.reason = reason
+        existing.judge_disagreement = disagreement
+        existing.sample_reason = sample_reason or existing.sample_reason
+        existing.uncertainty = uncertainty
+        return existing
+
     item = HitlItem(
         id=f"hitl-{uuid.uuid4().hex[:12]}",
         run_id=run_id,
         trace_id=trace_id,
         reason=reason,
         judge_disagreement=disagreement,
+        sample_reason=sample_reason,
+        uncertainty=uncertainty,
     )
     session.add(item)
     return item
@@ -433,6 +505,332 @@ def get_recipe(session: Session, recipe_id: str) -> RecipeRow | None:
     return session.get(RecipeRow, recipe_id)
 
 
+def insert_gold_label(
+    session: Session,
+    *,
+    trace_id: str | None,
+    run_id: str | None,
+    behavior_id: str,
+    oracle_verdict: str,
+    expert_verdict: str,
+    sample_reason: str,
+    oracle_score: float = 0.0,
+    oracle_layers_fired: dict[str, Any] | None = None,
+    response_snapshot: str = "",
+    expert_confidence: int = 3,
+    reviewer_id: str = "",
+    review_seconds: int = 0,
+    reason: str = "",
+    blind: bool = False,
+) -> GoldLabel:
+    """Record one immutable expert-labelled example — the measurement
+    spine's ground truth (``docs/FISSION_MEASUREMENT_SPINE.md`` §2).
+
+    Validates the verdict/sample-reason enums and clamps
+    ``expert_confidence`` to 1-5 so a bad label can't silently corrupt
+    the gold set the PPI metric and flywheel later trust. Unlike most
+    inserts here this is intentionally NOT idempotent on a natural key:
+    a fresh id is minted per call so re-reviewing a trace (e.g. a
+    double-labelled trace for inter-rater κ) yields a distinct row.
+    """
+    if oracle_verdict not in _VERDICTS:
+        raise ValueError(
+            f"oracle_verdict must be one of {sorted(_VERDICTS)}, got {oracle_verdict!r}"
+        )
+    if expert_verdict not in _VERDICTS:
+        raise ValueError(
+            f"expert_verdict must be one of {sorted(_VERDICTS)}, got {expert_verdict!r}"
+        )
+    if sample_reason not in _SAMPLE_REASONS:
+        raise ValueError(
+            f"sample_reason must be one of {sorted(_SAMPLE_REASONS)}, got {sample_reason!r}"
+        )
+    label = GoldLabel(
+        id=f"gold-{uuid.uuid4().hex[:12]}",
+        trace_id=trace_id,
+        run_id=run_id,
+        behavior_id=behavior_id,
+        oracle_verdict=oracle_verdict,
+        oracle_score=oracle_score,
+        oracle_layers_fired=dict(oracle_layers_fired or {}),
+        response_snapshot=response_snapshot,
+        sample_reason=sample_reason,
+        expert_verdict=expert_verdict,
+        expert_confidence=max(1, min(5, expert_confidence)),
+        reviewer_id=reviewer_id,
+        review_seconds=review_seconds,
+        reason=reason,
+        blind=blind,
+    )
+    session.add(label)
+    return label
+
+
+def list_gold_labels(
+    session: Session,
+    *,
+    run_id: str | None = None,
+    sample_reason: str | None = None,
+    limit: int = 1000,
+) -> list[GoldLabel]:
+    """Read the gold set, newest first. Optional filters scope to one
+    run or one sampling slice (``uniform`` is the slice PPI uses for the
+    unbiased population estimate)."""
+    stmt = select(GoldLabel).order_by(desc(GoldLabel.reviewed_at))
+    if run_id is not None:
+        stmt = stmt.where(GoldLabel.run_id == run_id)
+    if sample_reason is not None:
+        stmt = stmt.where(GoldLabel.sample_reason == sample_reason)
+    return list(session.scalars(stmt.limit(limit)))
+
+
+def get_gold_label(session: Session, gold_label_id: str) -> GoldLabel | None:
+    return session.get(GoldLabel, gold_label_id)
+
+
+def gold_label_oracle_expert_pairs(
+    session: Session,
+    run_id: str,
+    *,
+    sample_reason: str | None = "uniform",
+) -> list[tuple[str, str]]:
+    """``(oracle_verdict, expert_verdict)`` pairs for a run's gold labels,
+    for the PPI rectifier. Defaults to the ``uniform`` slice — the only
+    one that is a genuine simple random sample, hence the only one that
+    keeps the ASR estimate unbiased (``sample_reason=None`` returns all)."""
+    stmt = select(GoldLabel.oracle_verdict, GoldLabel.expert_verdict).where(
+        GoldLabel.run_id == run_id
+    )
+    if sample_reason is not None:
+        stmt = stmt.where(GoldLabel.sample_reason == sample_reason)
+    return [(o, e) for (o, e) in session.execute(stmt).all()]
+
+
+def gold_label_rater_panels(
+    session: Session,
+    *,
+    run_id: str | None = None,
+) -> list[tuple[str, str, list[str]]]:
+    """``(trace_id, oracle_verdict, [expert_verdict, ...])`` per reviewed
+    trace — the shape ``core.agreement`` needs.
+
+    A trace reviewed by two labellers has TWO ``GoldLabel`` rows (the
+    insert mints a fresh id per call rather than upserting on trace_id,
+    precisely so independent reviews both survive). Grouping them here
+    is what makes the human-ceiling alpha computable: each trace yields one
+    consensus item plus one multi-rater panel.
+
+    The oracle verdict is taken from the first row of each group; every
+    row for a trace snapshots the SAME frozen prediction, since the
+    prediction is captured at sample time and never recomputed.
+
+    Labels whose ``trace_id`` is NULL (the source trace was deleted —
+    gold labels outlive their traces by design) are grouped under their
+    own label id so they still contribute to κ, just never to the
+    ceiling.
+
+    **At most one label per (trace, reviewer) reaches the panel**, newest
+    kept. The human ceiling is only meaningful as agreement between
+    DIFFERENT people; counting one reviewer's repeat passes as separate
+    raters measures self-consistency, which is far higher than
+    inter-rater agreement and would inflate the ceiling the oracle is
+    scored against. Labels with no ``reviewer_id`` cannot be attributed,
+    so they collapse to a single anonymous rater — conservative by
+    construction, since that can only ever lower the ceiling.
+    """
+    stmt = select(
+        GoldLabel.id,
+        GoldLabel.trace_id,
+        GoldLabel.oracle_verdict,
+        GoldLabel.expert_verdict,
+        GoldLabel.reviewer_id,
+    ).order_by(GoldLabel.reviewed_at.asc())
+    if run_id is not None:
+        stmt = stmt.where(GoldLabel.run_id == run_id)
+
+    # (trace key) -> (oracle verdict, {reviewer -> latest verdict})
+    grouped: dict[str, tuple[str, dict[str, str]]] = {}
+    for label_id, trace_id, oracle_verdict, expert_verdict, reviewer_id in session.execute(
+        stmt
+    ).all():
+        key = trace_id or f"orphan:{label_id}"
+        if key not in grouped:
+            grouped[key] = (oracle_verdict, {})
+        # Ascending reviewed_at means a later pass overwrites an earlier
+        # one for the same reviewer — a correction, not a second vote.
+        grouped[key][1][reviewer_id or ""] = expert_verdict
+    return [(k, o, list(by_reviewer.values())) for k, (o, by_reviewer) in grouped.items()]
+
+
+def run_oracle_asr_counts(session: Session, run_id: str) -> tuple[int, int]:
+    """``(n_scorable, n_success)`` for a run: the oracle's ASR numerator
+    and denominator over all non-``error`` traces (the same denominator
+    the orchestrator's summary uses)."""
+    scorable = case((Trace.verdict != "error", 1), else_=0)
+    success = case((Trace.verdict == "success", 1), else_=0)
+    row = session.execute(
+        select(func.coalesce(func.sum(scorable), 0), func.coalesce(func.sum(success), 0)).where(
+            Trace.run_id == run_id
+        )
+    ).one()
+    return int(row[0]), int(row[1])
+
+
+def run_partial_count(session: Session, run_id: str) -> int:
+    """How many of a run's traces graded ``partial`` — the model engaged
+    or leaked corroborating detail without a proven full landing. Surfaced
+    on the overview so partials are visible rather than folded silently
+    into the non-success denominator of the ASR."""
+    return int(
+        session.scalar(
+            select(func.count()).where(Trace.run_id == run_id, Trace.verdict == "partial")
+        )
+        or 0
+    )
+
+
+def count_gold_labels(session: Session, *, run_id: str | None = None) -> int:
+    """How many labels exist (optionally per run). Backs the Phase-0
+    exit signal — "the gold set is growing"."""
+    stmt = select(func.count()).select_from(GoldLabel)
+    if run_id is not None:
+        stmt = stmt.where(GoldLabel.run_id == run_id)
+    return int(session.scalar(stmt) or 0)
+
+
+def insert_calibration_example(
+    session: Session,
+    *,
+    id: str,
+    dataset: str,
+    attack_type: str,
+    input_text: str,
+    expected_verdict: str,
+    external_id: str | None = None,
+    response_text: str = "",
+    label_raw: str = "",
+    label_meta: dict[str, Any] | None = None,
+) -> CalibrationExample:
+    """Insert one external calibration example. Validates the verdict
+    against the shared vocabulary and is idempotent on ``id`` (a stable
+    id derived from ``dataset`` + ``external_id``/content hash lets a
+    re-ingest of the same dump update rather than duplicate)."""
+    if expected_verdict not in _VERDICTS:
+        raise ValueError(
+            f"expected_verdict must be one of {sorted(_VERDICTS)}, got {expected_verdict!r}"
+        )
+    existing = session.get(CalibrationExample, id)
+    if existing is not None:
+        return existing
+    row = CalibrationExample(
+        id=id,
+        dataset=dataset,
+        attack_type=attack_type,
+        external_id=external_id,
+        input_text=input_text,
+        response_text=response_text,
+        expected_verdict=expected_verdict,
+        label_raw=label_raw,
+        label_meta=dict(label_meta or {}),
+    )
+    session.add(row)
+    return row
+
+
+def list_calibration_examples(
+    session: Session,
+    *,
+    dataset: str | None = None,
+    attack_type: str | None = None,
+    limit: int = 5000,
+) -> list[CalibrationExample]:
+    """Read the calibration set, optionally scoped to one dataset or
+    attack type (for per-stratum calibration)."""
+    stmt = select(CalibrationExample).order_by(CalibrationExample.id.asc())
+    if dataset is not None:
+        stmt = stmt.where(CalibrationExample.dataset == dataset)
+    if attack_type is not None:
+        stmt = stmt.where(CalibrationExample.attack_type == attack_type)
+    return list(session.scalars(stmt.limit(limit)))
+
+
+def count_calibration_examples(session: Session, *, dataset: str | None = None) -> int:
+    stmt = select(func.count()).select_from(CalibrationExample)
+    if dataset is not None:
+        stmt = stmt.where(CalibrationExample.dataset == dataset)
+    return int(session.scalar(stmt) or 0)
+
+
+def insert_calibration_result(
+    session: Session,
+    *,
+    id: str,
+    example_id: str,
+    judge_name: str,
+    predicted_verdict: str,
+    score: float,
+    correct: bool,
+    judge_version: str = "",
+    batch: str = "",
+) -> CalibrationResult:
+    """Persist one oracle prediction over a calibration example. Idempotent
+    on ``id`` so a re-run of the same batch updates rather than duplicates."""
+    existing = session.get(CalibrationResult, id)
+    if existing is not None:
+        return existing
+    row = CalibrationResult(
+        id=id,
+        example_id=example_id,
+        judge_name=judge_name,
+        judge_version=judge_version,
+        predicted_verdict=predicted_verdict,
+        score=score,
+        correct=correct,
+        batch=batch,
+    )
+    session.add(row)
+    return row
+
+
+def calibration_predictions(
+    session: Session,
+    *,
+    batch: str | None = None,
+) -> list[tuple[str, str, float, str, str]]:
+    """Join stored oracle predictions to their example ground truth for the
+    calibration report. Returns ``(expected, predicted, score, dataset,
+    attack_type)`` tuples — the exact shape ``core.calibration_report``
+    consumes. Uses the most recent batch when ``batch`` is None."""
+    if batch is None:
+        batch = session.scalar(
+            select(CalibrationResult.batch).order_by(desc(CalibrationResult.created_at)).limit(1)
+        )
+        if batch is None:
+            return []
+    rows = session.execute(
+        select(
+            CalibrationExample.expected_verdict,
+            CalibrationResult.predicted_verdict,
+            CalibrationResult.score,
+            CalibrationExample.dataset,
+            CalibrationExample.attack_type,
+        )
+        .join(CalibrationResult, CalibrationResult.example_id == CalibrationExample.id)
+        .where(CalibrationResult.batch == batch)
+    ).all()
+    return [(e, p, float(s), d, a) for (e, p, s, d, a) in rows]
+
+
+def list_calibration_batches(session: Session) -> list[str]:
+    """Distinct batch ids, most recent first."""
+    rows = session.execute(
+        select(CalibrationResult.batch, func.max(CalibrationResult.created_at).label("last"))
+        .group_by(CalibrationResult.batch)
+        .order_by(desc("last"))
+    ).all()
+    return [r[0] for r in rows]
+
+
 def list_hitl(
     session: Session,
     *,
@@ -443,6 +841,46 @@ def list_hitl(
     if status is not None:
         stmt = stmt.where(HitlItem.status == status)
     return list(session.scalars(stmt.limit(limit)))
+
+
+def get_hitl(session: Session, item_id: str) -> HitlItem | None:
+    return session.get(HitlItem, item_id)
+
+
+def count_hitl(session: Session, *, status: str | None = "pending") -> int:
+    stmt = select(func.count()).select_from(HitlItem)
+    if status is not None:
+        stmt = stmt.where(HitlItem.status == status)
+    return int(session.scalar(stmt) or 0)
+
+
+def next_pending_hitl(session: Session, *, exclude_id: str | None = None) -> HitlItem | None:
+    """The oldest still-pending queue item (optionally excluding one id),
+    so the review UI can chain straight to the next trace for a fast
+    keyboard-driven pass."""
+    stmt = select(HitlItem).where(HitlItem.status == "pending").order_by(HitlItem.enqueued_at.asc())
+    if exclude_id is not None:
+        stmt = stmt.where(HitlItem.id != exclude_id)
+    return session.scalars(stmt.limit(1)).first()
+
+
+def resolve_hitl(
+    session: Session,
+    *,
+    item_id: str,
+    status: str,
+    resolution: str = "",
+) -> HitlItem | None:
+    """Mark a queue item reviewed. ``status`` is ``confirmed`` (expert
+    agreed with the oracle) or ``rejected`` (expert overruled it). No-op
+    returning None when the id is unknown."""
+    item = session.get(HitlItem, item_id)
+    if item is None:
+        return None
+    item.status = status
+    item.resolution = resolution
+    item.resolved_at = datetime.now(UTC)
+    return item
 
 
 def asr_heatmap(session: Session, run_id: str) -> dict[tuple[str, str], dict[str, float | int]]:
@@ -539,15 +977,32 @@ def asr_heatmap_formatted(session: Session, run_id: str) -> dict[str, object]:
 __all__ = [
     "asr_heatmap",
     "asr_heatmap_formatted",
+    "calibration_predictions",
+    "count_calibration_examples",
+    "count_gold_labels",
+    "count_hitl",
     "enqueue_hitl",
     "finalize_run",
     "get_finding",
+    "get_gold_label",
+    "get_hitl",
     "get_run",
+    "gold_label_oracle_expert_pairs",
+    "insert_calibration_example",
+    "insert_calibration_result",
+    "insert_gold_label",
     "insert_trace",
+    "list_calibration_batches",
+    "list_calibration_examples",
     "list_findings",
+    "list_gold_labels",
     "list_hitl",
     "list_runs",
     "list_traces_for_run",
+    "next_pending_hitl",
     "promote_finding",
+    "resolve_hitl",
+    "run_oracle_asr_counts",
+    "update_trace_uncertainty",
     "upsert_run",
 ]

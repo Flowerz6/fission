@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}recipes · advtest{% endblock %}
 {% block content %}
-<h1>Recipes</h1>
-<p class="muted">
-  The Recipe catalogue — versioned, replayable representations of one
-  attack each, derived from a Seed. Atomic Recipes (1 step) typically
-  come from dataset-entry seeds; multi-step Recipes from human-chat
-  seeds via the Extractor.
-</p>
+<div class="page-head">
+  <p class="eyebrow">Catalogue</p>
+  <h1>Recipes</h1>
+  <p>
+    Versioned, replayable attacks, one per seed. Atomic recipes come from
+    dataset-entry seeds; multi-step recipes from human-chat seeds.
+  </p>
+</div>
 
 <form class="filter-bar" hx-get="/recipes" hx-target="body" hx-push-url="true" hx-trigger="change">
   <label>draft state:
@@ -45,10 +46,7 @@
 </table>
 {% else %}
 <p class="muted">
-  No Recipes in the catalogue yet. Recipes are produced by the Phase-6
-  Extractor agent from ingested Seeds, OR (after a follow-up phase)
-  synthesised from existing attack-plugin executions. Both routes
-  populate this view.
+  No recipes yet. Recipes are produced from ingested seeds.
 </p>
 {% endif %}
 {% endblock %}

@@ -1053,3 +1053,27 @@ async def test_ui_mode_session_close_is_idempotent(
     await session.close()
     assert closed["context"] == 1
     assert closed["pw"] == 1
+
+
+@pytest.mark.asyncio
+async def test_human_type_enters_newlines_as_shift_enter_not_submit() -> None:
+    """A multi-line prompt must land as ONE message. keyboard.type sends a raw
+    ``\n`` as an Enter keypress, which the Gemini side-panel composer treats as
+    SUBMIT — so a multi-line prompt would fragment into one message per line,
+    each canceling the last ("Canceled request"). human_type must type each line
+    separately and insert newlines as Shift+Enter, never a bare Enter."""
+    from advtest_ext.adapters._ui_mode_common.playwright_helpers import human_type
+
+    class _Locator:
+        async def focus(self) -> None:
+            return None
+
+    page = _FakePage()
+    await human_type(page, _Locator(), "line one\nline two\nline three")
+
+    typed = [c[1] for c in page.calls if c[0] == "keyboard.type"]
+    pressed = [c[1] for c in page.calls if c[0] == "keyboard.press"]
+    assert typed == ["line one", "line two", "line three"]  # per line, no blob
+    assert all("\n" not in t for t in typed)                # no raw newline typed
+    assert pressed == ["Shift+Enter", "Shift+Enter"]        # soft newlines between lines
+    assert "Enter" not in pressed                            # never a bare Enter (= submit)

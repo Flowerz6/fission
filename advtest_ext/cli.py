@@ -42,6 +42,7 @@ from advtest_ext._cli_factories import (
 from advtest_ext._cli_providers import (
     _resolve_db_url,
 )
+from advtest_ext._cli_rescore import register as _register_rescore
 from advtest_ext._cli_run_recipe import register as _register_run_recipe
 from advtest_ext.core.models import (
     Budget,
@@ -159,6 +160,11 @@ def _build_orchestrator(
         "account_pool": account_pool,
         "run_id": run_id,
         "phase": phase,
+        # Measurement-spine review sampling. 0 (default) → off, so a
+        # plain run is unchanged; a spine config opts in.
+        "review_sample_budget": config.review_sample_budget,
+        "review_uniform_fraction": config.review_uniform_fraction,
+        "review_seed": config.review_seed,
     }
     if strategy == "grid":
         return GridOrchestrator(**common_kwargs)  # type: ignore[arg-type]
@@ -264,6 +270,7 @@ app = typer.Typer(
 # needs; the helper cluster (signal evaluation, trace persistence,
 # account-pool derivation) travels with it.
 _register_run_recipe(app)
+_register_rescore(app)
 
 
 @app.callback()

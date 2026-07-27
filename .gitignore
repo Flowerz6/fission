@@ -29,7 +29,7 @@ token*.json
 out/
 **/out/
 *.db
-*.db.backup
+*.db.backup*
 *.sqlite
 *.sqlite3
 *.jsonl

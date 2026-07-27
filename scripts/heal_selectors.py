@@ -64,9 +64,12 @@ def _selectors_for(app: str) -> dict[str, str]:
         from advtest_ext.adapters.google_docs.ui_mode.selectors import SELECTORS
 
         return {k: str(v) for k, v in SELECTORS.items()}
+    if app == "google_sheets":
+        from advtest_ext.adapters.sheets.ui_mode.selectors import SELECTORS
+
+        return {k: str(v) for k, v in SELECTORS.items()}
     raise SystemExit(
-        f"no selector registry wired for app {app!r} yet "
-        "(google_docs is supported; google_sheets lands with the Sheets adapter)"
+        f"no selector registry wired for app {app!r} yet (supported: google_docs, google_sheets)"
     )
 
 

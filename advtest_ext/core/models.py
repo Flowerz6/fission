@@ -123,6 +123,17 @@ class JudgeScore(BaseModel):
     reasoning: str = ""
     flagged: bool = False
     judge_version: str = "unknown"
+    error: bool = False
+    """True when the judge FAILED rather than decided — an unparseable
+    or empty model reply, a truncated response, a provider error.
+
+    Load-bearing for calibration. A failed judge call still has to
+    return *some* score, and 0.0 is the safe choice; but 0.0 is also a
+    real verdict ("refused"), so without this flag a truncated reply is
+    silently indistinguishable from a confident refusal. Counting those
+    as refusals biases the ASR down and corrupts every agreement
+    statistic computed against the gold set. Consumers should exclude
+    errored scores rather than treat them as data."""
 
 
 class AttackTrace(BaseModel):
@@ -431,6 +442,18 @@ class RunConfig(BaseModel):
     to the ``ADVTEST_DB_URL`` env var or ``sqlite:///./advtest.db``
     so a bare ``advtest run`` just shows up in ``advtest_dashboard``
     without extra wiring."""
+    review_sample_budget: int = Field(default=0, ge=0)
+    """Measurement spine: how many traces to stratified-sample for
+    expert review at run completion (0 = off, the default → existing
+    behaviour unchanged). Requires a DB sink. The queue lands on the
+    dashboard's ``/hitl`` route; each item is tagged ``uniform`` |
+    ``disagreement`` (see ``core.sampling``)."""
+    review_uniform_fraction: float = Field(default=0.6, ge=0.0, le=1.0)
+    """Share of the review budget spent on the unbiased uniform slice.
+    Start high (uniform-heavy) at cold-start; decay as a trained L1
+    sharpens uncertainty sampling."""
+    review_seed: int = 0
+    """Seed for the uniform draw so a run's review queue is reproducible."""
 
     @model_validator(mode="after")
     def _check_phase_mode(self) -> RunConfig:

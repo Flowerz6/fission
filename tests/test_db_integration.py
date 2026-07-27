@@ -40,6 +40,7 @@ from advtest_ext.document import StubDocumentTarget
 from advtest_ext.judges.base import JudgeBase
 from advtest_ext.storage import (
     list_findings,
+    list_hitl,
     list_runs,
     list_traces_for_run,
     make_engine,
@@ -154,6 +155,10 @@ async def test_orchestrator_persists_run_trace_finding_when_factory_set(
         # Hoisted columns survive the orchestrator → DB write path.
         assert traces[0].depth == 0
         assert traces[0].parent_id is None
+        # Measurement-spine review-priority score is persisted onto the
+        # trace row (confident judge, no signals → low, in [0, 1]).
+        assert 0.0 <= traces[0].uncertainty <= 1.0
+        assert traces[0].uncertainty_reason != ""
 
         findings = list_findings(s, run_id=orch.run_id)
         assert len(findings) == 1
@@ -163,6 +168,79 @@ async def test_orchestrator_persists_run_trace_finding_when_factory_set(
         assert finding.replay_bundle_path is not None
         assert Path(finding.replay_bundle_path).exists()
         assert Path(finding.replay_bundle_path).suffix == ".zip"
+
+
+class _MultiAttempt(AttackPlugin):
+    """Yields N attempts so the run has enough traces to sample from."""
+
+    attack_class: AttackPluginClass = "single_turn"
+
+    def __init__(self, n: int) -> None:
+        self.name = "multi_attempt"
+        self.references = ["test"]
+        self._n = n
+        super().__init__()
+
+    async def generate(
+        self, *, behavior: Any, target: Any, budget: Any, context: Any = None
+    ) -> AsyncIterator[AttackAttempt]:
+        del target, budget, context
+        for i in range(self._n):
+            yield AttackAttempt(
+                payload=Payload(
+                    id=f"ma-{behavior.id}-{i}",
+                    text="HIGH",
+                    modality="text",
+                    generator_name=self.name,
+                ),
+                user_prompt="HIGH",
+            )
+
+
+async def test_review_sample_enqueues_hitl_when_budget_set() -> None:
+    """Measurement-spine activation: with a review budget + DB sink, the
+    orchestrator stratified-samples this run's traces at completion and
+    enqueues them to the HITL queue, tagged with their sampling slice."""
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    orch = GridOrchestrator(
+        target=StubDocumentTarget(),
+        attacks=[_MultiAttempt(n=10)],
+        behaviors=[_behavior()],
+        judge=_AlwaysHighJudge(),
+        session_factory=factory,
+        review_sample_budget=4,
+        review_uniform_fraction=0.5,
+        review_seed=1,
+    )
+    result = await orch.run()
+    assert len(result.traces) == 10
+
+    with session_scope(factory) as s:
+        queue = list_hitl(s)
+        assert len(queue) == 4
+        reasons = sorted(item.sample_reason for item in queue)
+        # Split 50/50 across the two slices per uniform_fraction=0.5.
+        assert reasons == ["disagreement", "disagreement", "uniform", "uniform"]
+        # Provenance carried for the eventual GoldLabel + PPI.
+        assert all(item.trace_id is not None for item in queue)
+        assert all(0.0 <= item.uncertainty <= 1.0 for item in queue)
+
+
+async def test_no_review_budget_leaves_queue_empty() -> None:
+    """Default (budget 0) → no enqueue: existing runs are unchanged."""
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    orch = GridOrchestrator(
+        target=StubDocumentTarget(),
+        attacks=[_MultiAttempt(n=5)],
+        behaviors=[_behavior()],
+        judge=_AlwaysHighJudge(),
+        session_factory=factory,
+    )
+    await orch.run()
+    with session_scope(factory) as s:
+        assert list_hitl(s) == []
 
 
 _PG_URL = os.environ.get("ADVTEST_TEST_DB_URL", "")

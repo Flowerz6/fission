@@ -123,6 +123,15 @@ def empty_client() -> Iterator[TestClient]:
         yield c
 
 
+@pytest.fixture(autouse=True)
+def _reset_blind_env() -> Iterator[None]:
+    """Keep the blind-review env knob from leaking across tests."""
+    import os
+
+    yield
+    os.environ.pop("ADVTEST_HITL_BLIND_PCT", None)
+
+
 def test_healthz_liveness(empty_client: TestClient) -> None:
     resp = empty_client.get("/healthz")
     assert resp.status_code == 200
@@ -168,12 +177,22 @@ def test_runs_index_renders(client: TestClient) -> None:
     assert "Runs" in resp.text
 
 
-def test_root_redirects_or_serves_runs_index(client: TestClient) -> None:
-    """``/`` shares a handler with ``/runs`` — both must serve the
-    same page."""
+def test_root_serves_overview_command_center(client: TestClient) -> None:
+    """``/`` now serves the Overview command center (not the runs list).
+    It headlines the latest run's calibrated ASR and links to it."""
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "run-seed" in resp.text
+    body = resp.text
+    assert "Command center" in body
+    assert "Attack success rate" in body
+    assert "run-seed" in body  # latest-run context line links to it
+    assert "Layered oracle" in body  # oracle pipeline section
+
+
+def test_overview_empty_state(empty_client: TestClient) -> None:
+    resp = empty_client.get("/")
+    assert resp.status_code == 200
+    assert "No runs to summarise" in resp.text
 
 
 def test_runs_show_renders_with_heatmap(client: TestClient) -> None:
@@ -311,6 +330,78 @@ def test_runs_tree_renders_tap_shaped_chains() -> None:
     # traces seeded above. Counting trace links is the cheapest way
     # to assert "no extra fake-root row was emitted".
     assert body.count('href="/traces/') == 4
+    # The live tree is now the Cytoscape explorer, not Mermaid: the panel
+    # mounts a canvas and embeds its node/edge data as JSON, and the page
+    # no longer emits a Mermaid `graph TD` block.
+    assert "cy-mount" in body
+    assert 'data-cell-key="p0|exfil_x|(none)"' in body
+    assert "/static/tree.js" in body
+    # The tree partial no longer emits a Mermaid graph node.
+    assert 'class="mermaid"' not in body
+
+
+def test_runs_tree_json_returns_cytoscape_payload() -> None:
+    """``/runs/{id}/_tree.json`` returns the Cytoscape node/edge payload the
+    live client diffs: one cell per (behaviour, technique), verdict-derived
+    node status, and parent→child edges reconstructed from ``parent_id``."""
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:
+        upsert_run(s, run_id="run-cy", target_name="T", strategy="grid")
+        spec = [
+            ("root", None, 1, 0.4, "refused"),
+            ("child_a", "root", 2, 0.9, "success"),
+            ("child_b", "root", 2, 0.2, "error"),
+        ]
+        for tid, parent, depth, score, verdict in spec:
+            trace = AttackTrace(
+                id=tid,
+                run_id="run-cy",
+                behavior_id="exfil_x",
+                payload=Payload(
+                    id=f"p-{tid}", text="x", modality="text", generator_name="tap_indirect"
+                ),
+                target_name="T",
+                raw_request=f"prompt-{tid}",
+                raw_response=f"reply-{tid}",
+                judge_scores=[
+                    JudgeScore(
+                        judge_name="strong_reject",
+                        score=score,
+                        flagged=verdict == "success",
+                        reasoning="r",
+                        judge_version="0.1",
+                    )
+                ],
+                verdict=verdict,  # type: ignore[arg-type]
+                parent_id=parent,
+                depth=depth,
+            )
+            insert_trace(s, run_id="run-cy", trace=trace)
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        resp = c.get("/runs/run-cy/_tree.json")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert set(data) == {"finished", "hash", "phases"}
+    cells = data["phases"][0]["cells"]
+    assert len(cells) == 1
+    cell = cells[0]
+    assert cell["key"] == "p0|exfil_x|(none)"
+    # One node per trace (statuses map verdict→status, error→pruned dashed),
+    # PLUS a synthetic playbook root (trace_id None, status "root") that parents
+    # the opening node so the tree has one top node.
+    statuses = {n["data"]["trace_id"]: n["data"]["status"] for n in cell["nodes"]}
+    assert statuses == {None: "root", "root": "refused", "child_a": "success", "child_b": "pruned"}
+    # The playbook root is labelled with the behaviour and carries no score.
+    pb = next(n for n in cell["nodes"] if n["data"]["trace_id"] is None)
+    assert pb["data"]["score"] is None and "exfil_x" in pb["data"]["label"]
+    # Three edges: playbook→root, root→child_a, root→child_b.
+    assert len(cell["edges"]) == 3
+    # Real prompt/response carried through for the inline node detail.
+    child_a = next(n for n in cell["nodes"] if n["data"]["trace_id"] == "child_a")
+    assert child_a["data"]["u"] == "prompt-child_a"
+    assert child_a["data"]["a"] == "reply-child_a"
 
 
 def test_runs_tree_renders_phases_as_labelled_sections() -> None:
@@ -358,7 +449,9 @@ def test_runs_tree_renders_phases_as_labelled_sections() -> None:
     assert "Gmail → Docs" in body
     assert "Docs → Docs" in body
     assert body.index("Gmail → Docs") < body.index("Docs → Docs")
-    assert "phase-head" in body
+    # Phases are grouped in the attack-tree explorer's cell navigator.
+    assert "cell-nav-group" in body
+    assert "tree-explorer" in body
 
 
 def test_traces_show_renders_for_unpromoted_trace() -> None:
@@ -580,14 +673,283 @@ def test_adapters_page_lists_registered_targets(client: TestClient) -> None:
 def test_hitl_page_renders_pending_items(client: TestClient) -> None:
     resp = client.get("/hitl")
     assert resp.status_code == 200
-    assert "judge spread 0.6" in resp.text
+    # Redesigned queue: title + the review affordance + gold-set stat.
+    assert "Review queue" in resp.text
+    assert "Gold labels" in resp.text
+    assert "Review" in resp.text  # per-row review button
+    assert "t1" in resp.text  # the seeded trace id
 
 
 def test_hitl_status_filter_changes_listing(client: TestClient) -> None:
     resp = client.get("/hitl", params={"status": "confirmed"})
     assert resp.status_code == 200
-    # Pending item filtered out.
-    assert "judge spread 0.6" not in resp.text
+    # No confirmed items yet → empty-state copy, no per-row Review button.
+    assert "Nothing in the confirmed queue" in resp.text
+
+
+# ----------------------------------------------------------------------
+# HITL review flow (Slice 4 — the ≤30s review UI → GoldLabel)
+# ----------------------------------------------------------------------
+
+
+def _review_setup(blind_pct: str = "0"):
+    """A dashboard + factory with one run, two conflict traces, and two
+    pending review items. Returns (client, factory, [item_ids])."""
+    import os
+
+    os.environ["ADVTEST_HITL_BLIND_PCT"] = blind_pct
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    item_ids: list[str] = []
+    with session_scope(factory) as s:
+        upsert_run(s, run_id="run-rv", target_name="Stub", strategy="grid")
+        for i in range(2):
+            insert_trace(
+                s,
+                run_id="run-rv",
+                trace=AttackTrace(
+                    id=f"rv{i}",
+                    run_id="run-rv",
+                    behavior_id="exfil_thing",
+                    payload=Payload(
+                        id=f"pp{i}",
+                        text="HIDDEN PAYLOAD",
+                        modality="text",
+                        generator_name="static_payload",
+                    ),
+                    target_name="Stub",
+                    raw_request="summarise",
+                    raw_response=f"leaked canary CANARY-{i}",
+                    judge_scores=[
+                        JudgeScore(
+                            judge_name="ipi_verdict",
+                            score=0.1,
+                            flagged=False,
+                            reasoning="looks refused",
+                            judge_version="0.1",
+                        )
+                    ],
+                    verdict="refused",  # type: ignore[arg-type]
+                ),
+            )
+            item = enqueue_hitl(
+                s,
+                run_id="run-rv",
+                trace_id=f"rv{i}",
+                reason="review sample (disagreement)",
+                disagreement=0.85,
+                sample_reason="disagreement",
+                uncertainty=0.85,
+            )
+            s.flush()
+            item_ids.append(item.id)
+    app = create_app(engine=engine)
+    return TestClient(app), factory, item_ids
+
+
+def test_hitl_review_page_renders_evidence() -> None:
+    client, _factory, item_ids = _review_setup()
+    resp = client.get(f"/hitl/{item_ids[0]}")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "leaked canary CANARY-0" in body  # the scored response
+    assert "Your verdict" in body
+    # Not blind (pct=0) → oracle verdict shown.
+    assert "Oracle says" in body
+
+
+def test_hitl_review_submit_writes_gold_label_and_resolves() -> None:
+    from advtest_ext.storage import count_gold_labels, get_hitl, list_gold_labels
+
+    client, factory, item_ids = _review_setup()
+    resp = client.post(
+        f"/hitl/{item_ids[0]}/review",
+        json={
+            "verdict": "success",
+            "confidence": 5,
+            "reason": "canary acted on",
+            "reviewer_id": "alice",
+            "review_seconds": 12,
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    # Expert overruled the oracle (oracle=refused, expert=success).
+    assert data["agreed"] is False
+    assert data["next_id"] == item_ids[1]
+
+    with session_scope(factory) as s:
+        assert count_gold_labels(s) == 1
+        gl = list_gold_labels(s)[0]
+        # Frozen oracle prediction captured from the trace.
+        assert gl.oracle_verdict == "refused"
+        assert gl.expert_verdict == "success"
+        assert gl.expert_confidence == 5
+        assert gl.sample_reason == "disagreement"
+        assert gl.reviewer_id == "alice"
+        # Queue item resolved as 'rejected' (expert overruled).
+        assert get_hitl(s, item_ids[0]).status == "rejected"
+
+
+def test_hitl_review_confirm_when_expert_agrees() -> None:
+    from advtest_ext.storage import get_hitl
+
+    client, factory, item_ids = _review_setup()
+    resp = client.post(f"/hitl/{item_ids[0]}/review", json={"verdict": "refused"})
+    assert resp.json()["agreed"] is True
+    with session_scope(factory) as s:
+        assert get_hitl(s, item_ids[0]).status == "confirmed"
+
+
+def test_hitl_review_rejects_bad_verdict() -> None:
+    client, _factory, item_ids = _review_setup()
+    resp = client.post(f"/hitl/{item_ids[0]}/review", json={"verdict": "error"})
+    assert resp.status_code == 422
+
+
+def test_hitl_review_missing_item_404() -> None:
+    client, _factory, _ids = _review_setup()
+    assert client.get("/hitl/nope").status_code == 404
+    assert client.post("/hitl/nope/review", json={"verdict": "success"}).status_code == 404
+
+
+def test_hitl_review_double_submit_conflicts() -> None:
+    client, _factory, item_ids = _review_setup()
+    first = client.post(f"/hitl/{item_ids[0]}/review", json={"verdict": "success"})
+    assert first.status_code == 200
+    second = client.post(f"/hitl/{item_ids[0]}/review", json={"verdict": "refused"})
+    assert second.status_code == 409  # already reviewed
+
+
+def test_hitl_blind_review_hides_oracle() -> None:
+    # Force every review blind → the oracle verdict must not be shown.
+    client, _factory, item_ids = _review_setup(blind_pct="100")
+    body = client.get(f"/hitl/{item_ids[0]}").text
+    assert "Blind review" in body
+    assert "Oracle says" not in body
+
+
+def test_hitl_blind_flag_recorded_on_gold_label() -> None:
+    from advtest_ext.storage import list_gold_labels
+
+    client, factory, item_ids = _review_setup(blind_pct="100")
+    client.post(f"/hitl/{item_ids[0]}/review", json={"verdict": "success"})
+    with session_scope(factory) as s:
+        assert list_gold_labels(s)[0].blind is True
+
+
+# ----------------------------------------------------------------------
+# PPI headline (Slice 5 — calibrated ASR ± CI on the run page)
+# ----------------------------------------------------------------------
+
+
+def test_run_page_shows_oracle_only_asr_without_labels(client: TestClient) -> None:
+    # The seeded run has no gold labels → the hero shows the uncalibrated
+    # oracle estimate with a prompt to label the queue.
+    body = client.get("/runs/run-seed").text
+    assert "Attack Success Rate" in body
+    assert "Uncalibrated" in body
+
+
+def test_run_page_shows_calibrated_ci_with_uniform_labels() -> None:
+    from advtest_ext.storage import insert_gold_label
+
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:
+        upsert_run(s, run_id="run-ci", target_name="Stub", strategy="grid")
+        for i in range(20):
+            verdict = "success" if i < 14 else "refused"
+            insert_trace(
+                s,
+                run_id="run-ci",
+                trace=AttackTrace(
+                    id=f"c{i}",
+                    run_id="run-ci",
+                    behavior_id="exfil_x",
+                    payload=Payload(
+                        id=f"q{i}", text="p", modality="text", generator_name="static_payload"
+                    ),
+                    target_name="Stub",
+                    raw_request="r",
+                    raw_response="x",
+                    judge_scores=[
+                        JudgeScore(
+                            judge_name="j",
+                            score=0.9 if i < 14 else 0.1,
+                            flagged=i < 14,
+                            reasoning="",
+                            judge_version="1",
+                        )
+                    ],
+                    verdict=verdict,  # type: ignore[arg-type]
+                ),
+            )
+        for i in range(6):
+            insert_gold_label(
+                s,
+                trace_id=f"c{i}",
+                run_id="run-ci",
+                behavior_id="exfil_x",
+                oracle_verdict="success",
+                expert_verdict="refused" if i < 2 else "success",
+                sample_reason="uniform",
+            )
+        finalize_run(
+            s,
+            run_id="run-ci",
+            summary=SummaryStats(total_traces=20, successful_traces=14, overall_asr=0.7),
+        )
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        body = c.get("/runs/run-ci").text
+    assert "calibrated" in body
+    assert "95% CI" in body
+    assert "labels" in body
+
+
+def test_calibration_empty_state(empty_client: TestClient) -> None:
+    resp = empty_client.get("/calibration")
+    assert resp.status_code == 200
+    assert "No calibration predictions yet" in resp.text
+
+
+def test_calibration_page_renders_metrics() -> None:
+    from advtest_ext.storage import insert_calibration_example, insert_calibration_result
+
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:
+        specs = [("e0", "success"), ("e1", "success"), ("e2", "refused")]
+        for eid, v in specs:
+            insert_calibration_example(
+                s,
+                id=eid,
+                dataset="jbb",
+                attack_type="jailbreak",
+                input_text="x",
+                expected_verdict=v,
+            )
+        for eid, pv, sc in [("e0", "success", 0.9), ("e1", "success", 0.8), ("e2", "refused", 0.1)]:
+            expected = dict(specs)[eid]
+            insert_calibration_result(
+                s,
+                id=f"r-{eid}",
+                example_id=eid,
+                judge_name="ipi_verdict",
+                predicted_verdict=pv,
+                score=sc,
+                correct=(pv == expected),
+                batch="b1",
+            )
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        body = c.get("/calibration").text
+    assert "Judge agreement vs public benchmarks" in body
+    assert "Confusion matrix" in body
+    assert "ECE" in body
+    assert "jbb" in body  # per-dataset breakdown
 
 
 def test_references_page_renders(client: TestClient) -> None:
@@ -716,3 +1078,279 @@ def test_finding_replay_endpoint_serves_zip_when_path_set(
         assert resp.headers["content-type"] == "application/zip"
         # Replay ZIP is non-empty and starts with the PK marker.
         assert resp.content[:2] == b"PK"
+
+
+# ----------------------------------------------------------------------
+# Drift view
+# ----------------------------------------------------------------------
+
+
+def test_drift_route_renders_empty_state(empty_client: TestClient) -> None:
+    """The drift aggregation and template both existed with no route to
+    reach them — the page was unreachable. Pin the route so it stays
+    wired, and lock the empty-state copy (an empty drift page is the
+    honest default until an adaptive run emits events)."""
+    r = empty_client.get("/drift")
+    assert r.status_code == 200
+    assert "No drift events recorded yet" in r.text
+
+
+def test_drift_route_renders_recorded_events() -> None:
+    """Drift events live in ``Trace.extra_metadata['drift']``, written by
+    the attack and adapter layers. Seed one of each scope and check the
+    counters and the event table pick them up.
+
+    Builds its own engine rather than borrowing the shared fixture's,
+    because the drift metadata has to be written before the app reads it.
+    """
+    from advtest_ext.storage.models import Trace
+
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    _seed_run(factory)
+    with session_scope(factory) as s:
+        trace = s.query(Trace).first()
+        assert trace is not None
+        trace.extra_metadata = {
+            "drift": [
+                {
+                    "scope": "attacker_goal",
+                    "kind": "off_mechanism",
+                    "detail": "attacker wandered off the injection mechanism",
+                    "turn": 3,
+                },
+                {
+                    "scope": "platform_ui",
+                    "kind": "recovered",
+                    "detail": "side panel remounted after layout change",
+                },
+            ]
+        }
+
+    with TestClient(create_app(engine=engine)) as c:
+        r = c.get("/drift")
+
+    assert r.status_code == 200
+    assert "No drift events recorded yet" not in r.text
+    # Both scopes counted, and the detail text reaches the event table.
+    assert "off_mechanism" in r.text
+    assert "wandered off the injection mechanism" in r.text
+    assert "remounted" in r.text
+
+
+def test_drift_route_is_reachable(empty_client: TestClient) -> None:
+    # Drift is no longer a headline nav tab, but the route stays live.
+    assert empty_client.get("/drift").status_code == 200
+
+
+# ----------------------------------------------------------------------
+# Surfaces inventory + slide-over (real-data derived)
+# ----------------------------------------------------------------------
+
+
+def test_surfaces_index_renders_real_surface(client: TestClient) -> None:
+    """The Surfaces page derives its inventory from distinct
+    ``Trace.target_name`` — the seeded run drove ``StubDocumentTarget``,
+    so exactly one exposed surface (1 finding) shows up."""
+    r = client.get("/surfaces")
+    assert r.status_code == 200
+    assert "Surface inventory" in r.text
+    # Raw target class shown in mono, human label camel-split (trailing
+    # "Target" trimmed): StubDocumentTarget -> "Stub Document".
+    assert "StubDocumentTarget" in r.text
+    assert "Stub Document" in r.text
+    # One finding was promoted -> the surface is exposed.
+    assert 'data-exposure="exposed"' in r.text
+    # Headline signature is the in-house gold-set agreement report.
+    assert "Oracle agreement vs expert consensus" in r.text
+
+
+def test_surfaces_index_empty_state(empty_client: TestClient) -> None:
+    r = empty_client.get("/surfaces")
+    assert r.status_code == 200
+    assert "0 surfaces" in r.text
+
+
+def test_surface_panel_returns_real_detail(client: TestClient) -> None:
+    """The slide-over partial carries the surface's real counts and its
+    promoted finding — no sample rows."""
+    r = client.get("/surfaces/StubDocumentTarget/_panel")
+    assert r.status_code == 200
+    assert "Target class" in r.text
+    assert "StubDocumentTarget" in r.text
+    # 2 traces seeded against this target, 1 run, 1 finding.
+    assert "2 attempts" in r.text
+    assert "Static payload landed" in r.text
+
+
+def test_surface_panel_404_for_unknown_surface(client: TestClient) -> None:
+    r = client.get("/surfaces/NoSuchTarget/_panel")
+    assert r.status_code == 404
+
+
+def test_build_surfaces_context_counts_are_real() -> None:
+    from advtest_ext.dashboard.app import build_surfaces_context
+
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    _seed_run(factory)
+    with session_scope(factory) as s:
+        ctx = build_surfaces_context(s)
+    assert ctx["totals"]["surfaces"] == 1
+    surf = ctx["surfaces"][0]
+    assert surf["target_name"] == "StubDocumentTarget"
+    assert surf["attempts"] == 2
+    assert surf["runs"] == 1
+    assert surf["findings"] == 1
+    assert surf["exposure"] == "exposed"
+
+
+def test_surfaces_route_is_reachable(empty_client: TestClient) -> None:
+    # Surfaces is no longer a headline nav tab, but the route stays live.
+    assert empty_client.get("/surfaces").status_code == 200
+
+
+# ----------------------------------------------------------------------
+# Judge quality (agreement report + optional benchmark)
+# ----------------------------------------------------------------------
+
+
+def test_judge_quality_renders_gold_set_headline(client: TestClient) -> None:
+    """Judge quality headlines the in-house gold-set agreement report.
+    The seeded run has no gold labels, so n=0 renders without fabricating
+    a number."""
+    r = client.get("/judge")
+    assert r.status_code == 200
+    assert "Judge quality" in r.text
+    assert "in-house gold set" in r.text
+    # No gold labels -> observed agreement / kappa slots still render.
+    assert "Oracle agreement vs expert consensus" in r.text
+
+
+def test_judge_quality_scores_seeded_gold_labels() -> None:
+    """With real gold labels present, the agreement headline reflects
+    them (n matches the labelled trace count)."""
+    from advtest_ext.storage import insert_gold_label
+
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    _seed_run(factory)
+    with session_scope(factory) as s:
+        insert_gold_label(
+            s,
+            trace_id="t0",
+            run_id="run-seed",
+            behavior_id="exfil_test_0",
+            oracle_verdict="success",
+            expert_verdict="success",
+            sample_reason="uniform",
+        )
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        r = c.get("/judge")
+    assert r.status_code == 200
+    # One labelled trace -> "n = 1 gold label" (singular).
+    assert "n = 1 gold label" in r.text
+
+
+def test_judge_quality_route_is_reachable(empty_client: TestClient) -> None:
+    # Judge quality is no longer a headline nav tab, but the route stays live.
+    assert empty_client.get("/judge").status_code == 200
+
+
+def test_playbooks_index_lists_the_guides_with_author() -> None:
+    """The Playbooks page lists the file-based guide corpus (not DB Recipes),
+    shows Bikash as author, and the sidebar swapped Recipes → Playbooks."""
+    engine = make_engine("sqlite:///:memory:")
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        r = c.get("/playbooks")
+    assert r.status_code == 200
+    assert "Sheets skill-manifest disclosure" in r.text  # a playbook title
+    assert "Bikash Sabat" in r.text  # author surfaced, not in the title
+    assert 'href="/playbooks"' in r.text  # nav item present
+    assert 'href="/recipes"' not in r.text  # Recipes removed from the nav
+
+
+def test_playbook_show_renders_seed_chain_signals_and_404s() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        r = c.get("/playbooks/sheets_skill_leak")
+        missing = c.get("/playbooks/does-not-exist")
+    assert r.status_code == 200
+    # Rendered as the canonical Playbook config object (report Table 2).
+    assert "playbook_id:" in r.text
+    assert "seed_chain:" in r.text and "signals:" in r.text
+    assert "mutation_surface.allowed:" in r.text and "invariants:" in r.text
+    assert "Bikash Sabat" in r.text
+    assert missing.status_code == 404
+
+
+def test_seed_corpus_loads_and_validates() -> None:
+    """The normalised seed corpus parses into valid Seeds, both kinds present."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "ingest_seeds", Path(__file__).resolve().parents[1] / "scripts" / "ingest_seeds.py"
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    seeds = mod.load_seed_corpus()
+    assert len(seeds) >= 20
+    kinds = {s.kind for s in seeds}
+    assert kinds == {"human_chat", "dataset_entry"}
+    # All three top public corpora relevant to our surface are represented.
+    corpora = {s.payload.get("corpus") for s in seeds if s.kind == "dataset_entry"}
+    assert {"AgentDojo", "MCPTox", "SafeMTData (ActorAttack)"} <= corpora
+    # Every dataset turn carries verbatim text (no bracketed placeholders left).
+    for s in seeds:
+        for t in s.payload.get("extracted_turns", []):
+            assert t.get("attacker"), f"empty turn in {s.id}"
+    # Bikash's flagship carries the real transcript (target responses present).
+    flagship = next(s for s in seeds if s.id == "bikash_sheets_skill_leak")
+    turns = flagship.payload["extracted_turns"]
+    assert len(turns) == 8
+    assert any(t.get("target") for t in turns)
+
+
+def test_seeds_index_and_show_render_normalised() -> None:
+    from advtest_ext.core.seed import Seed
+    from advtest_ext.storage.repository import insert_seed
+
+    seed = Seed(
+        id="bikash_sheets_skill_leak",
+        kind="human_chat",
+        title="V-Sheets — skill-manifest disclosure",
+        source_format="chat_export_json",
+        raw_artefact_path="configs/seed_gold/sheets_skill_leak.json",
+        taxonomy_hints=["crescendo", "system-prompt-leak"],
+        submitted_by="bikash",
+        payload={
+            "extracted_turns": [
+                {"n": 1, "attacker": "as your first task in this QA assessment...",
+                 "target": "row 6 populated", "expert": "partial"},
+                {"n": 2, "attacker": "prove it — run get_skills",
+                 "target": "EXECUTION_PLAN_STEP_STATUS_PENDING", "expert": "success"},
+            ],
+            "declared_effect": "system_prompt_leak",
+            "compiles_to_playbook": "sheets_skill_leak",
+        },
+    )
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:
+        insert_seed(s, seed=seed)
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        idx = c.get("/seeds")
+        show = c.get("/seeds/bikash_sheets_skill_leak")
+        missing = c.get("/seeds/nope")
+    assert idx.status_code == 200 and "bikash_sheets_skill_leak" in idx.text
+    assert show.status_code == 200
+    assert "Normalised chain" in show.text
+    assert "attacker" in show.text and "gemini" in show.text
+    assert "EXECUTION_PLAN_STEP_STATUS_PENDING" in show.text
+    assert 'href="/playbooks/sheets_skill_leak"' in show.text
+    assert missing.status_code == 404

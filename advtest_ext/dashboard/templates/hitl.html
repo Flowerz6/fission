@@ -1,12 +1,38 @@
 {% extends "base.html" %}
-{% block title %}HITL queue · advtest{% endblock %}
+{% block title %}Review queue · Fission{% endblock %}
 {% block content %}
-<h1>Human-in-the-loop queue</h1>
+<style>
+  .review-meter { display:inline-flex; align-items:center; gap:0.5rem; }
+  .review-meter .track {
+    width:64px; height:6px; border-radius:999px; background:var(--border);
+    overflow:hidden;
+  }
+  .review-meter .fill { height:100%; background:var(--accent); border-radius:999px; }
+  .review-meter .num { font-variant-numeric:tabular-nums; font-size:0.8rem; color:var(--fg-soft); }
+  .slice { text-transform:capitalize; }
+  .slice.uniform { background:var(--accent-soft); color:var(--accent); }
+  .slice.disagreement { background:var(--partial-bg); color:var(--partial); }
+  td .btn.review { padding:0.25rem 0.7rem; font-size:0.8rem; }
+</style>
+
+<p class="eyebrow">Campaign</p>
+<h1>Review queue</h1>
 <p class="muted">
-  Traces flagged when judge ensemble disagreement crosses the
-  configured threshold (see <code>EnsembleAsJudge</code>). Resolve
-  by confirming or rejecting the flag.
+  Traces sampled for expert labelling: a <strong>uniform</strong> slice
+  (feeds PPI's ASR&nbsp;±&nbsp;CI) and a <strong>disagreement</strong> slice
+  (highest oracle uncertainty). Each review writes a gold label.
 </p>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="label">Pending review</div>
+    <div class="value">{{ n_pending }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Gold labels</div>
+    <div class="value">{{ n_gold }}</div>
+  </div>
+</div>
 
 <form class="filter-bar">
   <label>status:
@@ -16,27 +42,49 @@
       {% endfor %}
     </select>
   </label>
+  {% if status == 'pending' and items %}
+  <a class="btn" style="margin-left:auto"
+     href="/hitl/{{ items[0].id }}">Start reviewing →</a>
+  {% endif %}
 </form>
 
 {% if items %}
 <table>
   <thead>
-    <tr><th>Item</th><th>Run</th><th>Trace</th><th>Disagreement</th><th>Reason</th><th>Enqueued</th></tr>
+    <tr>
+      <th>Trace</th><th>Run</th><th>Slice</th><th>Uncertainty</th>
+      <th>Enqueued</th><th></th>
+    </tr>
   </thead>
   <tbody>
     {% for item in items %}
     <tr>
-      <td><code>{{ item.id }}</code></td>
+      <td>{% if item.trace_id %}<code>{{ item.trace_id[:12] }}</code>{% else %}—{% endif %}</td>
       <td><a href="/runs/{{ item.run_id }}">{{ item.run_id }}</a></td>
-      <td>{% if item.trace_id %}<code>{{ item.trace_id }}</code>{% else %}—{% endif %}</td>
-      <td>{{ '%.2f'|format(item.judge_disagreement) }}</td>
-      <td class="muted">{{ item.reason }}</td>
+      <td>
+        {% if item.sample_reason %}
+        <span class="pill slice {{ item.sample_reason }}">{{ item.sample_reason }}</span>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td>
+        <span class="review-meter">
+          <span class="track"><span class="fill" style="width: {{ (item.uncertainty * 100)|round(0, 'floor') }}%"></span></span>
+          <span class="num">{{ '%.2f'|format(item.uncertainty) }}</span>
+        </span>
+      </td>
       <td class="muted">{{ item.enqueued_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>
+        {% if item.status == 'pending' %}
+        <a class="btn review" href="/hitl/{{ item.id }}">Review</a>
+        {% else %}
+        <span class="pill {{ 'success' if item.status == 'confirmed' else 'refused' }}">{{ item.status }}</span>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p>Nothing in the {{ status }} queue.</p>
+<div class="panel"><p style="margin:0">Nothing in the {{ status }} queue.</p></div>
 {% endif %}
 {% endblock %}
