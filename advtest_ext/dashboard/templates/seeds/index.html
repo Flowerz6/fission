@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 {% block title %}seeds · advtest{% endblock %}
 {% block content %}
-<h1>Seeds</h1>
-<p class="muted">
-  Ingested artefacts awaiting (or already backing) one Recipe each.
-  Two kinds: <strong>human_chat</strong> seeds come from red-team
-  reports (docx, chat exports, markdown, HAR); <strong>dataset_entry</strong>
-  seeds come from public vulnerability corpora (HarmBench, AdvBench,
-  AgentDojo, etc.) pinned by ``corpus_version``.
-</p>
+<div class="page-head">
+  <p class="eyebrow">Catalogue</p>
+  <h1>Seeds</h1>
+  <p>
+    Every attack enters as a Seed and is normalised to one shape (report Fig. 3).
+    <strong>human_chat</strong> seeds are expert-authored chains — Bikash's real
+    Gemini side-panel sessions; <strong>dataset_entry</strong> seeds are public-corpus
+    entries closest to our surface (Workspace IPI, multi-turn escalation, tool
+    poisoning). Both compile to the same Playbook.
+  </p>
+</div>
 
 <form class="filter-bar" hx-get="/seeds" hx-target="body" hx-push-url="true" hx-trigger="change">
   <label>kind:
@@ -22,31 +25,32 @@
 </form>
 
 {% if seeds %}
-<table>
+<div class="tbl-wrap"><table class="tbl">
   <thead>
     <tr>
-      <th>Id</th><th>Kind</th><th>Title</th><th>Source format</th>
-      <th>Submitted</th><th>By</th>
+      <th>Seed</th><th>Kind</th><th>Source</th>
+      <th class="num">Turns</th><th>Provenance</th>
     </tr>
   </thead>
   <tbody>
     {% for s in seeds %}
     <tr>
-      <td><a href="/seeds/{{ s.id }}"><code>{{ s.id }}</code></a></td>
-      <td><code>{{ s.kind }}</code></td>
-      <td>{{ s.title }}</td>
-      <td class="muted"><code>{{ s.source_format }}</code></td>
-      <td class="muted">{{ s.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
-      <td class="muted">{{ s.submitted_by }}</td>
+      <td>
+        <a href="/seeds/{{ s.id }}"><strong>{{ s.title }}</strong></a>
+        <div class="muted mono" style="font-size:0.74rem;margin-top:0.15rem">{{ s.id }}</div>
+      </td>
+      <td><span class="pill">{{ s.kind }}</span></td>
+      <td class="mono muted" style="font-size:0.78rem">{{ s.source_format }}</td>
+      <td class="num">{{ s.payload.get('extracted_turns', []) | length or '—' }}</td>
+      <td class="muted" style="font-size:0.82rem">{{ s.submitted_by }}</td>
     </tr>
     {% endfor %}
   </tbody>
-</table>
+</table></div>
 {% else %}
-<p class="muted">
-  No seeds ingested yet. Phase 6 (Recipe Extractor + docx ingest) will
-  populate this view; for now operators land Seeds via direct database
-  writes or future <code>advtest ingest-seed</code> calls.
-</p>
+<div class="empty-state">
+  No seeds ingested yet. Run <code>poetry run python scripts/ingest_seeds.py</code>
+  to load the normalised corpus (<code>seeds_corpus/*.json</code>).
+</div>
 {% endif %}
 {% endblock %}

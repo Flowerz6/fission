@@ -112,13 +112,13 @@ That single calibrated number is what makes every downstream improvement claim d
 | Piece | Status | Work |
 |---|---|---|
 | Run → traces, oracle labels | 🟩 EXISTS | reuse |
-| Uncertainty / disagreement scoring | 🟨 ACTIVATE | repurpose `ensemble.py` spread logic onto single-judge + L0 signals |
-| HITL queue (`HitlItem`, `enqueue_hitl`, `/hitl`) | 🟨 ACTIVATE | turn enqueue on in the default path (today only the dormant ensemble enqueues) |
-| Review UI (≤30s pre-labelled confirm/override) | 🟨 EXTEND | extend `/hitl` to show oracle verdict + evidence; one-click confirm/override + reason |
-| Stratified sampler (uncertain + uniform) | 🟦 ADD | new — picks which traces enqueue |
-| Gold-set sink (`GoldLabel`) | 🟦 ADD | new immutable table (above schema) |
-| PPI metric (ASR ±CI) | 🟦 ADD | new — runs per Run on (full oracle labels + labeled sample) |
-| Run-over-Run trend dashboard | 🟦 ADD | new dashboard view |
+| Uncertainty / disagreement scoring | 🟩 DONE | `core/uncertainty.py::score_uncertainty` (L0↔L2 conflict, uncorroborated success, near-threshold) wired into the orchestrator's default path → persisted on `Trace.uncertainty` (+reason). One-sided L0 handled (a non-fired signal is not refusal evidence). `tests/test_uncertainty.py`. |
+| HITL queue (`HitlItem`, `enqueue_hitl`, `/hitl`) | 🟩 DONE | Activated in the default path: `Orchestrator._enqueue_review_sample` enqueues the stratified sample at run completion (opt-in via `review_sample_budget`, off by default). `HitlItem` gained `sample_reason` + `uncertainty` columns for GoldLabel/PPI provenance. |
+| Review UI (≤30s pre-labelled confirm/override) | 🟩 DONE | `/hitl/{id}` review card (evidence + oracle call-out) + `POST /hitl/{id}/review` → writes a `GoldLabel`, resolves the queue item (confirmed=agree / rejected=overrule), auto-advances to the next pending. Keyboard-driven (S/P/R + 1-5). **Blind-review fraction** (`ADVTEST_HITL_BLIND_PCT`, default 20%, deterministic per item) hides the oracle verdict to guard anchoring. `tests/test_dashboard.py`. |
+| Stratified sampler (uncertain + uniform) | 🟩 DONE | `core/sampling.py::stratified_sample` — uniform slice drawn first (unbiased), disagreement = top-K by uncertainty from the remainder, seeded/reproducible. `tests/test_sampling.py`. Config: `review_sample_budget` / `review_uniform_fraction` / `review_seed` (see `configs/run_with_review_sampling.yaml`). |
+| Gold-set sink (`GoldLabel`) | 🟩 DONE | `storage/models.py::GoldLabel` + `insert/list/get/count_gold_labels` repository helpers + `tests/test_gold_set.py`. Immutable, frozen oracle prediction, `ON DELETE SET NULL` FKs + denormalised `behavior_id`/`response_snapshot` so labels outlive their run. |
+| PPI metric (ASR ±CI) | 🟩 DONE | `core/ppi.py::ppi_asr` (rectify oracle ASR by oracle↔expert disagreement on the **uniform** slice; normal-approx CI; degrades to `oracle_only` with no labels) + `ppi_asr_for_run` glue. Surfaced on `/runs/{id}` hero as `ASR = x% ± y% (95% CI)` with a CI band. `tests/test_ppi.py`. |
+| Run-over-Run trend dashboard | 🟨 PARTIAL | Run hero shows the calibrated headline; a dedicated run-over-run trend view (ASR ±CI across runs, NEW/REGRESSED/FIXED diff) is mocked in the redesign but not yet built as a live route. |
 
 ---
 
@@ -159,6 +159,22 @@ shapes the early design.
 - **Refinement 2 — cold-start phase.** Before any gold set exists you can't trust *any*
   uncertainty signal. The first 1–2 runs: label a larger **uniform** sample to establish
   baseline oracle accuracy, *then* turn on uncertainty-weighting.
+  - **Calibration set (implemented).** To measure the oracle *before* any in-house label
+    exists, ingest PUBLIC labelled benchmarks (several from the curated catalogue carry
+    ground-truth success labels) as a cold-start validation set: `advtest_ext.calibration`
+    + `configs/calibration_datasets.yaml` + `storage.CalibrationExample`. Run the oracle
+    over these and report F1/ECE from day one. Distinct from the gold set: an external input
+    with a known verdict but no *frozen oracle prediction* — you generate the prediction by
+    running your oracle, which is exactly the judge-calibration measurement. Ingest with
+    `scripts/ingest_calibration.py --dataset <slug> --path <dump.jsonl>`.
+  - **Calibration report (implemented).** The scoring half of the loop:
+    `scripts/run_calibration.py` runs the LLM judge over the ingested examples (those that
+    ship a response) → `storage.CalibrationResult` rows; `core/calibration_report.py` computes
+    **precision / recall / F1** (agreement) and **ECE** (are the confidence scores honest?),
+    overall and per dataset / attack-type. Surfaced on the dashboard's **Calibration** tab
+    (confusion matrix + reliability curve + per-stratum F1). Metrics are pure/unit-tested;
+    the LLM runner is operational. This gives a reviewer the pair they want: a calibrated ASR
+    *and* a validated instrument ("F1 0.9 / ECE 0.04 vs 12 public benchmarks").
 
 - **Refinement 3 — blind-spot guard (already partly designed).** Uncertainty sampling never
   surfaces the oracle's *unknown unknowns* (cases it's confidently wrong about). The uniform

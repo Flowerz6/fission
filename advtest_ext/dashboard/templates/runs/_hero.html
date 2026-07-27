@@ -10,9 +10,9 @@
         {% endif %}>
   <div class="run-header-row">
     <div>
-      <div class="muted" style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">Run</div>
+      <div class="muted" style="font-size: 0.78rem; text-transform: none; letter-spacing: normal; font-weight: 600;">Run</div>
       <h1 style="margin: 0.15rem 0 0.4rem 0;"><code style="font-size: 0.95em; padding: 0;">{{ run.id }}</code>
-        {% if not run.finished_at %}<span class="pill" style="font-size: 0.6em; vertical-align: middle; background: #ffedd5; color: #9a3412;">LIVE</span>{% endif %}
+        {% if not run.finished_at %}<span class="pill error" style="font-size: 0.6em; vertical-align: middle;">LIVE</span>{% endif %}
       </h1>
       <p class="muted" style="margin: 0;">
         Strategy <strong>{{ run.strategy }}</strong> &middot;
@@ -30,11 +30,47 @@
   </div>
 
   <div class="hero-stats">
-    {% set asr_pct = run.summary.get('overall_asr', 0.0) * 100 %}
+    {# Headline ASR: the PPI-calibrated estimate when a uniform gold-label
+       slice exists, else the raw oracle ASR. The CI is what makes this a
+       defensible number rather than "the oracle said X". #}
+    {% set asr_pct = (ppi.asr if ppi else run.summary.get('overall_asr', 0.0)) * 100 %}
     <div class="hero-stat hero-asr">
-      <div class="label">Attack Success Rate</div>
-      <div class="value-xl">{{ '%.1f'|format(asr_pct) }}<span class="unit">%</span></div>
+      <div class="label">Attack Success Rate
+        {% if ppi and ppi.method == 'ppi' %}<span class="pill success" style="font-size:0.6em; vertical-align:middle;">± CI · calibrated</span>
+        {% elif ppi %}<span class="pill" style="font-size:0.6em; vertical-align:middle;">oracle · uncalibrated</span>{% endif %}
+      </div>
+      <div class="value-xl">{{ '%.1f'|format(asr_pct) }}<span class="unit">%</span>
+        {% if ppi and ppi.method == 'ppi' %}<span class="unit" style="font-size:0.4em;"> ± {{ '%.1f'|format(ppi.ci_half_width * 100) }}</span>{% endif %}
+      </div>
+      {% if ppi and ppi.method == 'ppi' %}
+      {% set x = (ppi.asr * 520)|round(1) %}{% set lo = (ppi.ci_low * 520)|round(1) %}
+      {% set hi = (ppi.ci_high * 520)|round(1) %}{% set orc = (ppi.oracle_asr * 520)|round(1) %}
+      <div class="calscale">
+        <svg viewBox="0 0 520 52" preserveAspectRatio="none" role="img"
+             aria-label="ASR {{ '%.1f'|format(asr_pct) }} percent, 95 percent CI">
+          {% for gx in [0, 52, 104, 156, 208, 260, 312, 364, 416, 468, 519] %}
+          <line class="{{ 'tkm' if loop.index0 % 2 == 0 else 'tk' }}" x1="{{ gx }}" y1="{{ 30 if loop.index0 % 2 == 0 else 32 }}" x2="{{ gx }}" y2="38"/>
+          {% endfor %}
+          <text x="0" y="50">0</text><text x="240" y="50">50</text><text x="500" y="50">100</text>
+          <line class="fl" x1="0" y1="22" x2="{{ x }}" y2="22"/>
+          <line class="or" x1="{{ orc }}" y1="6" x2="{{ orc }}" y2="28"/>
+          <text x="{{ (orc + 4)|round(1) }}" y="12">oracle {{ '%.0f'|format(ppi.oracle_asr*100) }}</text>
+          <line class="cp" x1="{{ lo }}" y1="12" x2="{{ lo }}" y2="32"/>
+          <line class="cp" x1="{{ hi }}" y1="12" x2="{{ hi }}" y2="32"/>
+          <line class="cp" x1="{{ lo }}" y1="22" x2="{{ hi }}" y2="22" stroke-dasharray="1 2"/>
+          <line class="cp" x1="{{ x }}" y1="2" x2="{{ x }}" y2="28" stroke-width="2"/>
+        </svg>
+      </div>
+      <div class="muted" style="font-size:0.72rem; margin-top:0.35rem;">
+        95% CI {{ '%.1f'|format(ppi.ci_low*100) }}–{{ '%.1f'|format(ppi.ci_high*100) }}% ·
+        {{ ppi.n_labeled }} labels · oracle said {{ '%.1f'|format(ppi.oracle_asr*100) }}%
+      </div>
+      {% else %}
       <div class="bar-wrap"><div class="bar-fill" style="width: {{ asr_pct }}%;"></div></div>
+      {% if ppi %}<div class="muted" style="font-size:0.72rem; margin-top:0.35rem;">
+        Uncalibrated — <a href="/hitl">label the review queue</a> for a rectified CI.
+      </div>{% endif %}
+      {% endif %}
     </div>
     <div class="hero-stat">
       <div class="label">Successful</div>

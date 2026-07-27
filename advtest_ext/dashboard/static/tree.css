@@ -1,0 +1,246 @@
+/* ============================================================================
+   Attack-tree explorer — Cytoscape.js edition.
+
+   Self-contained styling for the live attack tree (navigator + Cytoscape
+   canvas + node-detail). Loaded only by the tree templates
+   (runs/_tree_live.html), never by base.html, so the dashboard's global
+   redesign owns base.html and this owns the tree component. Layout chrome
+   leans on the shared design tokens (--surface, --border, --accent, …); the
+   node status palette is hard-committed to the approved hexes below so the
+   tree reads identically in light and dark.
+   ============================================================================ */
+
+.tree-explorer {
+  display: grid;
+  /* minmax(0, 1fr): a bare 1fr column has min-width:auto, so the Cytoscape
+     canvas forces the viewer column WIDER than its track and it overflows —
+     the graph then sits off-centre/clipped and shifts whenever the canvas
+     re-renders on scroll or zoom. minmax(0,…) lets the column shrink to fit. */
+  grid-template-columns: 264px minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border, #dbe2df);
+  border: 1px solid var(--border, #dbe2df);
+  border-radius: var(--radius, 4px);
+  overflow: hidden;
+  margin-bottom: 1.35rem;
+}
+@media (max-width: 760px) {
+  .tree-explorer { grid-template-columns: 1fr; }
+}
+
+/* ---- navigator ---------------------------------------------------------- */
+.tree-explorer .cell-nav {
+  background: var(--surface, #fff);
+  max-height: 600px;
+  overflow-y: auto;
+}
+.tree-explorer .cell-nav-group {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted, #6a7773);
+  padding: 0.7rem 0.85rem 0.35rem;
+}
+.tree-explorer .cell-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.1rem 0.5rem;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--border, #dbe2df);
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tree-explorer .cell-item:hover { background: var(--surface-2, #f4f7f6); }
+.tree-explorer .cell-item.active {
+  background: var(--accent-soft, rgba(12, 92, 88, 0.09));
+  border-left-color: var(--accent, #0c5c58);
+}
+.tree-explorer .cell-item .ci-b {
+  grid-column: 1;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--fg, #0f1c1a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-explorer .cell-item .ci-t {
+  grid-column: 1;
+  font-size: 0.67rem;
+  color: var(--muted, #6a7773);
+}
+.tree-explorer .cell-item .ci-n {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fg-soft, #3f4d4a);
+  font-variant-numeric: tabular-nums;
+}
+.tree-explorer .cell-item .ci-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  margin-top: 0.25rem;
+  background: var(--surface-2, #f4f7f6);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.tree-explorer .cell-item .ci-bar span {
+  display: block;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* ---- viewer ------------------------------------------------------------- */
+.tree-viewer {
+  background: var(--surface, #fff);
+  min-height: 300px;
+  min-width: 0; /* allow the grid track to constrain the Cytoscape canvas */
+}
+.tree-panel { display: none; }
+.tree-panel.active { display: block; }
+.tree-panel-head {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--border, #dbe2df);
+  background: var(--surface-2, #f4f7f6);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.tree-panel-head code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--accent, #0c5c58);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* ---- Cytoscape canvas + controls --------------------------------------- */
+.tree-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.9rem 0;
+}
+.tree-btn {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fg-soft, #3f4d4a);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong, #c6cfcc);
+  border-radius: var(--radius-sm, 2px);
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+.tree-btn:hover { color: var(--accent, #0c5c58); border-color: var(--accent, #0c5c58); }
+.tree-live-flag {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted, #6a7773);
+}
+.tree-live-flag[data-live="1"] { color: #b23127; }
+
+.cy-mount {
+  /* Cytoscape appends its <canvas> layers as position:absolute; without a
+     positioned container they anchor to a wrong ancestor and drift as the page
+     scrolls. position:relative anchors them here; overflow:hidden clips. */
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 420px;
+  margin: 0.55rem 0.9rem;
+  border: 1px solid var(--border, #dbe2df);
+  border-radius: var(--radius-sm, 2px);
+  background:
+    radial-gradient(circle at 1px 1px, rgba(120, 120, 120, 0.12) 1px, transparent 0);
+  background-size: 22px 22px;
+  background-color: #fbfcfd;
+}
+
+.tree-legend {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0 0.95rem 0.4rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.66rem;
+  color: var(--muted, #6a7773);
+}
+.tree-legend .lg { display: inline-flex; align-items: center; gap: 0.35rem; }
+.tree-legend .sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+/* ---- node detail -------------------------------------------------------- */
+.tree-detail {
+  margin: 0 0.9rem 0.9rem;
+  border: 1px solid var(--border, #dbe2df);
+  border-radius: var(--radius-sm, 2px);
+  background: var(--surface, #fff);
+  padding: 0.85rem 1rem;
+}
+.tree-detail .td-h {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.tree-detail .td-t {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fg, #0f1c1a);
+}
+.tree-detail .td-pill {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.66rem;
+  font-weight: 600;
+  padding: 0.12rem 0.5rem;
+  border-radius: var(--radius-sm, 2px);
+  border: 1px solid transparent;
+}
+.tree-detail .td-link {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+}
+.tree-detail .td-hint {
+  font-size: 0.82rem;
+  color: var(--muted, #6a7773);
+  margin: 0;
+}
+.tree-detail .td-transcript {
+  background: var(--surface-2, #f4f7f6);
+  border: 1px solid var(--border, #dbe2df);
+  border-radius: var(--radius-sm, 2px);
+  padding: 0.6rem 0.75rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  max-height: 280px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tree-detail .td-transcript > div { padding: 0.15rem 0; }
+.tree-detail .td-transcript .u { color: var(--accent, #0c5c58); font-weight: 600; }
+.tree-detail .td-transcript .a { color: #1c7a45; font-weight: 600; }

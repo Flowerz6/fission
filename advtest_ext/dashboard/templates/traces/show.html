@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 {% block title %}trace {{ trace.id }} · advtest{% endblock %}
 {% block content %}
+<style>
+  .node-convo { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.5rem; }
+  .nc-turn { border: 1px solid var(--border); border-radius: var(--r-sm, 8px); padding: 0.7rem 0.9rem; background: var(--surface); }
+  .nc-turn.nc-current { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .nc-head { font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .nc-u, .nc-a { margin: 0.35rem 0; }
+  .nc-role { display: inline-block; font-size: 0.7rem; font-weight: 600; color: var(--muted); text-transform: lowercase; margin-bottom: 0.15rem; }
+  .nc-u pre, .nc-a pre { margin: 0.1rem 0 0; }
+</style>
 <h1>
   <span class="pill {{ trace.verdict or 'refused' }}">{{ trace.verdict or '-' }}</span>
   Trace <code>{{ trace.id }}</code>
@@ -39,33 +48,33 @@
 <pre>{{ trace.raw_request }}</pre>
 
 <h2>Gemini's response</h2>
-{% if full_response %}
-{# Phase 2: extracted from the intercepted streamGenerate body.
-   This is the full assembled response — never truncated by
-   Playwright's "read inner_text mid-stream" race. Prefer this
-   over ``trace.raw_response`` whenever it's available. #}
-<pre class="full-response">{{ full_response }}</pre>
+{# raw_response is now the COMPLETE assembled response (the ui_mode invokers
+   persist the full intercepted stream, not Playwright's mid-stream read);
+   full_response is the same text re-extracted live. Prefer the intercepted
+   full, fall back to raw_response. No truncation on either path. #}
+{% set response_text = full_response or trace.raw_response %}
+<pre class="full-response">{{ response_text }}</pre>
+{% if not full_response and not (trace.raw_response_data or {}).get('intercepted_traffic_path') %}
 <p class="muted" style="font-size: 0.85em;">
-  Source: intercepted Workspace Gemini API stream (longest prose
-  fragment across all streamGenerate responses captured for this
-  trace). The rendered side-panel text below may differ — it's
-  whatever Playwright managed to read before the response finished
-  streaming.
+  Rendered side-panel text (api_mode / interception disabled — no intercepted
+  stream captured for this trace).
 </p>
-<details style="margin-top: 0.5em;">
-  <summary class="muted">Rendered side-panel capture (often truncated; for comparison)</summary>
-  <pre>{{ trace.raw_response }}</pre>
-</details>
-{% else %}
-{# No intercepted capture available — fall back to whatever the
-   rendered-UI read got. This is the only data source for api_mode
-   traces and pre-Phase-2 ui_mode traces. #}
-<pre>{{ trace.raw_response }}</pre>
-<p class="muted" style="font-size: 0.85em;">
-  Source: rendered side-panel text only. No intercepted traffic
-  captured for this trace (api_mode, interception disabled, or
-  pre-2026-05-23 run). May be truncated mid-stream.
-</p>
+{% endif %}
+
+{% if node_turns and node_turns|length > 1 %}
+<h2>Full conversation for this branch <span class="muted" style="font-weight:400">· {{ node_turns|length }} turns</span></h2>
+<p class="muted" style="font-size: 0.85em;">Every turn of this node's side-panel conversation, with the complete Gemini reply.</p>
+<div class="node-convo">
+  {% for turn in node_turns %}
+  <div class="nc-turn{{ ' nc-current' if turn.trace_id == trace.id }}">
+    <div class="nc-head"><span class="pill {{ turn.verdict or 'refused' }}">{{ turn.verdict or '-' }}</span>
+      <span class="muted">turn {{ turn.turn }}{% if turn.score is not none %} · score {{ '%.2f'|format(turn.score) }}{% endif %}</span>
+      {% if turn.trace_id != trace.id %}· <a href="/traces/{{ turn.trace_id }}">open turn</a>{% else %}· <strong>this turn</strong>{% endif %}</div>
+    <div class="nc-u"><span class="nc-role">user</span> <pre>{{ turn.prompt }}</pre></div>
+    <div class="nc-a"><span class="nc-role">gemini</span> <pre>{{ turn.response }}</pre></div>
+  </div>
+  {% endfor %}
+</div>
 {% endif %}
 
 {# Phase 3 — typed signal stack. Populates from the SignalRecord

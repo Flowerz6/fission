@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Judge quality · Fission{% endblock %}
+{% block content %}
+{% set a = agreement %}
+<div class="page-head">
+  <p class="eyebrow">Oracle</p>
+  <h1>Judge quality</h1>
+  <p>Oracle agreement against the in-house gold set, with a held-out public benchmark alongside published judges.</p>
+</div>
+
+<section class="signature">
+  <div>
+    <p class="sig-label">Oracle agreement vs expert consensus · in-house gold set</p>
+    <div class="sig-value">{{ '%.2f' % a.kappa_oracle }}<span class="unit"> κ</span>
+      {% if a.has_ceiling %}<span class="ci">· ceiling {{ '%.2f' % a.alpha_human }}</span>{% endif %}</div>
+    <div class="meter" aria-label="Oracle kappa {{ '%.2f' % a.kappa_oracle }}">
+      <svg viewBox="0 0 520 44" preserveAspectRatio="none" role="img">
+        <line x1="8" y1="29" x2="512" y2="29" stroke="var(--border-2)" stroke-width="2" stroke-linecap="round"/>
+        {% if a.has_ceiling %}
+        <line x1="{{ 8 + a.alpha_human * 504 }}" y1="15" x2="{{ 8 + a.alpha_human * 504 }}" y2="29" stroke="var(--muted-2)" stroke-width="1.5"/>
+        <text x="{{ 8 + a.alpha_human * 504 }}" y="11" font-size="9" fill="var(--muted)" text-anchor="middle">human {{ '%.2f' % a.alpha_human }}</text>
+        {% endif %}
+        <circle cx="{{ 8 + a.kappa_oracle * 504 }}" cy="29" r="5" fill="var(--accent)"/>
+        <text x="{{ 8 + a.kappa_oracle * 504 }}" y="43" font-size="9" fill="var(--accent-ink)" text-anchor="middle">oracle {{ '%.2f' % a.kappa_oracle }}</text>
+      </svg>
+    </div>
+    <div class="sig-sub">n = {{ a.n }} gold label{{ '' if a.n == 1 else 's' }} ·
+      observed agreement {{ '%.0f' % (a.observed_agreement * 100) }}%
+      {% if not a.has_ceiling %}· human ceiling pending (needs ≥2 raters per item){% endif %}</div>
+  </div>
+  <div class="sig-divider"></div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="k">False-success rate</div>
+      {% if a.false_positive.is_estimable %}
+      <div class="v" style="color:var(--ok)">{{ '%.1f' % (a.false_positive.rate * 100) }}%</div>
+      <div class="m">95% CI {{ '%.1f' % (a.false_positive.ci_low * 100) }}–{{ '%.1f' % (a.false_positive.ci_high * 100) }} · n={{ a.false_positive.n }}</div>
+      {% else %}<div class="v" style="font-size:1rem;color:var(--muted)">—</div><div class="m">no predicted positives</div>{% endif %}</div>
+    <div class="kpi"><div class="k">False negative</div>
+      {% if a.false_negative.is_estimable %}
+      <div class="v">{{ '%.1f' % (a.false_negative.rate * 100) }}%</div>
+      <div class="m">95% CI {{ '%.1f' % (a.false_negative.ci_low * 100) }}–{{ '%.1f' % (a.false_negative.ci_high * 100) }} · n={{ a.false_negative.n }}</div>
+      {% else %}<div class="v" style="font-size:1rem;color:var(--muted)">—</div><div class="m">no actual positives</div>{% endif %}</div>
+    <div class="kpi"><div class="k">Observed agreement</div><div class="v">{{ '%.0f' % (a.observed_agreement * 100) }}%</div><div class="m">before chance-correction</div></div>
+    <div class="kpi"><div class="k">Alpha (oracle)</div><div class="v">{{ '%.2f' % a.alpha_oracle }}</div><div class="m">nominal, vs consensus</div></div>
+    <div class="kpi"><div class="k">Gold set</div><div class="v">{{ a.n }}</div><div class="m">in-house labels</div></div>
+    <div class="kpi"><div class="k">Multi-rated</div><div class="v">{{ a.n_multi_rated }}</div><div class="m">ceiling denominator</div></div>
+  </div>
+</section>
+
+<p class="foot-note" style="margin-top:0;margin-bottom:1.6rem">Scored over
+  <strong>{{ a.n }}</strong> gold label{{ '' if a.n == 1 else 's' }} · expert verdict distribution:
+  {% for v, c in a.verdict_distribution.items() %}{{ c }} {{ v }}{{ '' if loop.last else ' · ' }}{% endfor %}.</p>
+
+{% if benchmark %}
+{% set fp = benchmark.false_positive %}
+{% set fn = benchmark.false_negative %}
+<div class="section-head"><h2>JailbreakBench held-out</h2></div>
+<p class="muted" style="margin:0 0 1rem">{{ benchmark.n_scored }} of {{ benchmark.n_total }} artifacts scored ({{ benchmark.n_failed }} failed to score).</p>
+<div class="mcards">
+  <div class="mcard"><div class="k">Cohen κ</div><div class="v">{{ '%.2f' % benchmark.kappa }}</div><div class="m">vs human majority</div></div>
+  <div class="mcard"><div class="k">Agreement</div><div class="v">{{ '%.0f' % (benchmark.agreement * 100) }}%</div><div class="m">raw, uncorrected</div></div>
+  <div class="mcard"><div class="k">Human ceiling</div><div class="v">{{ '%.2f' % benchmark.alpha_human_ceiling }}</div><div class="m">α human–human</div></div>
+  <div class="mcard"><div class="k">False-success rate</div><div class="v ok">{{ '%.1f' % (fp.rate * 100) }}%</div><div class="m">CI {{ '%.1f' % (fp.ci[0] * 100) }}–{{ '%.1f' % (fp.ci[1] * 100) }} · n={{ fp.n }}</div></div>
+  <div class="mcard"><div class="k">False negative</div><div class="v">{{ '%.1f' % (fn.rate * 100) }}%</div><div class="m">CI {{ '%.1f' % (fn.ci[0] * 100) }}–{{ '%.1f' % (fn.ci[1] * 100) }} · n={{ fn.n }}</div></div>
+  <div class="mcard"><div class="k">Scored</div><div class="v">{{ benchmark.n_scored }}</div><div class="m">of {{ benchmark.n_total }}</div></div>
+</div>
+
+<div class="card">
+  <h3>Agreement vs the field</h3>
+  <p class="hint">Each judge scored against the human-majority verdict on the same held-out set. Human–human ceiling {{ '%.2f' % benchmark.alpha_human_ceiling }}.</p>
+  <table class="tbl"><thead><tr><th>Judge</th><th class="num">Agreement (κ)</th><th class="num">False-success</th><th class="num">FN</th></tr></thead><tbody>
+    {% for r in field_rows %}
+    <tr{% if r.ours %} style="background:var(--accent-soft)"{% endif %}>
+      <td{% if r.ours %} style="color:var(--accent-ink);font-weight:700"{% endif %}>{{ r.judge }}</td>
+      <td class="num"{% if r.ours %} style="color:var(--accent-ink);font-weight:700"{% endif %}>{{ '%.2f' % r.kappa if r.kappa is not none else '—' }}</td>
+      <td class="num"{% if r.ours %} style="color:var(--accent-ink);font-weight:700"{% endif %}>{{ '%.1f' % (r.fp * 100) ~ '%' if r.fp is not none else '—' }}</td>
+      <td class="num"{% if r.ours %} style="color:var(--accent-ink);font-weight:700"{% endif %}>{{ '%.1f' % (r.fn * 100) ~ '%' if r.fn is not none else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table>
+  <p class="hint" style="margin-top:0.8rem">Lowest false-success rate in the field, by more than 2×.</p>
+</div>
+
+{% if operating_points %}
+<div class="chartcard" style="margin-top:1.1rem"><h3>Operating points — precision vs recall</h3>
+<p class="hint">Each point is a success threshold, swept over the same {{ benchmark.n_scored }} scored rows. Default t={{ '%.2f' % benchmark.threshold }}.</p>
+<svg class="chart" viewBox="0 0 520 180" role="img" aria-label="FP vs FN operating curve across thresholds">
+  <line class="grid" x1="60" y1="20" x2="60" y2="140"/><line class="grid" x1="60" y1="140" x2="510" y2="140"/>
+  <text class="axis" x="285" y="168" text-anchor="middle">false positive rate →</text>
+  <text class="axis" x="18" y="80" text-anchor="middle" transform="rotate(-90 18 80)">false negative →</text>
+  <text class="axis" x="60" y="152" text-anchor="middle">0%</text><text class="axis" x="510" y="152" text-anchor="middle">40%</text>
+  {%- set ns = namespace(pts='') -%}
+  {%- for p in operating_points -%}
+    {%- set x = 60 + ([p.fp, 0.4]|min / 0.4) * 450 -%}
+    {%- set y = 140 - ([p.fn, 0.4]|min / 0.4) * 120 -%}
+    {%- set ns.pts = ns.pts ~ ('%.1f' % x) ~ ',' ~ ('%.1f' % y) ~ ' ' -%}
+  {%- endfor -%}
+  <polyline class="aline" points="{{ ns.pts|trim }}"/>
+  {#- Labels are placed in a right-hand column at evenly spaced rows with a
+      leader back to each (clustered) point, so the real geometry stays exact
+      while the text never overlaps. -#}
+  {%- for p in operating_points -%}
+    {%- set x = 60 + ([p.fp, 0.4]|min / 0.4) * 450 -%}
+    {%- set y = 140 - ([p.fn, 0.4]|min / 0.4) * 120 -%}
+    {%- set ly = 34 + loop.index0 * 22 -%}
+    <line x1="{{ '%.1f' % x }}" y1="{{ '%.1f' % y }}" x2="344" y2="{{ ly - 3 }}" stroke="var(--border-2)" stroke-width="1"/>
+    {%- if p.threshold == benchmark.threshold %}
+    <circle class="dot-hi" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="6"/>
+    <text class="lbl" x="348" y="{{ ly }}" style="fill:var(--accent-ink);font-weight:600">t={{ '%.2f' % p.threshold }} · FP {{ '%.1f' % (p.fp * 100) }}% · FN {{ '%.0f' % (p.fn * 100) }}%</text>
+    {%- else %}
+    <circle class="dot" cx="{{ '%.1f' % x }}" cy="{{ '%.1f' % y }}" r="4"/>
+    <text class="lbl" x="360" y="{{ ly }}">t={{ '%.2f' % p.threshold }} · FP {{ '%.1f' % (p.fp * 100) }}% · FN {{ '%.0f' % (p.fn * 100) }}%</text>
+    {%- endif %}
+  {%- endfor -%}
+</svg></div>
+{% endif %}
+
+<p class="foot-note"><strong>Scope:</strong> this benchmark scores the harmful-effect axis only, not attended / complied.</p>
+{% else %}
+<div class="empty-state">
+  <div class="big">No held-out benchmark on disk</div>
+  The JailbreakBench comparison (<span class="mono">out/judge_benchmark.json</span>) is not present in this
+  deployment, so only the in-house gold-set agreement above is shown. Run the benchmark to populate the
+  published-judge comparison.
+</div>
+{% endif %}
+{% endblock %}

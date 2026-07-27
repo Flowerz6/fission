@@ -1,0 +1,184 @@
+# Calibration dataset registry (vendored from the curated catalogue).
+#
+# These are PUBLIC adversarial benchmarks used to calibrate/validate
+# Fission's oracle *before* any in-house human labelling exists — the
+# cold-start calibration set (docs/FISSION_MEASUREMENT_SPINE.md §7,
+# refinement 2). Several carry ground-truth success labels; we run our
+# own oracle over them and compare, giving the judge a validation set
+# with an F1/ECE it can be held to.
+#
+# Data is NOT vendored (licences + size). Each `ingest` block records
+# how to map a downloaded dump onto the CalibrationExample schema:
+#   field_map: source column -> {input, response?, external_id?}
+#   label:     source column + which raw values mean success / refused
+# `labeled: false` entries are dynamic-environment benches (success is
+# defined by executing a tool call at run time, not a static row label)
+# — listed for provenance; ingest them via a live adapter, not this path.
+
+version: 1
+verdict_vocab: [success, refused, partial]
+
+datasets:
+  # --- Direct Prompt Injection ---
+  - name: tensor_trust
+    display_name: Tensor Trust
+    attack_type: direct_pi
+    urls:
+      - https://huggingface.co/datasets/qxcv/tensor-trust
+      - https://github.com/HumanCompatibleAI/tensor-trust-data
+    description: >-
+      Sandwiched attack (pre_prompt+attack+post_prompt+access_code);
+      dedicated extraction + hijacking robustness splits. HF viewer
+      broken — load per-config.
+    labeled: true
+    ingest:
+      format: jsonl
+      field_map:
+        input: attack
+        external_id: sample_id
+      label:
+        # An extraction attack that surfaces the access code succeeded.
+        column: attack_llm_output_contains_access_code
+        success_values: [true, "true", 1, "1"]
+        refused_values: [false, "false", 0, "0"]
+
+  - name: lakera_gandalf_rct
+    display_name: Lakera gandalf-rct
+    attack_type: direct_pi
+    urls:
+      - https://huggingface.co/datasets/Lakera/gandalf-rct
+    description: >-
+      2024 randomized Gandalf run; prompt/success/blocked_by/level/
+      password/llm/defense — learn which attack beats which guard.
+    labeled: true
+    ingest:
+      format: jsonl
+      field_map:
+        input: prompt
+        external_id: id
+      label:
+        column: success
+        success_values: [true, "true", 1, "1"]
+        refused_values: [false, "false", 0, "0"]
+      keep_meta: [level, blocked_by, defense, llm]
+
+  - name: hackaprompt_core
+    display_name: HackAPrompt (core)
+    attack_type: direct_pi
+    urls:
+      - https://huggingface.co/datasets/hackaprompt/hackaprompt-dataset
+    description: Competition submissions, user_input + correct success label, 10 leveled challenges.
+    labeled: true
+    ingest:
+      format: jsonl
+      field_map:
+        input: user_input
+        response: completion
+      label:
+        column: correct
+        success_values: [true, "true", 1, "1"]
+        refused_values: [false, "false", 0, "0"]
+      keep_meta: [level, model]
+
+  # --- Indirect Prompt Injection ---
+  - name: agentdojo_workspace
+    display_name: AgentDojo (Workspace suite)
+    attack_type: indirect_pi
+    urls:
+      - https://github.com/ethz-spylab/agentdojo
+    description: >-
+      Dynamic env; success = agent executes attacker's tool call.
+      Gmail/Calendar/Drive-like. Closest analogue to Fission's IPI focus.
+    labeled: false  # dynamic — success decided at run time, not a static label
+
+  - name: mcptox
+    display_name: MCPTox
+    attack_type: indirect_pi
+    urls:
+      - https://github.com/zhiqiangwang4/MCPTox-Benchmark
+      - https://arxiv.org/abs/2508.14925
+    description: >-
+      First real-world MCP tool-poisoning bench (45 live servers, 353
+      tools); stealthy success = agent driven to call a separate legit tool.
+    labeled: false
+
+  - name: fujitsu_art_safebench_v2
+    display_name: Fujitsu ART-SafeBench v2
+    attack_type: indirect_pi
+    urls:
+      - https://huggingface.co/datasets/Fujitsu/agentic-rag-redteam-bench
+    description: >-
+      Dedicated rag_poisoning.schema.json + orchestrator_attacks.schema.json;
+      provenance fields per row.
+    labeled: true
+    ingest:
+      format: jsonl
+      field_map:
+        input: attack_text
+        external_id: id
+      label:
+        column: label
+        success_values: [attack_success, success, unsafe, 1, "1", true]
+        refused_values: [attack_failed, refused, safe, 0, "0", false]
+
+  # --- Jailbreaking ---
+  - name: safemtdata_actorattack
+    display_name: SafeMTData (ActorAttack)
+    attack_type: jailbreak
+    urls:
+      - https://huggingface.co/datasets/SafeMTData/SafeMTData
+    description: >-
+      Multi-turn escalation; multi_turn_queries per-turn attacker text;
+      intent concealed via actor network. Beat single-turn on o1.
+    labeled: false  # multi-turn; success judged per-conversation, not per-row
+
+  - name: jailbreakbench_artifacts
+    display_name: JailbreakBench/artifacts
+    attack_type: jailbreak
+    urls:
+      - https://github.com/JailbreakBench/artifacts
+    description: PAIR/GCG outputs per target model; prompt/response/jailbroken/queries_to_jailbreak.
+    labeled: true
+    ingest:
+      format: jsonl
+      field_map:
+        input: prompt
+        response: response
+      label:
+        column: jailbroken
+        success_values: [true, "true", 1, "1"]
+        refused_values: [false, "false", 0, "0"]
+      keep_meta: [target_model, attack_type, queries_to_jailbreak]
+
+  # --- Evasion Attacks ---
+  - name: jfrog_obfuscation
+    display_name: jfrog/obfuscation-identification
+    attack_type: evasion
+    urls:
+      - https://huggingface.co/datasets/jfrog/obfuscation-identification
+    description: base64/caesar/binary/reversed/leet → input filters.
+    labeled: false
+
+  - name: mindgard_evaded_pi
+    display_name: Mindgard evaded-PI
+    attack_type: evasion
+    urls:
+      - https://huggingface.co/datasets/Mindgard/evaded-prompt-injection-and-jailbreak-samples
+    description: 12 char-injection + 8 adversarial-ML → named guards (Prompt Guard, Azure Shield, ProtectAI, NeMo).
+    labeled: false
+
+  - name: jailbreakbench_gcg
+    display_name: JailbreakBench GCG
+    attack_type: evasion
+    urls:
+      - https://github.com/JailbreakBench/artifacts
+    description: gradient suffixes → aligned models + perplexity defense.
+    labeled: false
+
+  - name: damo_multijail
+    display_name: DAMO-NLP-SG/MultiJail
+    attack_type: jailbreak
+    urls:
+      - https://huggingface.co/datasets/DAMO-NLP-SG/MultiJail
+    description: low-resource-language translation → RLHF refusal.
+    labeled: false

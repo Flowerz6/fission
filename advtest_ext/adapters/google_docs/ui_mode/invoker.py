@@ -61,6 +61,9 @@ from advtest_ext.adapters._ui_mode_common.config import (
     resolve_profile_dir,
     resolve_timeout_ms,
 )
+from advtest_ext.adapters._ui_mode_common.response_assembly import (
+    assemble_full_response,
+)
 from advtest_ext.adapters.google_docs.ui_mode.selectors import SELECTORS
 from advtest_ext.document.target import Response
 
@@ -867,12 +870,23 @@ async def ui_mode_invoke(
             except Exception:
                 pass
 
+    # Persist the COMPLETE response from the intercepted stream, not
+    # Playwright's mid-stream inner_text read (often badly truncated — the
+    # server response is the source of truth). Fall back to the UI text only
+    # if the capture is missing or somehow shorter, so we never truncate more.
+    ui_response_text = response_text
+    if intercept_on:
+        full = assemble_full_response(intercept_path)
+        if full and len(full) >= len(response_text):
+            response_text = full
+
     return Response(
         text=response_text,
         complied=None,
         raw={
             "document_id": document_id,
             "screenshot_path": str(screenshot_path),
+            "ui_response": ui_response_text,
             "intercepted_traffic_path": str(intercept_path) if intercept_on else None,
             "ui_mode": True,
             "document_body": document_body,

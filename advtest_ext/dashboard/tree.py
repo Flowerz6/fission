@@ -12,6 +12,7 @@ cleaner.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from types import SimpleNamespace
 from typing import Any
@@ -117,6 +118,12 @@ def collapse_conversations(traces: list[Any]) -> list[Any]:
                 judge_scores=getattr(best, "judge_scores", []),
                 behavior_id=behavior,
                 technique_id=technique,
+                # Carry the winning turn's prompt/response so the Cytoscape
+                # tree's node-detail panel can show the real transcript inline
+                # for collapsed multi-turn conversations (single-step traces
+                # already expose these on the ORM row).
+                raw_request=getattr(best, "raw_request", None),
+                raw_response=getattr(best, "raw_response", None),
                 # Carry the phase tag through the collapse so the per-phase
                 # tree grouping still works — without this, the synthesized
                 # node has no extra_metadata and every conversation falls
@@ -305,9 +312,231 @@ def build_phase_forests(traces: list[object]) -> list[dict[str, object]]:
     return groups
 
 
+# ---------------------------------------------------------------------------
+# Cytoscape graph payload
+# ---------------------------------------------------------------------------
+#
+# The live attack tree is rendered client-side with Cytoscape.js (dagre
+# layout) instead of Mermaid. Both the initial server render (embedded as
+# JSON per cell in ``runs/_tree_live.html``) AND the ``/runs/{id}/_tree.json``
+# polling endpoint go through :func:`tree_graph_payload` so the two can never
+# drift: the client diffs the polled payload against what it already mounted
+# and only ``cy.add()``s the new nodes/edges (no full repaint → no flicker).
+
+# ``Trace.verdict`` → Cytoscape node status (drives colour + shape). ``error``
+# maps to the dashed "pruned" style: a crashed / dropped branch that never
+# produced a real verdict. A missing verdict falls back to "refused" (matching
+# the old Mermaid ``t.verdict or "refused"`` classing).
+_VERDICT_STATUS = {
+    "success": "success",
+    "partial": "partial",
+    "refused": "refused",
+    "error": "pruned",
+}
+
+
+def _node_status(verdict: str | None) -> str:
+    return _VERDICT_STATUS.get(verdict or "", "refused")
+
+
+def _node_score(trace: Any) -> float | None:
+    js = getattr(trace, "judge_scores", None)
+    if not js:
+        return None
+    try:
+        return float(js[0].score)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _node_name(trace: Any, index: int) -> str:
+    """A short human label for a tree node: the tap_crescendo strategy for
+    this conversation when present, else the technique id, else a step
+    number. Condensed to a short even label so nodes line up."""
+    meta = getattr(trace, "extra_metadata", None)
+    name = ""
+    if isinstance(meta, dict):
+        tcr = meta.get("tap_crescendo")
+        if isinstance(tcr, dict):
+            name = str(tcr.get("strategy") or "").strip()
+    if not name:
+        name = str(getattr(trace, "technique_id", None) or "").strip()
+    if not name:
+        name = f"step {index}"
+    return _short_label(name)
+
+
+# Match a quoted framing (the distinctive bit of a strategy) as the label.
+# Quote chars via \u escapes so no ambiguous literals live in the source.
+_QUOTES = "'\"‘’“”"  # noqa: RUF001 (straight + smart quotes)
+_QUOTED_PHRASE = re.compile("[" + _QUOTES + "]([^" + _QUOTES + "]{3,28})[" + _QUOTES + "]")
+
+
+def _short_label(name: str, limit: int = 28) -> str:
+    """Condense a strategy sentence into a short, even node label. Long strategy
+    prose otherwise wraps to 3-4 lines and overflows the fixed-size
+    round-rectangle, so nodes render at different heights and look ragged.
+
+    Order of preference: a quoted framing (the distinctive bit, e.g. 'live
+    incident postmortem'), then the leading clause when brief, then a clean
+    word-boundary truncation."""
+    name = " ".join(name.split())  # collapse newlines / runs of whitespace
+    quoted = _QUOTED_PHRASE.search(name)
+    if quoted:
+        return quoted.group(1).strip()
+    for sep in (" — ", " - ", ": ", "; ", ", ", ". "):
+        head = name.split(sep, 1)[0].strip()
+        if 4 <= len(head) <= limit:
+            return head
+    if len(name) <= limit:
+        return name
+    cut = name[:limit].rsplit(" ", 1)[0].strip(" ,.:;-")
+    return (cut or name[:limit].strip()) + "…"
+
+
+def _clip(text: Any, limit: int = 1200) -> str:
+    s = "" if text is None else str(text)
+    return s if len(s) <= limit else s[:limit] + "…"
+
+
+def _cell_nodes_edges(
+    cell: dict[str, object], node_prefix: str
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Turn one cell's ``lines`` into Cytoscape ``nodes`` + ``edges``.
+
+    Node id is ``{node_prefix}_t{trace_id}`` (hyphens stripped) so ids stay
+    valid + unique across phases/cells — same scheme the old Mermaid view used.
+
+    A synthetic **playbook root** node (id ``{node_prefix}_playbook``) is
+    prepended and parents every opening variant, so the tree has ONE top node —
+    the playbook — that fans out into the attacker's approaches, instead of
+    several unconnected sibling roots."""
+    lines = cell.get("lines", [])  # type: ignore[assignment]
+    assert isinstance(lines, list)
+    ids_in_cell = {getattr(ln["trace"], "id", None) for ln in lines}
+
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    root_ids: list[str] = []  # parentless nodes → children of the playbook root
+    for i, line in enumerate(lines, start=1):
+        t = line["trace"]
+        tid = str(getattr(t, "id", "") or "").replace("-", "")
+        nid = f"{node_prefix}_t{tid}"
+        score = _node_score(t)
+        name = _node_name(t, i)
+        label = f"{name}\n{score:.2f}" if score is not None else name
+        nodes.append(
+            {
+                "data": {
+                    "id": nid,
+                    "label": label,
+                    "status": _node_status(getattr(t, "verdict", None)),
+                    "score": score,
+                    "depth": getattr(t, "depth", None),
+                    "trace_id": getattr(t, "id", None),
+                    "u": _clip(getattr(t, "raw_request", None)),
+                    "a": _clip(getattr(t, "raw_response", None)),
+                }
+            }
+        )
+        parent_id = getattr(t, "parent_id", None)
+        if parent_id and parent_id in ids_in_cell:
+            pid = f"{node_prefix}_t{str(parent_id).replace('-', '')}"
+            edges.append({"data": {"id": f"{pid}__{nid}", "source": pid, "target": nid}})
+        else:
+            root_ids.append(nid)
+
+    # Prepend the playbook root — one top node the opening variants branch from.
+    if nodes:
+        pb_id = f"{node_prefix}_playbook"
+        behavior = str(cell.get("behavior_id") or "playbook")
+        nodes.insert(
+            0,
+            {
+                "data": {
+                    "id": pb_id,
+                    "label": _short_label(behavior),
+                    "status": "root",
+                    "score": None,
+                    "depth": -1,
+                    "trace_id": None,
+                    "u": "Playbook",
+                    "a": f"Attack playbook: {behavior}. The opening moves branch from here.",
+                }
+            },
+        )
+        for rid in root_ids:
+            edges.append({"data": {"id": f"{pb_id}__{rid}", "source": pb_id, "target": rid}})
+    return nodes, edges
+
+
+def tree_graph_payload(
+    phases: list[dict[str, object]], *, finished: bool, tree_hash: str
+) -> dict[str, Any]:
+    """Serialise the per-phase forest into the Cytoscape graph payload the
+    client mounts and incrementally updates.
+
+    Shape::
+
+        {
+          "finished": bool,
+          "hash": str,
+          "phases": [
+            {"index", "label", "n_success", "n_traces",
+             "cells": [
+               {"key", "cell_index", "behavior_id", "technique_id",
+                "n_success", "n_traces",
+                "nodes": [{"data": {...}}], "edges": [{"data": {...}}]},
+             ]},
+          ],
+        }
+
+    ``key`` (``p{phase}|behavior|technique``) is stable across polls even as
+    a cell grows, so the client can match a polled cell to the panel it
+    already mounted. ``cell_index`` is the 0-based position across all phases
+    — the navigator's ``data-cell`` handle.
+    """
+    out_phases: list[dict[str, Any]] = []
+    cell_index = 0
+    for phase in phases:
+        p_idx = phase.get("index", 0)
+        cells_out: list[dict[str, Any]] = []
+        forest = phase.get("forest", [])  # type: ignore[assignment]
+        assert isinstance(forest, list)
+        for pos, cell in enumerate(forest, start=1):
+            node_prefix = f"p{p_idx}c{pos}"
+            nodes, edges = _cell_nodes_edges(cell, node_prefix)
+            behavior_id = cell.get("behavior_id")
+            technique_id = cell.get("technique_id")
+            cells_out.append(
+                {
+                    "key": f"p{p_idx}|{behavior_id}|{technique_id}",
+                    "cell_index": cell_index,
+                    "behavior_id": behavior_id,
+                    "technique_id": technique_id,
+                    "n_success": cell.get("n_success", 0),
+                    "n_traces": cell.get("n_traces", 0),
+                    "nodes": nodes,
+                    "edges": edges,
+                }
+            )
+            cell_index += 1
+        out_phases.append(
+            {
+                "index": p_idx,
+                "label": phase.get("label", ""),
+                "n_success": phase.get("n_success", 0),
+                "n_traces": phase.get("n_traces", 0),
+                "cells": cells_out,
+            }
+        )
+    return {"finished": finished, "hash": tree_hash, "phases": out_phases}
+
+
 __all__ = [
     "ascii_tree_lines",
     "build_phase_forests",
     "build_tree_forest",
     "collapse_conversations",
+    "tree_graph_payload",
 ]

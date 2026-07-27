@@ -33,12 +33,13 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from advtest_ext.providers.base import Provider
 
 # tap_crescendo is a multi-turn attack, so the target must speak multi-turn.
-# Map a guide's app onto the run's target adapter; ``google_docs`` uses the
-# multi-turn side-panel adapter. sheets/gmail map to their base adapters — if
-# those aren't multi-turn-capable yet, pass ``target_name`` explicitly.
+# Map a guide's app onto the run's target adapter. Docs + Sheets use their
+# multi-turn side-panel adapters (tap_crescendo is multi-turn). gmail maps to
+# its single-turn base adapter — pass ``target_name`` explicitly for a
+# multi-turn gmail run until a multi-turn gmail adapter exists.
 _APP_TO_TARGET_NAME: dict[str, str] = {
     "google_docs": "google_docs_multiturn",
-    "google_sheets": "sheets",
+    "google_sheets": "google_sheets_multiturn",
     "gmail": "gmail",
 }
 
@@ -69,6 +70,9 @@ def build_guide_run(
     output_dir: Path | None = None,
     session_factory: Any = None,
     max_concurrency: int = 1,
+    review_sample_budget: int = 0,
+    review_uniform_fraction: float = 0.6,
+    review_seed: int = 0,
     orchestrator_cls: type[Orchestrator] = GridOrchestrator,
     **attack_overrides: Any,
 ) -> Orchestrator:
@@ -99,6 +103,12 @@ def build_guide_run(
         # Raw specs (not the built signals) — the orchestrator builds them at
         # startup, exactly as it does for a CLI RunConfig's ``signals:`` block.
         signal_specs=list(guide.success.signals),
+        # Measurement-spine review sampling: at run completion, stratified-
+        # sample traces into the HITL queue so a live guide run feeds the
+        # gold set → PPI. 0 (default) keeps the legacy behaviour.
+        review_sample_budget=review_sample_budget,
+        review_uniform_fraction=review_uniform_fraction,
+        review_seed=review_seed,
     )
 
 
@@ -113,6 +123,9 @@ async def run_guide(
     budget: Budget | None = None,
     output_dir: str | Path | None = None,
     session_factory: Any = None,
+    review_sample_budget: int = 0,
+    review_uniform_fraction: float = 0.6,
+    review_seed: int = 0,
     **attack_overrides: Any,
 ) -> RunResult:
     """Resolve live components from ``provider_config`` (the providers YAML) and
@@ -147,6 +160,9 @@ async def run_guide(
         budget=budget,
         output_dir=Path(output_dir) if output_dir is not None else None,
         session_factory=session_factory,
+        review_sample_budget=review_sample_budget,
+        review_uniform_fraction=review_uniform_fraction,
+        review_seed=review_seed,
         **attack_overrides,
     )
     return await orchestrator.run()

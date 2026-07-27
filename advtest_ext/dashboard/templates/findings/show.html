@@ -45,25 +45,13 @@
 <pre>{{ trace.raw_request }}</pre>
 
 <h2>Gemini's response</h2>
-{% if full_response %}
-<pre class="full-response" style="white-space: pre-wrap;">{{ full_response }}</pre>
+{# raw_response is now the complete assembled response; full_response is the
+   same text re-extracted from the intercepted stream. No truncation. #}
+<pre class="full-response" style="white-space: pre-wrap;">{{ full_response or trace.raw_response }}</pre>
+{% if not full_response and not (trace.raw_response_data or {}).get('intercepted_traffic_path') %}
 <p class="muted" style="font-size: 0.85em;">
-  Source: intercepted Workspace Gemini API stream (longest prose
-  fragment across all streamGenerate responses captured for this
-  trace). The rendered side-panel text below may differ — it's
-  whatever Playwright managed to read before the response finished
-  streaming.
-</p>
-<details style="margin-top: 0.5em;">
-  <summary class="muted">Rendered side-panel capture (often truncated; for comparison)</summary>
-  <pre style="white-space: pre-wrap;">{{ trace.raw_response }}</pre>
-</details>
-{% else %}
-<pre style="white-space: pre-wrap;">{{ trace.raw_response }}</pre>
-<p class="muted" style="font-size: 0.85em;">
-  Source: rendered side-panel text only. No intercepted traffic
-  captured for this trace (api_mode, interception disabled, or
-  pre-2026-05-23 run). May be truncated mid-stream.
+  Rendered side-panel text (api_mode / interception disabled — no intercepted
+  stream captured for this trace).
 </p>
 {% endif %}
 

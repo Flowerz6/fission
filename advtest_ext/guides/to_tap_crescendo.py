@@ -9,6 +9,8 @@ Guide field                      Run input
 ===============================  ==================================================
 ``objective`` (+ ``strategy``/   ``Behavior.description`` — the goal + steering the
 ``key_moves``)                    attacker sees in every node's system prompt
+``strategy`` + ``key_moves``      ``strategy_brief`` — seeds the branch strategist so
+                                  variant proposals stay on-goal (not mail-biased)
 ``success.rubric``               ``Behavior.success_criteria``
 ``success.signals``              a built :class:`Signal` stack (the deterministic oracle)
 ``target``                       the adapter the run harness selects (passed through)
@@ -104,6 +106,18 @@ def _description(guide: Guide) -> str:
     return "\n\n".join(parts)
 
 
+def _strategy_brief(guide: Guide) -> str | None:
+    """The guide's overall approach, for the branch strategist's system prompt:
+    the ``strategy`` line plus its ``key_moves``. ``None`` when the guide
+    supplies neither (the attack then uses its legacy strategist prompt)."""
+    parts: list[str] = []
+    if guide.strategy:
+        parts.append(guide.strategy)
+    if guide.key_moves:
+        parts.append("Key moves: " + "; ".join(guide.key_moves))
+    return "\n".join(parts) if parts else None
+
+
 def _success_criteria(guide: Guide) -> str:
     """The judge's rubric. Prefer the guide's own rubric; if it's signals-only,
     synthesize a criterion naming the deterministic tells so the LLM judge and
@@ -180,6 +194,13 @@ def map_guide(guide: Guide) -> GuidePlan:
     seed_chain = _seed_chain(guide.exemplar_turns)
     if seed_chain:
         attack_kwargs["seed_chain"] = seed_chain
+
+    # Seed the branch strategist with the guide's own approach so variant
+    # proposals stay on-goal (a system-prompt-leak guide must not inherit the
+    # default retrieval-IPI mail steering). None when the guide gives neither.
+    brief = _strategy_brief(guide)
+    if brief:
+        attack_kwargs["strategy_brief"] = brief
 
     return GuidePlan(
         behavior=behavior,
