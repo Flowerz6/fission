@@ -46,6 +46,7 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -56,13 +57,20 @@ from advtest_ext.dashboard.tree import (
 from advtest_ext.dashboard.tree import (
     collapse_conversations as _collapse_conversations,
 )
+from advtest_ext.dashboard.tree import (
+    tree_graph_payload as _tree_graph_payload,
+)
 from advtest_ext.storage import (
     asr_heatmap_formatted,
+    count_gold_labels,
+    count_hitl,
     get_finding,
+    get_hitl,
     get_recipe,
     get_run,
     get_seed,
     get_trace,
+    insert_gold_label,
     list_finding_behavior_ids,
     list_finding_run_ids,
     list_findings,
@@ -74,6 +82,9 @@ from advtest_ext.storage import (
     list_traces_for_run,
     make_engine,
     make_session_factory,
+    next_pending_hitl,
+    resolve_hitl,
+    run_partial_count,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -120,6 +131,454 @@ def _tree_state_hash(phases: list[dict[str, Any]], *, finished: bool) -> str:
     return hashlib.sha1("\n".join(parts).encode()).hexdigest()[:16]
 
 
+# Verdicts an expert may assign in review. ``error`` is oracle-only
+# (a crashed attempt) and never a human label, so it's excluded here.
+_REVIEW_VERDICTS = ("success", "partial", "refused")
+
+
+class ReviewSubmission(BaseModel):
+    """Body of a ``POST /hitl/{id}/review`` — one expert label."""
+
+    verdict: str
+    confidence: int = Field(default=3, ge=1, le=5)
+    reason: str = ""
+    reviewer_id: str = ""
+    review_seconds: int = Field(default=0, ge=0)
+
+
+def _hitl_blind_pct() -> int:
+    """Fraction of reviews shown *blind* (oracle verdict hidden) to guard
+    against anchoring bias — the reviewer judges the evidence, not the
+    machine's guess. Env ``ADVTEST_HITL_BLIND_PCT`` (default 20)."""
+    try:
+        return max(0, min(100, int(os.environ.get("ADVTEST_HITL_BLIND_PCT", "20"))))
+    except ValueError:
+        return 20
+
+
+def _is_blind_review(item_id: str) -> bool:
+    """Deterministic per queue item (so a page refresh can't reroll it and
+    a tamperer can't opt out): hash the id into a 0-99 bucket."""
+    import hashlib
+
+    pct = _hitl_blind_pct()
+    if pct <= 0:
+        return False
+    bucket = int(hashlib.sha1(item_id.encode()).hexdigest(), 16) % 100
+    return bucket < pct
+
+
+def _oracle_snapshot(session: Session, trace: Any) -> dict[str, Any]:
+    """Freeze the oracle's prediction for a trace at review time — the
+    verdict, top judge score, and which signals fired — so the resulting
+    GoldLabel scores this run with the predictor that actually labelled
+    it (the flywheel mutates the oracle between runs)."""
+    top_score = max((js.score for js in trace.judge_scores), default=0.0)
+    signals = list_signals_for_trace(session, trace.id)
+    layers: dict[str, Any] = {s.name: bool(s.fired) for s in signals}
+    layers["judge_score"] = round(top_score, 4)
+    return {
+        "verdict": trace.verdict or "refused",
+        "score": top_score,
+        "layers": layers,
+    }
+
+
+def _overview_run_diff(session: Session, latest_id: str, prev_id: str) -> dict[str, int]:
+    """NEW / FIXED / PERSISTING vulnerable (behaviour, technique) cells
+    between the two most recent runs — the "re-test on every release"
+    story. A cell is vulnerable if any trace in that run succeeded on it.
+    NEW = vulnerable now, not before; FIXED = was, no longer; PERSISTING =
+    both. Honest set arithmetic, no fabricated 'regressed' bucket."""
+
+    def cells(run_id: str) -> set[tuple[str, str]]:
+        out: set[tuple[str, str]] = set()
+        for t in list_traces_for_run(session, run_id, limit=100_000):
+            if t.verdict == "success":
+                out.add((t.behavior_id, t.technique_id or "-"))
+        return out
+
+    now, before = cells(latest_id), cells(prev_id)
+    return {
+        "new": len(now - before),
+        "fixed": len(before - now),
+        "persisting": len(now & before),
+    }
+
+
+def build_overview_context(session: Session) -> dict[str, Any]:
+    """Assemble the command-center landing page from real data: cross-run
+    aggregates, the latest run's calibrated ASR (PPI), the review-queue
+    state, a run-over-run diff, and the latest run's technique heatmap."""
+    from advtest_ext.core.ppi import ppi_asr_for_run
+    from advtest_ext.dashboard.overview import build_overview
+
+    stats = build_overview(session)
+    latest = stats.recent_runs[0] if stats.recent_runs else None
+    prev = stats.recent_runs[1] if len(stats.recent_runs) > 1 else None
+
+    ppi = ppi_asr_for_run(session, latest.id) if latest is not None else None
+    diff = (
+        _overview_run_diff(session, latest.id, prev.id)
+        if latest is not None and prev is not None
+        else None
+    )
+    heatmap = (
+        asr_heatmap_formatted(session, latest.id)
+        if latest is not None
+        else {"is_empty": True, "rows": [], "families": [], "techniques": []}
+    )
+
+    pending = list_hitl(session, status="pending", limit=500)
+    queue = {
+        "pending": len(pending),
+        "gold": count_gold_labels(session),
+        "uniform": sum(1 for i in pending if i.sample_reason == "uniform"),
+        "disagreement": sum(1 for i in pending if i.sample_reason == "disagreement"),
+        "top": pending[:3],
+    }
+    top_findings = list_findings(session, run_id=latest.id, limit=5) if latest is not None else []
+    n_partial = run_partial_count(session, latest.id) if latest is not None else 0
+
+    # Per-run ASR trend, most-recent last for the sparkline. build_overview
+    # already ordered it oldest→newest.
+    trend = stats.asr_trend[-12:]
+    # Pre-compute the SVG polyline geometry (avoids fragile template math).
+    tw, th = 640.0, 120.0
+    pts: list[str] = []
+    n = len(trend)
+    for i, row in enumerate(trend):
+        x = (i / (n - 1) * tw) if n > 1 else tw / 2
+        y = (1.0 - max(0.0, min(1.0, float(row["asr"])))) * th
+        pts.append(f"{x:.1f},{y:.1f}")
+    trend_svg = {
+        "w": tw,
+        "h": th,
+        "points": " ".join(pts),
+        "end": pts[-1] if pts else None,
+        "first_asr": trend[0]["asr"] if trend else 0.0,
+        "last_asr": trend[-1]["asr"] if trend else 0.0,
+    }
+    return {
+        "s": stats,
+        "latest": latest,
+        "prev": prev,
+        "ppi": ppi,
+        "diff": diff,
+        "heatmap": heatmap,
+        "queue": queue,
+        "top_findings": top_findings,
+        "trend": trend,
+        "trend_svg": trend_svg,
+        "n_partial": n_partial,
+    }
+
+
+def _surface_label(target_name: str) -> tuple[str, str]:
+    """Human-readable app label + region hint from a stored
+    ``Trace.target_name``. Pure formatting of the real class name —
+    no invented app/account metadata. Returns ``(label, region)``
+    where ``region`` is the raw class name shown in mono."""
+    import re
+
+    words = re.sub(r"(?<!^)(?=[A-Z0-9])", " ", target_name).split()
+    if words and words[-1] == "Target":
+        words = words[:-1]
+    label = " ".join(words) or target_name
+    return label, target_name
+
+
+def build_surfaces_context(session: Session) -> dict[str, Any]:
+    """Assemble the Surfaces inventory purely from real DB rows.
+
+    A *surface* is a distinct ``Trace.target_name`` — the Gemini
+    deployment actually driven. Per surface we count attempts (traces),
+    runs (distinct ``run_id``), and open findings (findings whose trace
+    ran against that surface), plus the severity mix. Exposure is a
+    derived-from-data flag: a surface with ≥1 finding is *exposed*.
+
+    The headline signature is the in-house gold-set agreement report
+    (``core.agreement``) — the oracle-trust number that qualifies every
+    coverage count below it. Nothing here is sampled or invented; a
+    surface with no findings shows an empty severity cell, not a zero.
+    """
+    from collections import defaultdict
+
+    from sqlalchemy import func
+
+    from advtest_ext.core.agreement import agreement_for_gold_set
+    from advtest_ext.storage import Finding, Trace
+
+    attempt_rows = (
+        session.query(
+            Trace.target_name,
+            func.count(Trace.id),
+            func.count(func.distinct(Trace.run_id)),
+        )
+        .group_by(Trace.target_name)
+        .all()
+    )
+    finding_counts = dict(
+        session.query(Trace.target_name, func.count(Finding.id))
+        .join(Finding, Finding.trace_id == Trace.id)
+        .group_by(Trace.target_name)
+        .all()
+    )
+    sev_by_surface: dict[str, dict[str, int]] = defaultdict(dict)
+    for tn, sev, cnt in (
+        session.query(Trace.target_name, Finding.severity, func.count(Finding.id))
+        .join(Finding, Finding.trace_id == Trace.id)
+        .group_by(Trace.target_name, Finding.severity)
+        .all()
+    ):
+        sev_by_surface[tn][sev] = cnt
+    behaviors_by_surface: dict[str, list[str]] = defaultdict(list)
+    for tn, beh in (
+        session.query(Trace.target_name, Trace.behavior_id).distinct().all()
+    ):
+        behaviors_by_surface[tn].append(beh)
+
+    surfaces: list[dict[str, Any]] = []
+    for target_name, attempts, n_runs in attempt_rows:
+        n_find = int(finding_counts.get(target_name, 0))
+        label, region = _surface_label(target_name)
+        if n_find > 0:
+            exposure, exposure_label = "exposed", "Exposed"
+        elif attempts > 0:
+            exposure, exposure_label = "mitigated", "Probed · no findings"
+        else:  # pragma: no cover - a surface with no traces can't appear here
+            exposure, exposure_label = "untested", "Not yet tested"
+        # Severity chips, ordered most-severe first, only for real counts.
+        order = {"crit": 0, "critical": 0, "high": 1, "med": 2, "medium": 2, "low": 3}
+        sev_chips = sorted(
+            sev_by_surface.get(target_name, {}).items(),
+            key=lambda kv: order.get(kv[0], 9),
+        )
+        surfaces.append(
+            {
+                "target_name": target_name,
+                "label": label,
+                "region": region,
+                "attempts": int(attempts),
+                "runs": int(n_runs),
+                "findings": n_find,
+                "sev_chips": sev_chips,
+                "behaviors": sorted(behaviors_by_surface.get(target_name, [])),
+                "exposure": exposure,
+                "exposure_label": exposure_label,
+            }
+        )
+    surfaces.sort(key=lambda s: (-s["findings"], -s["attempts"]))
+
+    agreement = agreement_for_gold_set(session)
+    benchmark = _load_judge_benchmark()
+    totals = {
+        "surfaces": len(surfaces),
+        "exposed": sum(1 for s in surfaces if s["exposure"] == "exposed"),
+        "findings": sum(s["findings"] for s in surfaces),
+        "attempts": sum(s["attempts"] for s in surfaces),
+        # Real distinct run count across all surfaces.
+        "runs": int(session.query(func.count(func.distinct(Trace.run_id))).scalar() or 0),
+        "gold": agreement.n,
+    }
+    return {
+        "surfaces": surfaces,
+        "agreement": agreement,
+        "benchmark": benchmark,
+        "totals": totals,
+    }
+
+
+def build_surface_panel_context(session: Session, target_name: str) -> dict[str, Any]:
+    """Real detail for one surface's slide-over: attempt/run/finding
+    counts, the behaviours exercised, the deterministic-signal layer map
+    actually recorded, and the surface's findings. Everything is read
+    back from the DB; a signal that never fired shows ``0 / N``."""
+    from collections import defaultdict
+
+    from sqlalchemy import func
+
+    from advtest_ext.storage import Finding, JudgeScore, SignalRecord, Trace
+
+    attempts = int(
+        session.query(func.count(Trace.id)).filter(Trace.target_name == target_name).scalar() or 0
+    )
+    if attempts == 0:
+        return {}
+    n_runs = int(
+        session.query(func.count(func.distinct(Trace.run_id)))
+        .filter(Trace.target_name == target_name)
+        .scalar()
+        or 0
+    )
+    # Run strategies driving this surface (real ``Run.strategy`` values).
+    from advtest_ext.storage import Run
+
+    strategies = sorted(
+        {
+            strat
+            for (strat,) in session.query(Run.strategy)
+            .join(Trace, Trace.run_id == Run.id)
+            .filter(Trace.target_name == target_name)
+            .distinct()
+            .all()
+        }
+    )
+    behaviors = sorted(
+        {
+            b
+            for (b,) in session.query(Trace.behavior_id)
+            .filter(Trace.target_name == target_name)
+            .distinct()
+            .all()
+        }
+    )
+    # Deterministic-signal layer map: fired / total per signal name.
+    sig_rows: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for name, fired, cnt in (
+        session.query(SignalRecord.name, SignalRecord.fired, func.count(SignalRecord.id))
+        .join(Trace, Trace.id == SignalRecord.trace_id)
+        .filter(Trace.target_name == target_name)
+        .group_by(SignalRecord.name, SignalRecord.fired)
+        .all()
+    ):
+        sig_rows[name][1] += int(cnt)
+        if fired:
+            sig_rows[name][0] += int(cnt)
+    signals = [
+        {"name": name, "fired": vals[0], "total": vals[1]} for name, vals in sorted(sig_rows.items())
+    ]
+    n_judged = int(
+        session.query(func.count(func.distinct(JudgeScore.trace_id)))
+        .join(Trace, Trace.id == JudgeScore.trace_id)
+        .filter(Trace.target_name == target_name)
+        .scalar()
+        or 0
+    )
+    n_success = int(
+        session.query(func.count(Trace.id))
+        .filter(Trace.target_name == target_name, Trace.verdict == "success")
+        .scalar()
+        or 0
+    )
+    findings = (
+        session.query(Finding)
+        .join(Trace, Trace.id == Finding.trace_id)
+        .filter(Trace.target_name == target_name)
+        .order_by(Finding.severity, Finding.promoted_at.desc())
+        .all()
+    )
+    label, region = _surface_label(target_name)
+    return {
+        "target_name": target_name,
+        "label": label,
+        "region": region,
+        "attempts": attempts,
+        "runs": n_runs,
+        "strategies": strategies,
+        "behaviors": behaviors,
+        "signals": signals,
+        "n_judged": n_judged,
+        "n_success": n_success,
+        "findings": findings,
+    }
+
+
+def _load_judge_benchmark(output_dir: Path | None = None) -> dict[str, Any] | None:
+    """Load the JailbreakBench held-out benchmark JSON, if present.
+
+    Tries ``<output_dir>/judge_benchmark.json`` then the repo's
+    ``out/judge_benchmark.json``. Returns ``None`` when absent so the
+    Judge-quality page omits the benchmark block gracefully rather than
+    fabricating one."""
+    import json
+
+    candidates: list[Path] = []
+    if output_dir is not None:
+        candidates.append(output_dir / "judge_benchmark.json")
+    candidates.append(Path("out/judge_benchmark.json"))
+    candidates.append(Path(__file__).resolve().parents[2] / "out" / "judge_benchmark.json")
+    for path in candidates:
+        try:
+            if path.is_file():
+                return json.loads(path.read_text())
+        except (OSError, ValueError):  # pragma: no cover - defensive
+            continue
+    return None
+
+
+def _benchmark_operating_points(benchmark: dict[str, Any]) -> list[dict[str, float]]:
+    """Real FP/FN sweep across success thresholds from the benchmark's
+    scored rows (``score`` vs ``truth``). Powers the operating-points
+    curve. Empty when the file carries no per-row scores."""
+    rows = benchmark.get("scored_rows") or []
+    scored = [(float(r["score"]), r["truth"]) for r in rows if "score" in r and "truth" in r]
+    if not scored:
+        return []
+    n_pos = sum(1 for _s, t in scored if t == "success")
+    n_neg = len(scored) - n_pos
+    points: list[dict[str, float]] = []
+    for thr in (0.05, 0.19, 0.5, 0.7, 0.9):
+        fp = sum(1 for s, t in scored if s >= thr and t != "success")
+        fn = sum(1 for s, t in scored if s < thr and t == "success")
+        points.append(
+            {
+                "threshold": thr,
+                "fp": (fp / n_neg) if n_neg else 0.0,
+                "fn": (fn / n_pos) if n_pos else 0.0,
+            }
+        )
+    return points
+
+
+def build_judge_context(session: Session, output_dir: Path | None = None) -> dict[str, Any]:
+    """Assemble the Judge-quality spec sheet.
+
+    Headline = the in-house gold-set agreement report
+    (``agreement_for_gold_set``), scored over the real ``GoldLabel``
+    rows. Second, clearly-labelled block = the JailbreakBench held-out
+    benchmark from ``out/judge_benchmark.json`` (measured kappa, ceiling
+    alpha, error rates, and published-judge baselines) — omitted when
+    the file is absent. The operating-points curve is a real threshold
+    sweep over the benchmark's scored rows."""
+    from advtest_ext.core.agreement import agreement_for_gold_set
+
+    agreement = agreement_for_gold_set(session)
+    benchmark = _load_judge_benchmark(output_dir)
+
+    field_rows: list[dict[str, Any]] = []
+    operating_points: list[dict[str, float]] = []
+    if benchmark is not None:
+        for name, b in (benchmark.get("baselines") or {}).items():
+            field_rows.append(
+                {
+                    "judge": name,
+                    "kappa": b.get("kappa"),
+                    "fp": b.get("fp"),
+                    "fn": b.get("fn"),
+                    "ours": False,
+                }
+            )
+        field_rows.append(
+            {
+                "judge": benchmark.get("judge", "Fission"),
+                "kappa": benchmark.get("kappa"),
+                "fp": (benchmark.get("false_positive") or {}).get("rate"),
+                "fn": (benchmark.get("false_negative") or {}).get("rate"),
+                "ours": True,
+            }
+        )
+        field_rows.sort(key=lambda r: (r["kappa"] is None, -(r["kappa"] or 0.0)))
+        operating_points = _benchmark_operating_points(benchmark)
+
+    return {
+        "agreement": agreement,
+        "benchmark": benchmark,
+        "field_rows": field_rows,
+        "operating_points": operating_points,
+    }
+
+
 def create_app(
     *,
     db_url: str | None = None,
@@ -163,6 +622,25 @@ def create_app(
             return await call_next(request)
 
     templates = Jinja2Templates(directory=_TEMPLATE_DIR)
+
+    # Cache-busting version for the tree component's static assets. tree.js/
+    # tree.css change without their URL changing, so browsers keep serving the
+    # stale copy. Appending ?v=<mtime> makes a changed file a new URL. Computed
+    # per render (a callable global) so editing a static file busts the cache
+    # immediately — no app restart needed.
+    def _static_version() -> str:
+        try:
+            return str(
+                max(
+                    int((_STATIC_DIR / _name).stat().st_mtime)
+                    for _name in ("tree.js", "tree.css")
+                    if (_STATIC_DIR / _name).exists()
+                )
+            )
+        except ValueError:
+            return "0"
+
+    templates.env.globals["static_v"] = _static_version
 
     if _STATIC_DIR.exists():
         app.mount(
@@ -210,6 +688,13 @@ def create_app(
         return JSONResponse({"status": "ready", "db": "ok"})
 
     @app.get("/", response_class=HTMLResponse)
+    async def overview_index(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        ctx = build_overview_context(session)
+        return templates.TemplateResponse(request, "overview.html", ctx)
+
     @app.get("/runs", response_class=HTMLResponse)
     async def runs_index(
         request: Request,
@@ -344,6 +829,14 @@ def create_app(
         # uses, so the embedded tree matches it — without this the include
         # gets no ``phases`` and renders nothing on the run page.
         phases = _build_phase_forests(_collapse_conversations(list(traces)))
+        # Measurement-spine headline: the calibrated ASR ± CI. Rectifies
+        # the oracle's ASR by the oracle↔expert disagreement on this run's
+        # uniform gold-label slice (PPI). Degrades to an oracle-only
+        # estimate when no labels exist yet.
+        from advtest_ext.core.ppi import ppi_asr_for_run
+
+        ppi = ppi_asr_for_run(session, run_id)
+        tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
         return {
             "run": run,
             "traces": traces,
@@ -353,7 +846,11 @@ def create_app(
             "technique_chart": technique_chart,
             "full_responses": full_responses,
             "phases": phases,
-            "tree_hash": _tree_state_hash(phases, finished=bool(run.finished_at)),
+            "ppi": ppi,
+            "tree_hash": tree_hash,
+            "tree_graph": _tree_graph_payload(
+                phases, finished=bool(run.finished_at), tree_hash=tree_hash
+            ),
         }
 
     @app.get("/runs/{run_id}/tree", response_class=HTMLResponse)
@@ -376,7 +873,14 @@ def create_app(
         return templates.TemplateResponse(
             request,
             "runs/tree.html",
-            {"run": run, "phases": phases, "tree_hash": tree_hash},
+            {
+                "run": run,
+                "phases": phases,
+                "tree_hash": tree_hash,
+                "tree_graph": _tree_graph_payload(
+                    phases, finished=bool(run.finished_at), tree_hash=tree_hash
+                ),
+            },
         )
 
     @app.get("/runs/{run_id}/_tree", response_class=HTMLResponse)
@@ -386,12 +890,15 @@ def create_app(
         v: str = "",
         session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
-        """HTMX polling endpoint for the live Mermaid attack-tree view.
-        Returns just the tree partial so the page swaps it in place as the
-        run progresses. ``v`` is the state hash the client last rendered;
-        when the tree is unchanged we return ``204 No Content`` so HTMX
-        skips the swap and the Mermaid trees don't re-render (and flicker)
-        every poll. See runs/_tree_live.html."""
+        """Server-rendered rebuild of the live attack-tree explorer.
+
+        The Cytoscape client updates the tree in place from
+        ``/_tree.json`` (see below), so this HTML partial is no longer
+        polled every 2 s. It survives as a structural fallback: the client
+        re-fetches it only when the run grows an entirely new
+        (behaviour, technique) cell — a rare event that changes the
+        navigator, not just the graph. ``v`` is the state hash the client
+        last rendered; an unchanged tree returns ``204 No Content``."""
         run = get_run(session, run_id)
         if run is None:
             raise HTTPException(404, f"run {run_id!r} not found")
@@ -403,8 +910,66 @@ def create_app(
         return templates.TemplateResponse(
             request,
             "runs/_tree_live.html",
-            {"run": run, "phases": phases, "tree_hash": tree_hash},
+            {
+                "run": run,
+                "phases": phases,
+                "tree_hash": tree_hash,
+                "tree_graph": _tree_graph_payload(
+                    phases, finished=bool(run.finished_at), tree_hash=tree_hash
+                ),
+            },
         )
+
+    @app.get("/runs/{run_id}/_panel", response_class=HTMLResponse)
+    async def runs_panel(
+        request: Request,
+        run_id: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        """Slide-over panel body for a run: a compact meta line + the
+        interactive attack tree. Loaded by ``openRunPanel()`` (base.html) into
+        the shared slide-over and mounted client-side via AttackTree.boot()."""
+        run = get_run(session, run_id)
+        if run is None:
+            raise HTTPException(404, f"run {run_id!r} not found")
+        traces = list_traces_for_run(session, run_id)
+        phases = _build_phase_forests(_collapse_conversations(list(traces)))
+        tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
+        return templates.TemplateResponse(
+            request,
+            "runs/_panel.html",
+            {
+                "run": run,
+                "phases": phases,
+                "tree_hash": tree_hash,
+                "tree_graph": _tree_graph_payload(
+                    phases, finished=bool(run.finished_at), tree_hash=tree_hash
+                ),
+            },
+        )
+
+    @app.get("/runs/{run_id}/_tree.json")
+    async def runs_tree_json(
+        run_id: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        """Cytoscape graph payload for the live attack tree. The client
+        polls this every ~2 s while the run is in flight and diffs it
+        against what it has already mounted, ``cy.add()``-ing only the new
+        nodes/edges and re-classing nodes whose verdict changed — a smooth
+        incremental update instead of the old full Mermaid repaint. Polling
+        stops once ``finished`` is true. Same builder as the initial embed
+        (``tree_graph_payload``) so the two never drift."""
+        run = get_run(session, run_id)
+        if run is None:
+            raise HTTPException(404, f"run {run_id!r} not found")
+        traces = list_traces_for_run(session, run_id)
+        phases = _build_phase_forests(_collapse_conversations(list(traces)))
+        tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
+        payload = _tree_graph_payload(
+            phases, finished=bool(run.finished_at), tree_hash=tree_hash
+        )
+        return JSONResponse(payload)
 
     @app.get("/runs/{run_id}/transcript", response_class=HTMLResponse)
     async def runs_transcript(
@@ -554,6 +1119,23 @@ def create_app(
         raw = trace.raw_response_data or {}
         intercepted_path = raw.get("intercepted_traffic_path")
         full_response = extract_full_response(intercepted_path) if intercepted_path else ""
+        # Full conversation for THIS node: a tap_crescendo node is many turns
+        # (each its own trace). Reconstruct the node's turns — with the complete
+        # reply per turn — so the page shows the whole side-panel conversation,
+        # not just the one turn the node was clicked at.
+        from advtest_ext.dashboard.transcript import build_transcript_groups
+
+        run_traces = list(list_traces_for_run(session, trace.run_id))
+        conv_full: dict[str, str] = {}
+        for rt in run_traces:
+            p = (rt.raw_response_data or {}).get("intercepted_traffic_path")
+            if p:
+                conv_full[rt.id] = extract_full_response(p)
+        node_turns: list[Any] = []
+        for group in build_transcript_groups(run_traces, conv_full):
+            if any(turn.trace_id == trace_id for turn in group.turns):
+                node_turns = group.turns
+                break
         # Phase 3 — load any SignalRecord rows attached to this trace
         # so the template can render the typed-signal panel alongside
         # the existing judge-scores table.
@@ -565,6 +1147,7 @@ def create_app(
                 "trace": trace,
                 "finding": finding,
                 "full_response": full_response,
+                "node_turns": node_turns,
                 "signals": signals,
             },
         )
@@ -755,6 +1338,63 @@ def create_app(
     async def adapters_index(request: Request) -> Response:
         return templates.TemplateResponse(request, "adapters.html", {"adapters": list_adapters()})
 
+    @app.get("/calibration", response_class=HTMLResponse)
+    async def calibration_index(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+        batch: str | None = None,
+    ) -> Response:
+        from advtest_ext.core.calibration_report import build_calibration_report_from_db
+        from advtest_ext.storage import (
+            count_calibration_examples,
+            list_calibration_batches,
+        )
+
+        report = build_calibration_report_from_db(session, batch=batch)
+        return templates.TemplateResponse(
+            request,
+            "calibration.html",
+            {
+                "report": report,
+                "batches": list_calibration_batches(session),
+                "batch": batch,
+                "n_examples": count_calibration_examples(session),
+            },
+        )
+
+    @app.get("/ledger", response_class=HTMLResponse)
+    async def seed_ledger_index(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        """Seed ledger — per-seed outcomes aggregated across runs, with a
+        triage recommendation for each. The downstream half of the
+        passive-human loop: humans fix seeds between runs, and this is the
+        view that tells them which seeds to fix and why."""
+        from advtest_ext.dashboard.seed_ledger import build_seed_ledger
+
+        return templates.TemplateResponse(
+            request, "seed_ledger.html", {"ledger": build_seed_ledger(session)}
+        )
+
+    @app.get("/drift", response_class=HTMLResponse)
+    async def drift_index(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        """Drift view — the attacker wandering off-mechanism mid-run, and
+        the product surface moving underneath one.
+
+        Both are read back from ``Trace.extra_metadata['drift']``, which
+        the attack and adapter layers have been writing all along; the
+        aggregation and the template existed with no route to reach them.
+        """
+        from advtest_ext.dashboard.drift import build_drift_summary
+
+        return templates.TemplateResponse(
+            request, "drift.html", {"d": build_drift_summary(session)}
+        )
+
     @app.get("/hitl", response_class=HTMLResponse)
     async def hitl_index(
         request: Request,
@@ -765,7 +1405,103 @@ def create_app(
         return templates.TemplateResponse(
             request,
             "hitl.html",
-            {"items": items, "status": status},
+            {
+                "items": items,
+                "status": status,
+                "n_pending": count_hitl(session, status="pending"),
+                "n_gold": count_gold_labels(session),
+            },
+        )
+
+    @app.get("/hitl/{item_id}", response_class=HTMLResponse)
+    async def hitl_review(
+        request: Request,
+        item_id: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        item = get_hitl(session, item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="queue item not found")
+        trace = get_trace(session, item.trace_id) if item.trace_id else None
+        oracle = _oracle_snapshot(session, trace) if trace is not None else None
+        signals = list_signals_for_trace(session, item.trace_id) if item.trace_id else []
+        nxt = next_pending_hitl(session, exclude_id=item_id)
+        return templates.TemplateResponse(
+            request,
+            "hitl_review.html",
+            {
+                "item": item,
+                "trace": trace,
+                "oracle": oracle,
+                "signals": signals,
+                "blind": _is_blind_review(item_id),
+                "verdicts": _REVIEW_VERDICTS,
+                "next_id": nxt.id if nxt else None,
+                "n_pending": count_hitl(session, status="pending"),
+                "n_gold": count_gold_labels(session),
+            },
+        )
+
+    @app.post("/hitl/{item_id}/review")
+    async def hitl_submit_review(
+        item_id: str,
+        body: ReviewSubmission,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        if body.verdict not in _REVIEW_VERDICTS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"verdict must be one of {list(_REVIEW_VERDICTS)}",
+            )
+        item = get_hitl(session, item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="queue item not found")
+        if item.status != "pending":
+            raise HTTPException(status_code=409, detail="item already reviewed")
+        trace = get_trace(session, item.trace_id) if item.trace_id else None
+        if trace is None:
+            raise HTTPException(status_code=400, detail="trace unavailable; cannot label")
+
+        oracle = _oracle_snapshot(session, trace)
+        blind = _is_blind_review(item_id)
+        insert_gold_label(
+            session,
+            trace_id=trace.id,
+            run_id=item.run_id,
+            behavior_id=trace.behavior_id,
+            oracle_verdict=oracle["verdict"],
+            oracle_score=oracle["score"],
+            oracle_layers_fired=oracle["layers"],
+            response_snapshot=trace.raw_response,
+            # The stratified slice that queued this trace (uniform is the
+            # load-bearing slice for PPI's unbiased estimate).
+            sample_reason=item.sample_reason or "uniform",
+            expert_verdict=body.verdict,
+            expert_confidence=body.confidence,
+            reviewer_id=body.reviewer_id,
+            review_seconds=body.review_seconds,
+            reason=body.reason,
+            blind=blind,
+        )
+        # confirmed = expert agreed with the oracle; rejected = overruled.
+        agreed = body.verdict == oracle["verdict"]
+        resolve_hitl(
+            session,
+            item_id=item_id,
+            status="confirmed" if agreed else "rejected",
+            resolution=f"expert={body.verdict} (oracle={oracle['verdict']})",
+        )
+        session.commit()
+
+        nxt = next_pending_hitl(session, exclude_id=item_id)
+        return JSONResponse(
+            {
+                "ok": True,
+                "agreed": agreed,
+                "next_id": nxt.id if nxt else None,
+                "n_pending": count_hitl(session, status="pending"),
+                "n_gold": count_gold_labels(session),
+            }
         )
 
     # ------------------------------------------------------------------
@@ -840,6 +1576,156 @@ def create_app(
             "recipes/show.html",
             {"recipe": recipe},
         )
+
+    @app.get("/playbooks", response_class=HTMLResponse)
+    async def playbooks_index(request: Request) -> Response:
+        """The attack playbooks — the file-based ``guides/`` corpus the LLM
+        attacker runs, grounded in real seeder sessions. (Distinct from Recipes,
+        which are DB seed-derived; a playbook is a normalized tap_crescendo
+        steering doc.)"""
+        from advtest_ext.guides.corpus import load_guides
+        from advtest_ext.guides.models import display_title
+
+        guides_dir = Path(__file__).resolve().parents[2] / "guides"
+        guides = load_guides(guides_dir) if guides_dir.exists() else []
+        items = [
+            {
+                "id": g.id,
+                "title": display_title(g),
+                "objective": g.objective,
+                "surface": f"{g.target.app}/{g.target.surface}",
+                "author": g.provenance.author or "—",
+                "n_signals": len(g.success.signals),
+                "n_steps": len(g.setup_steps),
+                "tags": g.tags,
+            }
+            for g in guides
+        ]
+        return templates.TemplateResponse(request, "playbooks/index.html", {"playbooks": items})
+
+    @app.get("/playbooks/{playbook_id}", response_class=HTMLResponse)
+    async def playbooks_show(request: Request, playbook_id: str) -> Response:
+        from advtest_ext.guides.corpus import load_guides
+        from advtest_ext.guides.models import display_title
+
+        guides_dir = Path(__file__).resolve().parents[2] / "guides"
+        guides = load_guides(guides_dir) if guides_dir.exists() else []
+        guide = next((x for x in guides if x.id == playbook_id), None)
+        if guide is None:
+            raise HTTPException(404, f"playbook {playbook_id!r} not found")
+
+        # Map the guide onto the report's Playbook vocabulary (Table 2 / the
+        # coverage map: attack class x technique x carrier surface x target
+        # surface x effect).
+        _app_display = {
+            "google_sheets": "Sheets", "google_docs": "Docs",
+            "gmail": "Gmail", "outlook": "Outlook",
+        }
+        roles: list[str] = []
+        for r in [guide.target.account_role, *[s.account_role for s in guide.setup_steps]]:
+            if r and r not in roles:
+                roles.append(r)
+        step_apps = [s.app for s in guide.setup_steps]
+        if "gmail" in step_apps:
+            carrier = "a Gmail message"
+        elif any(s.operation == "set_document_body" for s in guide.setup_steps):
+            carrier = "a Doc body"
+        else:
+            carrier = "the chat turn (direct)"
+        taxonomy = {
+            "attack_class": (guide.threat_class or "—").replace("_", " "),
+            "carrier_surface": carrier,
+            "target_surface": "Gemini in " + _app_display.get(guide.target.app, guide.target.app),
+            "technique": list(guide.tags),
+        }
+
+        # Assemble the canonical Playbook object (report Table 2) as an
+        # ordered list of (key, value, kind) rows the template renders as a
+        # YAML-style config document. ``kind`` drives styling: scalar / list /
+        # map / block. Everything here is real guide content mapped onto the
+        # report's field names — no fabricated values.
+        seed_chain = [
+            {"n": i + 1, "text": t} for i, t in enumerate(guide.exemplar_turns)
+        ]
+        steps = [
+            {
+                "n": i + 1,
+                "op": f"{st.region}:{st.operation}",
+                "account": st.account_role or "—",
+                "intent": st.intent,
+            }
+            for i, st in enumerate(guide.setup_steps)
+        ]
+        signals = [
+            {
+                "kind": s.get("kind", "—"),
+                "name": s.get("name", "—"),
+                "match": s.get("pattern") or s.get("token") or s.get("canary") or "",
+            }
+            for s in guide.success.signals
+        ]
+        config = {
+            "playbook_id": guide.id,
+            "version": 1,
+            "seed_ref": guide.provenance.source,
+            "intent": (guide.threat_class or "—").replace("_", " "),
+            "taxonomy": taxonomy,
+            "accounts": roles,
+            "steps": steps,
+            "seed_chain": seed_chain,
+            "signals": signals,
+            "mutation_surface_allowed": list(guide.mutation_surface),
+            "invariants": list(guide.invariants),
+            "last_replay_succeeded_at": None,
+            "rediscovered_count": 0,
+        }
+        return templates.TemplateResponse(
+            request,
+            "playbooks/show.html",
+            {
+                "g": guide,
+                "title": display_title(guide),
+                "accounts": roles,
+                "taxonomy": taxonomy,
+                "config": config,
+            },
+        )
+
+    @app.get("/surfaces", response_class=HTMLResponse)
+    async def surfaces_index(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        """Deployment-surface coverage: every distinct Gemini target under
+        test, with real attempt / run / finding counts and an oracle-trust
+        signature headlining the page. Rows open a slide-over with the
+        surface's real detail."""
+        ctx = build_surfaces_context(session)
+        return templates.TemplateResponse(request, "surfaces.html", ctx)
+
+    @app.get("/surfaces/{target_name}/_panel", response_class=HTMLResponse)
+    async def surfaces_panel(
+        request: Request,
+        target_name: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        """Real slide-over detail for one surface — loaded by HTMX when a
+        row is clicked. 404s for a surface name that has no traces."""
+        ctx = build_surface_panel_context(session, target_name)
+        if not ctx:
+            raise HTTPException(404, f"surface {target_name!r} has no traces")
+        return templates.TemplateResponse(request, "surfaces/_panel.html", ctx)
+
+    @app.get("/judge", response_class=HTMLResponse)
+    async def judge_quality(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        """The oracle's specification sheet: the in-house gold-set
+        agreement report headline, plus the JailbreakBench held-out
+        benchmark (when present) with published-judge baselines."""
+        ctx = build_judge_context(session, output_dir)
+        return templates.TemplateResponse(request, "judge_quality.html", ctx)
 
     @app.get("/references", response_class=HTMLResponse)
     async def references_index(request: Request) -> Response:

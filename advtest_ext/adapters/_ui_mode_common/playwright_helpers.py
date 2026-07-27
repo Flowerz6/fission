@@ -93,10 +93,19 @@ async def human_type(page: Any, input_locator: Any, text: str) -> None:
     Variable delay across rounds (different ``random.uniform``
     draw each call); fixed delay within one typing burst."""
     await input_locator.focus()
-    await page.keyboard.type(
-        text,
-        delay=random.uniform(*HUMAN_TYPING_DELAY_MS),
-    )
+    # Insert embedded newlines as Shift+Enter, never a raw "\n": keyboard.type
+    # sends "\n" as an Enter keypress, and the Gemini side-panel composer treats
+    # Enter as SUBMIT. Typing a multi-line prompt directly therefore fires one
+    # message PER LINE, each canceling the previous in-flight request (the
+    # "Canceled request" fragmentation). Type each line, soft-newline between
+    # them, and let the caller submit the whole message once (send button).
+    delay = random.uniform(*HUMAN_TYPING_DELAY_MS)
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if line:
+            await page.keyboard.type(line, delay=delay)
+        if i < len(lines) - 1:
+            await page.keyboard.press("Shift+Enter")
 
 
 async def wait_for_button_ready(locator: Any, timeout_ms: int) -> None:

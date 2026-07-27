@@ -1,79 +1,81 @@
-{# Live attack-tree visualisation, grouped by PHASE. A multi-phase run
-   (e.g. Gmail→Docs then Docs→Docs) renders one labelled tree section per
-   phase, in order; a single-phase run renders one unlabelled group, so
-   the markup is uniform across both. One Mermaid ``graph TD`` per
-   (behaviour, technique) cell within a phase — each persisted trace is a
-   node, each ``parent_id`` link an edge, node colour its verdict.
+{# Live attack-tree EXPLORER (Cytoscape.js). A cell navigator (left) drives
+   one Cytoscape canvas per (behaviour, technique) cell (right). Each node is
+   a conversation; edges are ``parent_id`` links; node colour/shape is the
+   verdict-derived status (success / partial / refused / pruned-dashed).
 
-   Self-polls every 2 s while the run is in flight; stops when complete.
+   The graph is rendered entirely client-side (see /static/tree.js). While the
+   run is in flight the client polls ``/runs/{id}/_tree.json`` and adds only
+   the new nodes/edges — no full repaint, so branches settle smoothly instead
+   of the old Mermaid flicker. The component is self-contained: it loads its
+   own vendored libraries and stylesheet and does NOT depend on base.html.
 
-   Node id format: ``p{phase}c{cell}_t{trace-id}`` (hyphens stripped) so
-   ids stay valid Mermaid identifiers AND unique across phases. #}
-<section id="run-tree-live"
-         {% if not run.finished_at %}
-         hx-get="/runs/{{ run.id }}/_tree?v={{ tree_hash }}"
-         hx-trigger="every 2s"
-         hx-swap="outerHTML"
-         {% endif %}>
-  {% set ns = namespace(any=false) %}
-  {% for phase in phases %}{% if phase.forest %}{% set ns.any = true %}{% endif %}{% endfor %}
+   Node id format ``p{phase}c{cell}_t{trace}`` (hyphens stripped) keeps ids
+   valid + unique across phases; built server-side in tree.tree_graph_payload. #}
+{# tree.css / tree.js are loaded globally in base.html (so this partial also
+   mounts inside the slide-over, where injected <script> tags wouldn't run). #}
+{% set tg = tree_graph %}
+{% set ns = namespace(any=false) %}
+{% for phase in tg.phases %}{% if phase.cells %}{% set ns.any = true %}{% endif %}{% endfor %}
+
+<section id="run-tree-live">
   {% if not ns.any %}
   <p class="muted">
     No traces yet — waiting for the first branch to land.
-    {% if not run.finished_at %}(this view refreshes every 2 seconds){% endif %}
+    {% if not run.finished_at %}(this view updates live as branches land){% endif %}
   </p>
   {% else %}
-  {% for phase in phases %}
-  {% set p_idx = loop.index %}
-  {% if phase.label %}
-  <div class="phase-head" style="margin: 1.5rem 0 0.5rem; padding: 0.5rem 0.85rem;
-       background: #eef2ff; border-left: 4px solid #4338ca; border-radius: 4px;">
-    <strong style="font-size: 1.05rem;">Attack tree for {{ phase.label }}</strong>
-    <span class="muted">&mdash; {{ phase.n_success }}/{{ phase.n_traces }} success</span>
-  </div>
-  {% endif %}
-  {% for cell in phase.forest %}
-  {% set cell_idx = "p" ~ p_idx ~ "c" ~ loop.index %}
-  {% set cell_trace_ids = cell.lines | map(attribute="trace.id") | list %}
-  <section class="tree-cell">
-    <h2>
-      <code>{{ cell.behavior_id }}</code>
-      &times;
-      <code>{{ cell.technique_id }}</code>
-      <span class="muted">
-        &mdash; {{ cell.n_success }}/{{ cell.n_traces }} success
-      </span>
-    </h2>
-    <div class="mermaid">
-graph TD
-    R{{ cell_idx }}(("root"))
-{%- for line in cell.lines %}
-{%- set t = line.trace %}
-{%- set tid = t.id | replace("-", "") %}
-{%- set nid = cell_idx ~ "_t" ~ tid %}
-{%- set parent_id = t.parent_id %}
-{%- if parent_id and parent_id in cell_trace_ids %}
-{%- set parent_nid = cell_idx ~ "_t" ~ (parent_id | replace("-", "")) %}
-    {{ parent_nid }} --> {{ nid }}
-{%- else %}
-    R{{ cell_idx }} --> {{ nid }}
-{%- endif %}
-{%- set score = t.judge_scores[0].score if t.judge_scores else None %}
-    {{ nid }}["#{{ loop.index }} · d={{ t.depth }}{% if score is not none %} · {{ '%.2f'|format(score) }}{% endif %}"]
-    click {{ nid }} "/traces/{{ t.id }}"
-{%- endfor %}
-    classDef success fill:#cfeacb,stroke:#1a531b,stroke-width:2px,color:#0f3a10
-    classDef refused fill:#f0c8c8,stroke:#6f1414,color:#3f0808
-    classDef partial fill:#f8e3a0,stroke:#6b4f0a,color:#3a2a04
-    classDef error fill:#dddddd,stroke:#444444,color:#222
-{%- for line in cell.lines %}
-{%- set t = line.trace %}
-{%- set tid = t.id | replace("-", "") %}
-    class {{ cell_idx }}_t{{ tid }} {{ t.verdict or "refused" }}
-{%- endfor %}
+  <div class="tree-explorer"
+       data-run-id="{{ run.id }}"
+       data-live="{{ 0 if run.finished_at else 1 }}"
+       data-tree-hash="{{ tg.hash }}">
+
+    {# ---- navigator ---- #}
+    <div class="cell-nav">
+      {% for phase in tg.phases %}
+      {% if phase.label %}<div class="cell-nav-group">{{ phase.label }} &middot; {{ phase.n_success }}/{{ phase.n_traces }}</div>{% endif %}
+      {% for cell in phase.cells %}
+      {% set pct = ((cell.n_success / cell.n_traces * 100) | round | int) if cell.n_traces else 0 %}
+      <button type="button" class="cell-item{{ ' active' if cell.cell_index == 0 }}"
+              data-cell="{{ cell.cell_index }}" data-cell-key="{{ cell.key }}">
+        <span class="ci-b">{{ cell.behavior_id }}</span>
+        <span class="ci-t">{{ cell.technique_id }}</span>
+        <span class="ci-n">{{ cell.n_success }}/{{ cell.n_traces }}</span>
+        <span class="ci-bar"><span style="width: {{ pct }}%; background: {{ '#d5595b' if pct >= 66 else ('#cf9a4c' if pct >= 33 else '#948f9f') }}"></span></span>
+      </button>
+      {% endfor %}
+      {% endfor %}
     </div>
-  </section>
-  {% endfor %}
-  {% endfor %}
+
+    {# ---- viewer ---- #}
+    <div class="tree-viewer">
+      {% for phase in tg.phases %}
+      {% for cell in phase.cells %}
+      <div class="tree-panel{{ ' active' if cell.cell_index == 0 }}"
+           data-cell="{{ cell.cell_index }}" data-cell-key="{{ cell.key }}">
+        <div class="tree-panel-head">
+          <code>{{ cell.behavior_id }}</code> &times; <code>{{ cell.technique_id }}</code>
+          <span class="muted">&mdash; <span class="th-count">{{ cell.n_success }}/{{ cell.n_traces }} success</span></span>
+        </div>
+        <div class="tree-toolbar">
+          <button type="button" class="tree-btn" data-tree-fit>Fit</button>
+          {% if not run.finished_at %}<span class="tree-live-flag" data-live="1">&#9679; live</span>{% endif %}
+        </div>
+        <div class="cy-mount"></div>
+        <div class="tree-legend">
+          <span class="lg"><span class="sw" style="background:#e8f3ee;border:1.5px solid #57a880"></span>success</span>
+          <span class="lg"><span class="sw" style="background:#f8f0dd;border:1.5px solid #cf9a4c"></span>partial</span>
+          <span class="lg"><span class="sw" style="background:#f4f4f8;border:1.5px solid #948f9f"></span>refused</span>
+          <span class="lg"><span class="sw" style="background:#faebec;border:1.5px dashed #d5595b"></span>pruned</span>
+        </div>
+        <div class="tree-detail">
+          <div class="td-h"><span class="td-t">Select a node</span></div>
+          <p class="td-hint">Each node is one conversation. Click a node to read its transcript.</p>
+        </div>
+        <script type="application/json" class="cell-data">{"nodes": {{ cell.nodes | tojson }}, "edges": {{ cell.edges | tojson }}}</script>
+      </div>
+      {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
   {% endif %}
 </section>

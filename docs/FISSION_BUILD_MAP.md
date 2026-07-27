@@ -141,9 +141,9 @@ realistic label budget.
 | **Target** (live Gemini UI) | Docs/Sheets/Gmail browser automation works (§7 findings) | 🟩 | — |
 | **L0 pattern match** | signals: token/canary/regex/http-shape | 🟩 | — |
 | **L1 attack-success classifier** | VERIFIED: orchestrator uses a SINGLE judge; harmbench/llama_guard are registry options only; nothing trained; no tiering | 🟥 | wire as a distinct classifier-mode tier + make it SFT-trainable |
-| **L2 LLM judge** | `ipi_verdict`, `strong_reject`, family-disjoint — but single judge in default path; `ensemble.py` exists yet DORMANT | 🟩 | make it DPO-trainable + log full rubric for audit |
-| **L3 async human** | VERIFIED: `HitlItem` + `enqueue_hitl` + `/hitl` route + ensemble disagreement→enqueue ALL exist, but fire only under the (unused) ensemble path; no correction→gold-set/retrain loop | 🟨 | activate enqueue in default path + correction→gold-set flow |
-| **Measurement spine (PPI)** | none (§7: subsample not collected) | 🟥 | **critical path** — metric + gold set + trend dashboard |
+| **L2 LLM judge** | `ipi_verdict` + NOW `decomposed_ipi` (attended/complied/harmful_effect sub-verdicts combined by a transparent rule — auditable, harder to game); `strong_reject`; family-disjoint. Calibratable against public benchmarks via the Calibration tab (F1/ECE per oracle). | 🟩 | DPO-trainable next; ensemble path still dormant |
+| **L3 async human** | ACTIVATED: stratified sampler enqueues (uniform + disagreement) to `/hitl` in the default path; ≤30s review UI writes immutable `GoldLabel`s; blind-review anchoring guard. | 🟩 | correction→retrain loop (flywheel) next |
+| **Measurement spine (PPI)** | BUILT: `GoldLabel` → uncertainty scoring → stratified sampler → review UI → `core/ppi.py` ASR ± 95% CI on the run + overview command-center; calibration ingest + report (F1/ECE). | 🟩 | run-over-run trend as a dedicated live route |
 | **Flywheel (train/promote)** | none | 🟥 | SFT/DPO loops + promotion gate (Table 2) |
 | **Catalogue** | runs/traces/findings in DB + dashboard | 🟨 | searchable Playbook catalogue + staleness stamping |
 | **Browser farm / scale** | one Chrome per run, headed | 🟥 | headless container pool + per-session isolation |

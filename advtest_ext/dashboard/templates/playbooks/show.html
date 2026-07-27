@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · playbook{% endblock %}
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow">Playbook</p>
+  <h1>{{ title }}</h1>
+  <p>One canonical, versioned, replayable object — compiled from a Seed. Both seed kinds compile to this same shape; everything downstream is identical for both.</p>
+</div>
+<p class="muted"><a href="/playbooks">&larr; all playbooks</a></p>
+
+{# ---------- The Playbook as a config object (report Table 2) ---------- #}
+<style>
+  .pb-config {
+    font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
+    font-size: 0.82rem;
+    line-height: 1.7;
+    background: var(--surface-2, #fbfaf7);
+    border: 1px solid var(--border, #e4ded2);
+    border-radius: 8px;
+    padding: 1.1rem 1.3rem;
+    overflow-x: auto;
+    color: var(--ink, #2b2620);
+  }
+  .pb-config .cfg-file {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.72rem; color: var(--muted, #8a8172);
+    padding-bottom: 0.7rem; margin-bottom: 0.7rem;
+    border-bottom: 1px dashed var(--border, #e4ded2);
+  }
+  .pb-config .cfg-file .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #b5651d); opacity: 0.7; }
+  .pb-config .k { color: var(--accent-ink, #7a4410); }
+  .pb-config .c { color: var(--muted, #a49a88); }
+  .pb-config .s { color: var(--ink, #2b2620); }
+  .pb-config .n { color: var(--muted, #a49a88); }
+  .pb-config .row { display: flex; white-space: pre; }
+  .pb-config .row .key { display: inline-block; min-width: 15.5rem; }
+  .pb-config .li { padding-left: 2ch; white-space: pre-wrap; }
+  .pb-config .li .n { display: inline-block; min-width: 3ch; }
+  .pb-config .blank { height: 0.7rem; }
+  .pb-config .block { padding-left: 4ch; white-space: pre-wrap; color: var(--ink, #2b2620); }
+</style>
+
+<div class="pb-config">
+  <div class="cfg-file"><span class="dot"></span>{{ config.playbook_id }}.playbook · normalised JSON</div>
+
+  <div class="row"><span class="key"><span class="k">playbook_id:</span></span><span class="s">{{ config.playbook_id }}</span></div>
+  <div class="row"><span class="key"><span class="k">version:</span></span><span class="s">{{ config.version }}</span><span class="c">   # immutable identity; re-extraction increments</span></div>
+  <div class="row"><span class="key"><span class="k">seed_ref:</span></span><span class="s">{{ config.seed_ref }}</span><span class="c">   # exactly one Seed — provenance never mixed</span></div>
+  {% if g.provenance.author %}<div class="block"><span class="c"># author: {{ g.provenance.author }}{% if g.provenance.worked_on %} · {{ g.provenance.worked_on }}{% endif %}</span></div>{% endif %}
+  <div class="row"><span class="key"><span class="k">intent:</span></span><span class="s">{{ config.intent }}</span><span class="c">   # effect &amp; mechanism (gate G2 checks against this)</span></div>
+  <div class="block"><span class="c"># {{ g.objective }}</span></div>
+
+  <div class="blank"></div>
+  <div class="row"><span class="key"><span class="k">taxonomy:</span></span><span class="c"># position on the coverage map</span></div>
+  <div class="li"><span class="k">attack_class:</span>    {{ config.taxonomy.attack_class }}</div>
+  <div class="li"><span class="k">carrier_surface:</span> {{ config.taxonomy.carrier_surface }}</div>
+  <div class="li"><span class="k">target_surface:</span>  {{ config.taxonomy.target_surface }}</div>
+  {% if config.taxonomy.technique %}<div class="li"><span class="k">technique:</span>       [{{ config.taxonomy.technique | join(", ") }}]</div>{% endif %}
+
+  <div class="blank"></div>
+  <div class="row"><span class="key"><span class="k">accounts:</span></span><span class="c"># roles &amp; tenancy in the chain</span></div>
+  {% if config.accounts %}{% for a in config.accounts %}<div class="li"><span class="n">-</span> {{ a }}</div>{% endfor %}
+  {% else %}<div class="li c">[] # single-account, no cross-tenant setup</div>{% endif %}
+  {% if g.target.workspace %}<div class="li c"># workspace: {{ g.target.workspace }}</div>{% endif %}
+
+  <div class="blank"></div>
+  <div class="row"><span class="key"><span class="k">steps:</span></span><span class="c"># ordered actions, exact parameters, per-step assertions</span></div>
+  {% if config.steps %}{% for st in config.steps %}<div class="li"><span class="n">- {{ '%02d' % st.n }}</span>  <span class="s">{{ st.op }}</span>  <span class="c">→ {{ st.account }}  # {{ st.intent }}</span></div>{% endfor %}
+  {% else %}<div class="li c">[] # direct chat — no out-of-band environment setup</div>{% endif %}
+
+  {% if config.seed_chain %}
+  <div class="blank"></div>
+  <div class="row"><span class="key"><span class="k">seed_chain:</span></span><span class="c"># expert-authored turns, replayed as the opening moves</span></div>
+  {% for t in config.seed_chain %}<div class="li"><span class="n">- {{ '%02d' % t.n }}</span>  {{ t.text }}</div>{% endfor %}
+  {% endif %}
+
+  <div class="blank"></div>
+  <div class="row"><span class="key"><span class="k">signals:</span></span><span class="c"># canary tokens / handshakes — what L0 matches on (deterministic)</span></div>
+  {% if config.signals %}{% for s in config.signals %}<div class="li"><span class="n">-</span> <span class="s">{{ s.kind }}</span>  <span class="k">{{ s.name }}</span>  <span class="c">{{ s.match }}</span></div>{% endfor %}
+  {% else %}<div class="li c">[] # no L0 signal declared — L2 rubric is the only verdict</div>{% endif %}
+  {% if g.success.rubric %}
+  <div class="li"><span class="k">rubric:</span> <span class="c">|  # L2 promotion criterion</span></div>
+  <div class="block">{{ g.success.rubric }}</div>
+  {% endif %}
+
+  <div class="blank"></div>
+  <div class="row"><span class="key"><span class="k">mutation_surface.allowed:</span></span><span class="c"># facets the Explorer may vary (gate G1)</span></div>
+  {% if config.mutation_surface_allowed %}{% for m in config.mutation_surface_allowed %}<div class="li"><span class="n">-</span> {{ m }}</div>{% endfor %}
+  {% else %}<div class="li c">[] # nothing opted in — no facet is mutable</div>{% endif %}
+
+  <div class="blank"></div>
+  <div class="row"><span class="key"><span class="k">invariants:</span></span><span class="c"># what must hold for a variant to still BE this attack (gate G1)</span></div>
+  {% if config.invariants %}{% for inv in config.invariants %}<div class="li"><span class="n">-</span> {{ inv }}</div>{% endfor %}
+  {% else %}<div class="li c">[] # no invariant declared</div>{% endif %}
+
+  <div class="blank"></div>
+  <div class="row"><span class="key"><span class="k">last_replay_succeeded_at:</span></span><span class="s">null</span><span class="c">   # staleness stamp — no successful replay recorded yet</span></div>
+  <div class="row"><span class="key"><span class="k">rediscovered_count:</span></span><span class="s">{{ config.rediscovered_count }}</span><span class="c">   # Trace-hash collisions folded in, not duplicated</span></div>
+</div>
+{% endblock %}

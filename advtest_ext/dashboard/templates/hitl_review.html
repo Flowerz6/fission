@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Review trace · Fission{% endblock %}
+{% block content %}
+<style>
+  .rv-top { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+  .rv-top .counts { color:var(--muted); font-size:0.85rem; font-variant-numeric:tabular-nums; }
+  .rv-grid { display:grid; grid-template-columns: 1fr 340px; gap:1.5rem; align-items:start; margin-top:1rem; }
+  @media (max-width: 880px) { .rv-grid { grid-template-columns: 1fr; } }
+
+  .rv-label { font-size:0.75rem; text-transform:none; letter-spacing:normal; font-weight:600; color:var(--muted); margin:0 0 0.35rem; }
+  .rv-response {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:1rem 1.15rem; max-height:340px; overflow:auto; white-space:pre-wrap;
+    font-size:0.9rem; line-height:1.6; color:var(--fg);
+  }
+  .rv-signals { list-style:none; padding:0; margin:0.5rem 0 0; display:flex; flex-wrap:wrap; gap:0.4rem; }
+  .rv-signals .pill.fired { background:var(--success-bg); color:var(--success); }
+  .rv-signals .pill.quiet { background:var(--refused-bg); color:var(--muted); }
+
+  .rv-panel { position:sticky; top:5rem; }
+  .rv-oracle {
+    border:1px solid var(--border); border-radius:var(--radius); padding:0.9rem 1rem;
+    background:var(--surface); margin-bottom:1rem;
+  }
+  .rv-oracle.blind { border-style:dashed; border-color:var(--border-strong); background:repeating-linear-gradient(45deg, var(--surface), var(--surface) 9px, var(--surface-2) 9px, var(--surface-2) 18px); }
+  .rv-oracle .rv-reason { font-size:0.82rem; color:var(--fg-soft); margin-top:0.4rem; }
+
+  .rv-verdicts { display:grid; gap:0.5rem; margin:0.75rem 0; }
+  .rv-vbtn {
+    display:flex; align-items:center; justify-content:space-between; gap:0.5rem;
+    padding:0.7rem 0.95rem; border-radius:var(--radius); border:1px solid var(--border-strong);
+    background:var(--surface); color:var(--fg); font-size:0.95rem; font-weight:600;
+    cursor:pointer; transition:all 0.12s; text-align:left; width:100%;
+  }
+  .rv-vbtn:hover { border-color:var(--accent); box-shadow:0 0 0 3px rgba(15,95,92,0.12); }
+  .rv-vbtn .key { font-size:0.72rem; font-weight:600; color:var(--muted); border:1px solid var(--border); border-radius:var(--radius-sm); padding:0.05rem 0.4rem; }
+  .rv-vbtn.success:hover { border-color:var(--success); }
+  .rv-vbtn.partial:hover { border-color:var(--partial); }
+  .rv-vbtn.refused:hover { border-color:var(--refused); }
+
+  .rv-conf { display:flex; gap:0.3rem; }
+  .rv-conf button {
+    flex:1; padding:0.35rem 0; border:1px solid var(--border-strong); border-radius:var(--radius-sm);
+    background:var(--surface); cursor:pointer; font-weight:600; color:var(--fg-soft); font-family:inherit;
+  }
+  .rv-conf button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .rv-field { margin:0.75rem 0; }
+  .rv-field textarea, .rv-field input {
+    width:100%; padding:0.5rem 0.65rem; border:1px solid var(--border-strong); border-radius:var(--radius-sm);
+    font-family:var(--font-mono); font-size:0.85rem; color:var(--fg); background:var(--surface); resize:vertical;
+  }
+  .rv-field textarea::placeholder, .rv-field input::placeholder { color:var(--muted); }
+  .rv-field textarea:focus, .rv-field input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .rv-hint { font-size:0.78rem; color:var(--muted); margin-top:0.5rem; }
+  .rv-flash { padding:0.6rem 0.9rem; border-radius:var(--radius); font-size:0.88rem; font-weight:600; display:none; margin-bottom:1rem; }
+  .rv-flash.ok { background:var(--success-bg); color:var(--success); display:block; }
+  .rv-flash.err { background:var(--error-bg); color:var(--error); display:block; }
+</style>
+
+<div class="rv-top">
+  <h1 style="margin-bottom:0">Review trace</h1>
+  <span class="counts">{{ n_pending }} pending · {{ n_gold }} gold labels</span>
+</div>
+<p class="muted" style="margin-top:0.35rem">
+  Behavior <code>{{ trace.behavior_id if trace else '—' }}</code> ·
+  attack <code>{{ trace.attack_name if trace else '—' }}</code> ·
+  run <a href="/runs/{{ item.run_id }}">{{ item.run_id }}</a>
+</p>
+
+<div id="rv-flash" class="rv-flash"></div>
+
+<div class="rv-grid">
+  <!-- Evidence -->
+  <div>
+    {% if trace %}
+    <p class="rv-label">Assistant response (the scored text)</p>
+    <div class="rv-response">{{ trace.raw_response or '(empty response)' }}</div>
+
+    <p class="rv-label" style="margin-top:1.25rem">Deterministic signals (L0)</p>
+    {% if signals %}
+    <ul class="rv-signals">
+      {% for s in signals %}
+      <span class="pill {{ 'fired' if s.fired else 'quiet' }}">{{ s.name }}: {{ 'fired' if s.fired else 'quiet' }}</span>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted" style="margin:0.25rem 0 0">No signal stack ran for this trace.</p>{% endif %}
+
+    <details style="margin-top:1.25rem">
+      <summary class="rv-label" style="cursor:pointer">Injected payload</summary>
+      <pre style="margin-top:0.5rem"><code>{{ trace.payload_text }}</code></pre>
+    </details>
+    {% else %}
+    <div class="panel"><p style="margin:0">The source trace is unavailable (deleted); this item can't be labelled.</p></div>
+    {% endif %}
+  </div>
+
+  <!-- Decision -->
+  <div class="rv-panel">
+    <div class="rv-oracle {{ 'blind' if blind else '' }}">
+      {% if blind %}
+      <p class="rv-label" style="margin:0">Blind review</p>
+      <div class="rv-reason">The oracle's verdict is hidden to avoid anchoring. Judge from the evidence alone.</div>
+      {% elif oracle %}
+      <p class="rv-label" style="margin:0">Oracle says</p>
+      <div style="margin-top:0.35rem">
+        <span class="pill {{ oracle.verdict }}">{{ oracle.verdict }}</span>
+        <span class="muted" style="font-size:0.82rem">score {{ '%.2f'|format(oracle.score) }}</span>
+      </div>
+      <div class="rv-reason">{{ item.reason }} · uncertainty {{ '%.2f'|format(item.uncertainty) }}</div>
+      {% endif %}
+    </div>
+
+    {% if trace %}
+    <p class="rv-label">Your verdict</p>
+    <div class="rv-verdicts">
+      {% for v in verdicts %}
+      <button type="button" class="rv-vbtn {{ v }}" data-verdict="{{ v }}">
+        <span>{{ v|capitalize }}</span>
+        <span class="key">{{ {'success':'S','partial':'P','refused':'R'}[v] }}</span>
+      </button>
+      {% endfor %}
+    </div>
+
+    <p class="rv-label">Confidence <span id="rv-conf-val" style="color:var(--fg-soft)">3</span>/5</p>
+    <div class="rv-conf" id="rv-conf">
+      {% for c in range(1,6) %}
+      <button type="button" data-conf="{{ c }}" class="{{ 'on' if c == 3 else '' }}">{{ c }}</button>
+      {% endfor %}
+    </div>
+
+    <div class="rv-field">
+      <input id="rv-reviewer" type="text" placeholder="reviewer id (optional)">
+    </div>
+    <div class="rv-field">
+      <textarea id="rv-reason" rows="2" placeholder="why? (optional)"></textarea>
+    </div>
+    <p class="rv-hint">Keys: <b>S</b>/<b>P</b>/<b>R</b> submit · <b>1–5</b> confidence. Auto-advances to the next trace.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(function () {
+  const itemId = {{ item.id|tojson }};
+  const nextId = {{ next_id|tojson }};
+  const started = Date.now();
+  let confidence = 3;
+
+  const flash = document.getElementById("rv-flash");
+  const reviewerEl = document.getElementById("rv-reviewer");
+  // Remember the reviewer id across the session so a run of reviews
+  // doesn't retype it every trace.
+  try { if (reviewerEl && localStorage.getItem("advtest_reviewer")) reviewerEl.value = localStorage.getItem("advtest_reviewer"); } catch (e) {}
+
+  document.querySelectorAll("#rv-conf button").forEach(function (b) {
+    b.addEventListener("click", function () { setConf(parseInt(b.dataset.conf, 10)); });
+  });
+  function setConf(c) {
+    confidence = c;
+    document.getElementById("rv-conf-val").textContent = c;
+    document.querySelectorAll("#rv-conf button").forEach(function (b) {
+      b.classList.toggle("on", parseInt(b.dataset.conf, 10) === c);
+    });
+  }
+
+  document.querySelectorAll(".rv-vbtn").forEach(function (btn) {
+    btn.addEventListener("click", function () { submit(btn.dataset.verdict); });
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.target && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT")) return;
+    const k = e.key.toLowerCase();
+    if (k === "s") submit("success");
+    else if (k === "p") submit("partial");
+    else if (k === "r") submit("refused");
+    else if (k >= "1" && k <= "5") setConf(parseInt(k, 10));
+  });
+
+  let sending = false;
+  function submit(verdict) {
+    if (sending) return;
+    sending = true;
+    const reviewer = reviewerEl ? reviewerEl.value.trim() : "";
+    try { if (reviewer) localStorage.setItem("advtest_reviewer", reviewer); } catch (e) {}
+    fetch("/hitl/" + itemId + "/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        verdict: verdict,
+        confidence: confidence,
+        reason: (document.getElementById("rv-reason") || {}).value || "",
+        reviewer_id: reviewer,
+        review_seconds: Math.round((Date.now() - started) / 1000),
+      }),
+    }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (data) {
+      flash.className = "rv-flash ok";
+      flash.textContent = (data.agreed ? "Confirmed" : "Overruled") + " · saved gold label. " +
+        (data.next_id ? "Loading next…" : "Queue empty.");
+      setTimeout(function () {
+        window.location = data.next_id ? "/hitl/" + data.next_id : "/hitl";
+      }, 450);
+    }).catch(function (err) {
+      sending = false;
+      flash.className = "rv-flash err";
+      flash.textContent = "Save failed: " + err.message;
+    });
+  }
+})();
+</script>
+{% endblock %}

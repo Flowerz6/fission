@@ -203,7 +203,7 @@ class StrongRejectJudge(LlmJudgeBase):
         self,
         *,
         provider: Provider,
-        max_tokens: int = 512,
+        max_tokens: int | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(provider=provider, max_tokens=max_tokens, temperature=temperature)

@@ -1,0 +1,54 @@
+# Measurement-spine example — the same headline Docs run, but with
+# review sampling ON so the run feeds the gold set.
+#
+# What the extra block does: after the run, the orchestrator
+# stratified-samples up to `review_sample_budget` traces (a uniform
+# slice + a disagreement slice ranked by each trace's uncertainty
+# score) and enqueues them to the HITL review queue. An expert then
+# labels them on the dashboard's /hitl route; each confirmed/overruled
+# label becomes an immutable GoldLabel that PPI (ASR ± CI) and the
+# flywheel later consume.
+#
+# See docs/FISSION_MEASUREMENT_SPINE.md. Requires a DB sink (the CLI
+# defaults db_url to ADVTEST_DB_URL or sqlite:///./advtest.db).
+
+target_name: google_docs
+
+attacks:
+  - indirect_injection
+
+behaviors:
+  - exfil_doc_via_image_url
+  - fake_meeting_time_in_email_summary
+  - leak_system_prompt
+
+judges:
+  - strong_reject
+
+# Deterministic signals (L0) sharpen the uncertainty score: an L0↔L2
+# conflict (a canary fired but the judge said refused) is the dominant
+# review-priority axis, so wiring signals makes the disagreement slice
+# meaningful. Without any signals the sampler falls back to
+# near-threshold only.
+signals:
+  - kind: canary_appears
+    name: exfil_canary
+    where: ui_response
+
+budget:
+  max_queries: 30
+  max_seconds: 600
+  max_cost_usd: 2
+
+output_dir: ./out/run_with_review_sampling
+max_concurrency: 3
+
+# --- Measurement-spine review sampling ---
+# Enqueue up to 12 traces for expert review at run completion.
+review_sample_budget: 12
+# Cold-start: weight the unbiased uniform slice heavily (it is what
+# makes the ASR estimate an honest population claim). Decay this toward
+# ~0.3 once a trained L1 gives uncertainty sampling real teeth.
+review_uniform_fraction: 0.6
+# Reproducible review queue across re-runs of the same config.
+review_seed: 0

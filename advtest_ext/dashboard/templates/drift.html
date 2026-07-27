@@ -3,11 +3,11 @@
 {% block content %}
 
 <div class="page-head">
+  <p class="eyebrow">Oracle</p>
   <h1>Drift detection</h1>
-  <p class="sub">Workspace AI is a moving target. Fission tracks two kinds of
-     drift: the <strong>attacker</strong> wandering off the attack mechanism
-     mid-conversation, and the <strong>product surface</strong> shifting
-     under a run. A static, API-only harness handles neither.</p>
+  <p class="sub">Two kinds of drift: the <strong>attacker</strong> drifting
+     off-mechanism mid-conversation, and the <strong>product surface</strong>
+     shifting under a run.</p>
 </div>
 
 {% if d.total == 0 %}
@@ -40,11 +40,8 @@
 <div class="grid-2">
   <div class="card">
     <h2>Attacker-goal drift</h2>
-    <p class="card-hint">The attacker LLM is told to escalate freely; left
-      unchecked it softens its own objective or drops the injection mechanism.
-      A per-turn intent check (separate from the success judge) flags
-      off-mechanism turns and prunes a branch after repeated drift — TAP's
-      off-topic prune, lifted to the conversation level.</p>
+    <p class="card-hint">A per-turn intent check flags off-mechanism turns and
+      prunes a branch after repeated drift.</p>
     <div class="sev-row">
       <span class="sev-name">Off-mech</span>
       <span class="track"><span class="fill med"
@@ -61,10 +58,9 @@
 
   <div class="card">
     <h2>Platform / UI drift</h2>
-    <p class="card-hint">The deployed product moves: the side panel doesn't
-      mount, a "Resolve suggestions" modal blocks the composer, a streamed
-      reply renders late. The Replayer's observe–verify–re-act loop absorbs
-      these in-Run so a UI change slows a run rather than breaking it.</p>
+    <p class="card-hint">UI shifts — an unmounted side panel, a blocking modal,
+      a late-rendering reply — recovered in-run by the replayer's
+      observe–verify–re-act loop.</p>
     {% for kind, label in [('recovered','Re-orient / retry'), ('dialog_cleared','Dialog cleared'), ('capture_retry','Capture retry')] %}
     <div class="sev-row">
       <span class="sev-name" style="width: 110px">{{ label }}</span>
@@ -86,9 +82,9 @@
       <tr>
         <td>
           {% if e.scope == 'attacker_goal' %}
-          <span class="pill" style="background:#ede9fe;color:#6d28d9">attacker-goal</span>
+          <span class="pill teal">attacker-goal</span>
           {% else %}
-          <span class="pill" style="background:#dbeafe;color:#1d4ed8">platform/UI</span>
+          <span class="pill grey">platform/UI</span>
           {% endif %}
         </td>
         <td>

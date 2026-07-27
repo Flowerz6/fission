@@ -34,10 +34,20 @@ _DEFAULT_API_KEY_ENV = "ANTHROPIC_API_KEY"
 # and exact — silently dropping temperature for a model that DOES
 # accept it would mask attacker_temperature=1.0 / judge_temperature=0.0
 # tuning intent.
+#
+# Sonnet 5 is subtler than the Opus entries: it rejects a NON-DEFAULT
+# temperature and accepts the default. Our judge roles pin 0.0 (the
+# whole point — deterministic-by-rubric scoring), which is non-default,
+# so it lands on the reject path and belongs here. Steer judges by
+# rubric wording rather than sampling on these models.
 _TEMPERATURE_REJECTING_MODELS: frozenset[str] = frozenset(
     {
         "claude-opus-4-7",
         "claude-opus-4-7-1m",
+        "claude-opus-4-8",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-fable-5",
     }
 )
 
@@ -69,7 +79,6 @@ class AnthropicProvider(Provider):
         from anthropic import AsyncAnthropic
 
         api_key = self.resolve_api_key(default_env_name=_DEFAULT_API_KEY_ENV)
-        client = AsyncAnthropic(api_key=api_key)
 
         system_text = "\n\n".join(m.content for m in messages if m.role == "system") or None
         chat_messages = self._messages_to_api(messages)
@@ -85,7 +94,14 @@ class AnthropicProvider(Provider):
         if system_text is not None:
             kwargs["system"] = system_text
 
-        response = await client.messages.create(**kwargs)
+        # ``async with`` so the client's connection pool is closed
+        # deterministically. Leaving it to the garbage collector defers
+        # teardown to whenever the object is finalised — often after the
+        # event loop has already closed, which surfaces as a stack of
+        # "Task exception was never retrieved / Event loop is closed"
+        # tracebacks that look like a crash but are only cleanup noise.
+        async with AsyncAnthropic(api_key=api_key) as client:
+            response = await client.messages.create(**kwargs)
         return ChatResponse(
             text=self._extract_text(response),
             usage=self._extract_usage(response),

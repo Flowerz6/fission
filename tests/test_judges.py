@@ -776,3 +776,58 @@ async def test_ipi_verdict_unparseable_output_fails_safe() -> None:
     score = await judge.evaluate(trace=_trace("x"), behavior=_behavior())
     assert score.score == 0.0
     assert score.flagged is False
+
+
+# ----------------------------------------------------------------------
+# Judges inherit the provider's configured token budget
+# ----------------------------------------------------------------------
+
+
+def test_llm_judges_inherit_provider_max_tokens() -> None:
+    """Regression: an operator raising ``max_tokens`` on the judge role
+    in the provider YAML must actually change the judge's calls.
+
+    Judges used to carry a hardcoded default (256 for the IPI judges)
+    and no factory passed the configured value through, so the setting
+    was silently ignored. Once thinking is on by default that stops
+    being cosmetic: thinking and the answer share the budget, so 256
+    was consumed by thinking and the reply came back empty — with
+    ``stop_reason='max_tokens'`` surfacing several layers from the cause.
+    """
+    from advtest_ext.judges.decomposed_ipi import DecomposedIpiJudge
+    from advtest_ext.judges.ipi_verdict import IpiVerdictJudge
+    from advtest_ext.judges.strong_reject import StrongRejectJudge
+    from advtest_ext.providers.base import ChatResponse, Provider, Usage
+    from advtest_ext.providers.factory import ProviderConfig
+
+    class _P(Provider):
+        def __init__(self, max_tokens: int) -> None:
+            super().__init__(
+                ProviderConfig(provider_type="local_vllm", model_id="m", max_tokens=max_tokens)
+            )
+
+        async def complete(self, messages, *, tools=None, **overrides):
+            del messages, tools, overrides
+            return ChatResponse(
+                text="", usage=Usage(), provider_type="local_vllm", model_id="m", raw={}
+            )
+
+    for cls in (DecomposedIpiJudge, IpiVerdictJudge, StrongRejectJudge):
+        judge = cls(provider=_P(8192))
+        assert judge._max_tokens == 8192, f"{cls.__name__} ignored the provider budget"
+
+    # An explicit value still wins — a caller can cap one judge alone.
+    assert DecomposedIpiJudge(provider=_P(8192), max_tokens=512)._max_tokens == 512
+
+
+def test_judge_factory_wires_the_configured_budget() -> None:
+    """End-to-end through the CLI factory: the value in the provider YAML
+    is what the judge will send."""
+    import os
+
+    from advtest_ext._cli_factories import _resolve_judge
+
+    os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
+    judge = _resolve_judge("decomposed_ipi")
+    assert judge._max_tokens == judge._provider.config.max_tokens
+    assert judge._max_tokens > 256, "must not fall back to the old hardcoded default"

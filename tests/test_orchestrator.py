@@ -337,6 +337,43 @@ async def test_no_signal_no_upgrade_verdict_stays_judge_only() -> None:
     assert result.traces[0].verdict == "refused"
 
 
+async def test_l0_l2_conflict_scores_high_uncertainty() -> None:
+    """Measurement spine: a fired signal (L0 says landed) against a
+    low judge score (L2 says refused) is the dominant uncertainty axis,
+    so the trace is flagged for expert review with a high score."""
+    orch = GridOrchestrator(
+        target=_MarkerTarget(),
+        attacks=[_FixedAttack(name="atk", n_attempts=1)],
+        behaviors=[_behavior()],
+        judge=_ConstantJudge(score=0.05),  # L2 refused
+        signal_specs=[
+            {
+                "kind": "token_appears",
+                "name": "hide_white",
+                "token": "HX-WHITE",
+                "where": "ui_response",
+            },
+        ],
+    )
+    result = await orch.run()
+    trace = result.traces[0]
+    assert trace.metadata["uncertainty"] >= 0.7
+    assert "conflict" in trace.metadata["uncertainty_reason"]
+
+
+async def test_agreeing_oracle_scores_low_uncertainty() -> None:
+    """When the judge is confident and no signal contradicts it, the
+    oracle's layers agree — low review priority."""
+    orch = GridOrchestrator(
+        target=_MarkerTarget(),
+        attacks=[_FixedAttack(name="atk", n_attempts=1)],
+        behaviors=[_behavior()],
+        judge=_ConstantJudge(score=0.95),
+    )
+    result = await orch.run()
+    assert result.traces[0].metadata["uncertainty"] < 0.2
+
+
 # ----------------------------------------------------------------------
 # Budget enforcement
 # ----------------------------------------------------------------------

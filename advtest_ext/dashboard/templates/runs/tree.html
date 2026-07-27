@@ -3,20 +3,8 @@
 
 {% block content %}
 <style>
-  /* Mermaid live-tree styling. Container gives the Mermaid SVG room
-     to breathe; nodes inherit colours from the classDef rules emitted
-     in the partial. */
   .tree-cell { margin-bottom: 1.75rem; }
   .tree-cell h2 { margin-bottom: 0.25rem; }
-  .tree-cell .mermaid {
-    background: #fafafa;
-    border: 1px solid #e2e2e6;
-    border-radius: 8px;
-    padding: 14px 18px;
-    margin: 0.4rem 0 0 0;
-    overflow-x: auto;
-  }
-  .tree-cell .mermaid svg { display: block; margin: 0 auto; }
   /* Existing ASCII view (collapsed by default; available for
      replay-bundle ops / debugging). */
   .tree-pre {
@@ -56,10 +44,11 @@
   <span class="pill partial">partial</span>
   <span class="pill refused">refused</span>. Click any node to jump to its
   detail page (cover doc, hidden injection, Gemini's response).
-  {% if not run.finished_at %}This view refreshes every 2 seconds while the run is in flight.{% endif %}
+  {% if not run.finished_at %}This view updates live as branches land while the run is in flight.{% endif %}
 </p>
 
-{# Live Mermaid view — self-polling partial, replaced on every swap. #}
+{# Live Cytoscape explorer — mounts client-side and updates incrementally
+   from /runs/{id}/_tree.json while the run is in flight (see static/tree.js). #}
 {% include "runs/_tree_live.html" %}
 
 {# Existing ASCII tree, kept as a collapsible details panel for ops /

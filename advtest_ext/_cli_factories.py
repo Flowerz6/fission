@@ -395,10 +395,41 @@ def _tap_crescendo_attack_factory(options: dict[str, Any] | None = None) -> Atta
     # agrees the injection fired — so "green → move on" matches the
     # authoritative verdict the dashboard shows.
     confirm_judge = _ipi_verdict_judge_factory() if opts.get("confirm_with_llm_judge") else None
+    # Family-disjoint on-mechanism checker (report §6.3). Opt-in via
+    # attack_options.tap_crescendo.on_mechanism_check. Loaded from a
+    # SEPARATE role so it isn't the Claude attacker grading its own turns
+    # (preference-leakage bias) — the default role is the local Qwen
+    # CHECKER_MODEL, disjoint from both attacker (Claude) and target
+    # (Gemini). Fail-open: if the role is missing the check is simply off,
+    # never silently the attacker checking itself.
+    checker = None
+    if opts.get("on_mechanism_check"):
+        checker_role = str(opts.get("checker_role", "CHECKER_MODEL"))
+        try:
+            checker = _load_provider_role(
+                cfg_path,
+                checker_role,
+                missing_role_hint=(
+                    f"add a {checker_role} role (a model family-disjoint from "
+                    "both the attacker and the target), or unset on_mechanism_check"
+                ),
+            )
+        except typer.BadParameter:
+            if not opts.get("checker_role"):
+                # Default role absent and the operator didn't name one:
+                # degrade to no checking rather than fail the run.
+                typer.echo(
+                    "tap_crescendo: on_mechanism_check set but no CHECKER_MODEL "
+                    "role found; running WITHOUT drift pruning",
+                    err=True,
+                )
+            else:
+                raise
     return TapCrescendoAttack(
         attacker=attacker,
         judge=_retrieval_judge_from_opts(opts),
         confirm_judge=confirm_judge,
+        checker=checker,
         entity=str(opts.get("entity", "QUILLFEATHER")),
         canary=opts.get("canary"),
         handshake_token=opts.get("handshake_token", "QUILLFEATHER-ENGINEER"),
@@ -416,6 +447,7 @@ def _tap_crescendo_attack_factory(options: dict[str, Any] | None = None) -> Atta
         node_stuck_patience=int(opts.get("node_stuck_patience", 3)),
         node_max_turns=int(opts.get("node_max_turns", 12)),
         node_settle_s=float(opts.get("node_settle_s", 2.0)),
+        onmech_patience=int(opts.get("onmech_patience", 2)),
         textgrad_max_attempts=int(opts.get("textgrad_max_attempts", 0)),
         textgrad_floor=(
             float(opts["textgrad_floor"]) if opts.get("textgrad_floor") is not None else None
@@ -517,6 +549,10 @@ _MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
     {"ui_output_dir", "doc_id", "doc_ids", "browser_mint"}
 )
 
+_SHEETS_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
+    {"ui_output_dir", "sheet_id", "sheet_ids", "browser_mint"}
+)
+
 
 def _multiturn_target_factory(options: dict[str, Any] | None = None) -> DocumentTarget:
     """Build a ``GeminiDocsMultiTurnTarget`` — a live, warm Gemini Docs
@@ -558,6 +594,44 @@ def _multiturn_target_factory(options: dict[str, Any] | None = None) -> Document
     )
 
 
+def _sheets_multiturn_target_factory(options: dict[str, Any] | None = None) -> DocumentTarget:
+    """Build a ``GeminiSheetsMultiTurnTarget`` — the Sheets peer of
+    ``google_docs_multiturn``: a warm, multi-turn Gemini Sheets side-panel
+    target (crescendo / tap_chain drive it). Needs only a logged-in Playwright
+    profile. This is the target Bikash's ``sheets_skill_leak`` guide runs
+    against. NOTE: the Sheets side-panel selectors are seeded from Docs and
+    need live validation — see docs/SHEETS_UI_MODE_RUNBOOK.md.
+
+    target_options: ``ui_output_dir`` (screenshots + intercepted JSONL;
+    default ./out), ``sheet_id`` (reuse a blank Sheet, never deleted),
+    ``sheet_ids`` (rotate one per node), ``browser_mint`` (mint one blank
+    Sheet through the browser, no API/OAuth)."""
+    from advtest_ext.adapters.sheets.ui_mode.multi_turn_target import (
+        GeminiSheetsMultiTurnTarget,
+    )
+
+    opts = options or {}
+    unknown = set(opts) - _SHEETS_MULTITURN_TARGET_OPTION_KEYS
+    if unknown:
+        raise typer.BadParameter(
+            f"unknown target_options keys for google_sheets_multiturn: {sorted(unknown)}; "
+            f"allowed: {sorted(_SHEETS_MULTITURN_TARGET_OPTION_KEYS)}"
+        )
+    sheet_ids = opts.get("sheet_ids")
+    if sheet_ids is not None and (
+        not isinstance(sheet_ids, list) or not all(isinstance(s, str) for s in sheet_ids)
+    ):
+        raise typer.BadParameter(
+            "target_options.sheet_ids for google_sheets_multiturn must be a list of strings"
+        )
+    return GeminiSheetsMultiTurnTarget(
+        output_dir=Path(str(opts.get("ui_output_dir", "./out"))),
+        sheet_id=opts.get("sheet_id"),
+        sheet_ids=sheet_ids,
+        browser_mint=bool(opts.get("browser_mint", False)),
+    )
+
+
 def _stub_target(options: dict[str, Any] | None = None) -> DocumentTarget:
     """Adapter signature shim: the CLI registry callable returns a
     fresh ``StubDocumentTarget``. The stub doesn't accept per-run
@@ -593,6 +667,7 @@ def _register_workspace_targets() -> None:
     # no Gemini provider (the side panel IS the model), so it's a plain
     # factory rather than a _workspace_target_factory.
     _TARGET_REGISTRY["google_docs_multiturn"] = _multiturn_target_factory
+    _TARGET_REGISTRY["google_sheets_multiturn"] = _sheets_multiturn_target_factory
 
 
 _register_workspace_targets()
@@ -656,6 +731,33 @@ def _ipi_verdict_judge_factory() -> JudgeBase:
     return IpiVerdictJudge(provider=provider)
 
 
+def _decomposed_ipi_judge_factory() -> JudgeBase:
+    """Build a ``DecomposedIpiJudge`` wired to ``CLAUDE_JUDGE`` — the
+    same disjoint LLM as ``ipi_verdict``, but emitting attended /
+    complied / harmful_effect sub-verdicts combined by a transparent
+    rule (auditable, harder to game). Selectable via ``judges:
+    [decomposed_ipi]``."""
+    from advtest_ext.judges.decomposed_ipi import DecomposedIpiJudge
+    from advtest_ext.providers import load_provider_from_yaml
+
+    cfg_path = Path(os.environ.get("ADVTEST_PROVIDER_CONFIG") or _DEFAULT_PROVIDER_CONFIG)
+    if not cfg_path.exists():
+        raise typer.BadParameter(
+            f"provider config not found at {cfg_path} — set "
+            "ADVTEST_PROVIDER_CONFIG or create the file with a CLAUDE_JUDGE role"
+        )
+    try:
+        provider = load_provider_from_yaml(cfg_path, "CLAUDE_JUDGE")
+    except KeyError as exc:
+        raise typer.BadParameter(
+            f"{cfg_path} has no CLAUDE_JUDGE role — add one "
+            "(provider_type: anthropic, model_id: claude-sonnet-4-6, "
+            "api_key_env: ANTHROPIC_API_KEY)"
+        ) from exc
+    provider = _apply_model_override(provider, "CLAUDE_JUDGE")
+    return DecomposedIpiJudge(provider=provider)
+
+
 def _retrieval_verdict_judge_factory() -> JudgeBase:
     """Run-level judge for retrieval-IPI runs (crescendo / tap_chain /
     tap_crescendo). Scores grounding/persona/handshake/canary so the
@@ -676,6 +778,7 @@ _JUDGE_REGISTRY: dict[str, Callable[[], JudgeBase]] = {
     "heuristic": HeuristicJudge,
     "strong_reject": _strong_reject_judge_factory,
     "ipi_verdict": _ipi_verdict_judge_factory,
+    "decomposed_ipi": _decomposed_ipi_judge_factory,
     "retrieval_verdict": _retrieval_verdict_judge_factory,
 }
 
