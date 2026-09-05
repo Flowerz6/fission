@@ -144,7 +144,7 @@ async def _launch_context(profile_dir: Path) -> Any:
         ignore_default_args=["--enable-automation", "--no-sandbox"],
         viewport={"width": 1280, "height": 900},
     )
-    context.__advtest_pw = pw
+    setattr(context, "__advtest_pw", pw)
     return context
 
 

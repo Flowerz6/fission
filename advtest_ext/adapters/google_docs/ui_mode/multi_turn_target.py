@@ -36,6 +36,7 @@ inbox the side panel grounds on (see ``scripts/quillfeather_send.py``).
 from __future__ import annotations
 
 import asyncio
+import inspect
 import re
 import uuid
 from pathlib import Path
@@ -117,6 +118,9 @@ class GeminiDocsMultiTurnTarget(DocumentTarget):
         self._ctx: NativeContext | None = None
         self._owns_doc = False
         self._turn = 0
+        # Monotonic conversation id keeps screenshots and intercepted traffic
+        # unique when reset() starts another tree node.
+        self._conversation = 1
         # Every scratch doc we mint across all nodes, deleted at close().
         self._created_docs: list[str] = []
 
@@ -186,7 +190,7 @@ class GeminiDocsMultiTurnTarget(DocumentTarget):
             raise RuntimeError("render_document did not record a document_id on the context")
 
         reset = self._turn == 0
-        trace_id = f"{self._trace_prefix}-t{self._turn + 1}"
+        trace_id = f"{self._trace_prefix}-c{self._conversation}-t{self._turn + 1}"
         invoke_fn = self._invoke_fn or self._default_invoke_fn()
         response: Response = await invoke_fn(
             document_id=document_id,
@@ -236,6 +240,7 @@ class GeminiDocsMultiTurnTarget(DocumentTarget):
         reused as-is (carryover caveat — prefer auto-created docs for
         multi-node runs)."""
         self._turn = 0
+        self._conversation += 1
         if self._doc_ids:
             # Advance to the next existing doc for the next node.
             self._doc_cursor += 1
@@ -267,6 +272,25 @@ class GeminiDocsMultiTurnTarget(DocumentTarget):
                 await self._session.close()
             finally:
                 self._session = None
+
+    def bind_carrier(self, **bindings: Any) -> None:
+        doc_id = bindings.get("doc_id")
+        if not isinstance(doc_id, str) or not doc_id:
+            raise ValueError("Docs carrier binding requires doc_id")
+        self._doc_id = doc_id
+        self._doc_ids = None
+        self._ctx = None
+        self._owns_doc = False
+        self.reset()
+
+    async def cleanup_bound_carrier(self, **bindings: Any) -> bool:
+        doc_id = bindings.get("doc_id")
+        if not isinstance(doc_id, str) or not doc_id or self._doc_deleter is None:
+            return False
+        result = self._doc_deleter(doc_id)
+        if inspect.isawaitable(result):
+            await result
+        return True
 
     def capabilities(self) -> DocumentCapabilities:
         # The whole point of this target: it CAN hold a conversation.
