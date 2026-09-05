@@ -111,6 +111,20 @@ async def test_first_turn_resets_then_continues() -> None:
     # The driver is handed the spreadsheet id, not a doc id.
     assert all(c["spreadsheet_id"] == "SHEET-NEW" for c in calls)
     assert calls[0]["user_prompt"] == "turn 1"
+    assert [c["trace_id"] for c in calls] == ["test-c1-t1", "test-c1-t2"]
+
+
+async def test_reset_uses_a_new_capture_namespace() -> None:
+    calls: list[dict[str, Any]] = []
+    target, _ = _make_target(calls=calls, session=_FakeSession(), sheet_id="SHEET-PINNED")
+    ctx = await target.render_document(_EMPTY_DOC)
+    await target.invoke(ctx, "node 1")
+    target.reset()
+    ctx = await target.render_document(_EMPTY_DOC)
+    await target.invoke(ctx, "node 2")
+
+    assert [c["trace_id"] for c in calls] == ["test-c1-t1", "test-c2-t1"]
+    assert len({c["trace_id"] for c in calls}) == 2
 
 
 async def test_teardown_deletes_owned_sheet_and_close_leaves_injected_session() -> None:
@@ -310,7 +324,7 @@ async def test_browser_mint_hosts_once_via_browser_no_api() -> None:
         session=_MintSession(),
         invoke_fn=_recording_invoke_fn([]),
         # sheet_factory must NOT be called in browser-mint mode.
-        sheet_factory=lambda: minted.append("api") or "API-SHEET",
+        sheet_factory=lambda: minted.append("api") or "API-SHEET",  # type: ignore[func-returns-value]
     )
     ctx = await target.render_document(_EMPTY_DOC)
     assert ctx.rendered["spreadsheet_id"] == "MINTED_SHEET_1234567890"

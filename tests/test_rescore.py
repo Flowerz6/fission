@@ -175,8 +175,12 @@ def test_l0_signals_are_read_not_re_evaluated_and_still_upgrade() -> None:
 
     assert stats.n_signal_upgrades == 1
     with session_scope(factory) as s:
-        assert get_trace(s, "t0").verdict == "success"  # high-precision signal fired
-        assert get_trace(s, "t1").verdict == "refused"  # judge said no, no signal
+        t0 = get_trace(s, "t0")
+        t1 = get_trace(s, "t1")
+        assert t0 is not None
+        assert t1 is not None
+        assert t0.verdict == "success"  # high-precision signal fired
+        assert t1.verdict == "refused"  # judge said no, no signal
 
 
 def test_loose_regex_signal_only_lifts_to_partial_not_success() -> None:
@@ -199,7 +203,9 @@ def test_loose_regex_signal_only_lifts_to_partial_not_success() -> None:
     assert stats.n_signal_upgrades == 0
     assert stats.n_findings == 0
     with session_scope(factory) as s:
-        assert get_trace(s, "t0").verdict == "partial"
+        t0 = get_trace(s, "t0")
+        assert t0 is not None
+        assert t0.verdict == "partial"
 
 
 def test_rescoring_twice_is_idempotent_per_judge() -> None:
@@ -214,6 +220,7 @@ def test_rescoring_twice_is_idempotent_per_judge() -> None:
 
     with session_scope(factory) as s:
         trace = get_trace(s, "t0")
+        assert trace is not None
         scripted = [j for j in trace.judge_scores if j.judge_name == "scripted"]
         assert len(scripted) == 1
         assert scripted[0].score == pytest.approx(0.3)
@@ -234,7 +241,9 @@ def test_other_judges_scores_are_left_alone() -> None:
         _run(s, run_id=run_id, judge=other, threshold=0.5)
 
     with session_scope(factory) as s:
-        names = {j.judge_name for j in get_trace(s, "t0").judge_scores}
+        trace = get_trace(s, "t0")
+        assert trace is not None
+        names = {j.judge_name for j in trace.judge_scores}
     assert {"scripted", "other_judge"} <= names
 
 
@@ -438,7 +447,9 @@ def test_regrade_out_of_success_removes_stale_finding() -> None:
             records=[{"name": "internal_tool_names", "kind": "regex_match", "fired": True}],
         )
         # Seed the pre-existing (stale) success + Finding.
-        get_trace(s, "t0").verdict = "success"
+        seed_trace = get_trace(s, "t0")
+        assert seed_trace is not None
+        seed_trace.verdict = "success"
         promote_finding(s, run_id=run_id, trace_id="t0", title="stale", description="old")
 
     with session_scope(factory) as s:
@@ -449,7 +460,9 @@ def test_regrade_out_of_success_removes_stale_finding() -> None:
 
     assert stats.n_findings_removed == 1
     with session_scope(factory) as s:
-        assert get_trace(s, "t0").verdict == "partial"
+        t0 = get_trace(s, "t0")
+        assert t0 is not None
+        assert t0.verdict == "partial"
         assert list_findings(s, run_id=run_id) == []
 
 
@@ -481,7 +494,9 @@ def test_judge_errors_do_not_overwrite_verdicts() -> None:
     factory = _factory()
     run_id = _seed(factory, n=2)
     with session_scope(factory) as s:
-        get_trace(s, "t0").verdict = "success"
+        seed_trace = get_trace(s, "t0")
+        assert seed_trace is not None
+        seed_trace.verdict = "success"
 
     with session_scope(factory) as s:
         stats = _run(s, run_id=run_id, judge=FailingJudge(), threshold=0.5)
@@ -493,8 +508,10 @@ def test_judge_errors_do_not_overwrite_verdicts() -> None:
     # And nothing was written.
     assert stats.n_findings == 0
     with session_scope(factory) as s:
-        assert get_trace(s, "t0").verdict == "success"  # preserved
-        assert not [j for j in get_trace(s, "t0").judge_scores if j.judge_name == "failing"]
+        t0 = get_trace(s, "t0")
+        assert t0 is not None
+        assert t0.verdict == "success"  # preserved
+        assert not [j for j in t0.judge_scores if j.judge_name == "failing"]
 
 
 def test_errored_score_never_reaches_the_sampler() -> None:

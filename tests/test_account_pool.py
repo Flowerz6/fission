@@ -45,7 +45,7 @@ def test_account_slot_is_frozen(tmp_path: Path) -> None:
     / hold as dict keys."""
     s = AccountSlot(role="recipient", profile_dir=tmp_path / "p")
     with pytest.raises(ValidationError):
-        s.role = "attacker_sender"  # type: ignore[misc]
+        s.role = "attacker_sender"
 
 
 # ----------------------------------------------------------------------

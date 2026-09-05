@@ -63,7 +63,7 @@ def _ctx(**trace_kwargs: Any) -> SignalContext:
     )
 
 
-def _write_capture(path: Path, entries: list[dict]) -> None:
+def _write_capture(path: Path, entries: list[dict[str, Any]]) -> None:
     path.write_text(
         "\n".join(json.dumps(e) for e in entries) + "\n",
         encoding="utf-8",
@@ -281,7 +281,7 @@ class _StubJudge:
 
 @pytest.mark.asyncio
 async def test_llm_judge_verdict_fires_above_threshold() -> None:
-    sig = LlmJudgeVerdict(name="j", judge=_StubJudge(0.8), threshold=0.5)
+    sig = LlmJudgeVerdict(name="j", judge=_StubJudge(0.8), threshold=0.5)  # type: ignore[arg-type]
     res = await sig.evaluate(context=_ctx())
     assert res.fired is True
     assert res.evidence["score"] == 0.8
@@ -290,14 +290,14 @@ async def test_llm_judge_verdict_fires_above_threshold() -> None:
 
 @pytest.mark.asyncio
 async def test_llm_judge_verdict_does_not_fire_below_threshold() -> None:
-    sig = LlmJudgeVerdict(name="j", judge=_StubJudge(0.2), threshold=0.5)
+    sig = LlmJudgeVerdict(name="j", judge=_StubJudge(0.2), threshold=0.5)  # type: ignore[arg-type]
     res = await sig.evaluate(context=_ctx())
     assert res.fired is False
 
 
 def test_llm_judge_verdict_rejects_out_of_range_threshold() -> None:
     with pytest.raises(ValueError, match="threshold must be in"):
-        LlmJudgeVerdict(name="j", judge=_StubJudge(0.5), threshold=1.5)
+        LlmJudgeVerdict(name="j", judge=_StubJudge(0.5), threshold=1.5)  # type: ignore[arg-type]
 
 
 # ----------------------------------------------------------------------

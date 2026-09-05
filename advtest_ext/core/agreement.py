@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import itertools
 import statistics
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -184,7 +184,7 @@ def krippendorff_alpha(units: Sequence[Sequence[str]]) -> float:
     expected by chance. Returns 0.0 when no item has ≥2 ratings (alpha is
     undefined — the caller should render an empty state, not a zero).
     """
-    coincidence: Counter[tuple[str, str]] = Counter()
+    coincidence: defaultdict[tuple[str, str], float] = defaultdict(float)
     for unit in units:
         m = len(unit)
         if m < 2:
@@ -195,7 +195,7 @@ def krippendorff_alpha(units: Sequence[Sequence[str]]) -> float:
     if not coincidence:
         return 0.0
 
-    marginals: Counter[str] = Counter()
+    marginals: defaultdict[str, float] = defaultdict(float)
     for (c, _k), v in coincidence.items():
         marginals[c] += v
     n = sum(marginals.values())

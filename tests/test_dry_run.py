@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from advtest_ext.core.builtin_operations import default_operations
 from advtest_ext.core.dry_run import DryRunResult, validate
 from advtest_ext.core.recipe import Recipe, Step
@@ -17,7 +19,7 @@ def _step(
     *,
     app: str = "docs",
     operation: str = "type_prompt",
-    params: dict | None = None,
+    params: dict[str, Any] | None = None,
     on_fail: str = "abort",
     role: str = "recipient",
 ) -> Step:
@@ -31,7 +33,7 @@ def _step(
     )
 
 
-def _recipe(steps: list[Step], signals: list[dict] | None = None) -> Recipe:
+def _recipe(steps: list[Step], signals: list[dict[str, Any]] | None = None) -> Recipe:
     return Recipe(
         id="r",
         seed_id="s",

@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -797,8 +797,7 @@ def test_llm_judges_inherit_provider_max_tokens() -> None:
     from advtest_ext.judges.decomposed_ipi import DecomposedIpiJudge
     from advtest_ext.judges.ipi_verdict import IpiVerdictJudge
     from advtest_ext.judges.strong_reject import StrongRejectJudge
-    from advtest_ext.providers.base import ChatResponse, Provider, Usage
-    from advtest_ext.providers.factory import ProviderConfig
+    from advtest_ext.providers.base import ChatResponse, Provider, ProviderConfig, Usage
 
     class _P(Provider):
         def __init__(self, max_tokens: int) -> None:
@@ -826,8 +825,9 @@ def test_judge_factory_wires_the_configured_budget() -> None:
     import os
 
     from advtest_ext._cli_factories import _resolve_judge
+    from advtest_ext.judges.base import LlmJudgeBase
 
     os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
-    judge = _resolve_judge("decomposed_ipi")
+    judge = cast(LlmJudgeBase, _resolve_judge("decomposed_ipi"))
     assert judge._max_tokens == judge._provider.config.max_tokens
     assert judge._max_tokens > 256, "must not fall back to the old hardcoded default"

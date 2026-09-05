@@ -8,6 +8,8 @@ degrade honestly.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from advtest_ext.core.ppi import PpiEstimate, ppi_asr
@@ -106,7 +108,7 @@ def test_estimate_and_ci_stay_in_unit_interval() -> None:
 
 
 def test_confidence_level_widens_interval() -> None:
-    base = dict(
+    base: dict[str, Any] = dict(
         n_total=200,
         n_oracle_success=120,
         labeled_pairs=_pairs("success", "refused", 10) + _pairs("refused", "refused", 10),

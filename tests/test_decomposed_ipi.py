@@ -21,8 +21,13 @@ from advtest_ext.judges.decomposed_ipi import (
     aggregate_score,
     parse_decomposition,
 )
-from advtest_ext.providers.base import ChatMessage, ChatResponse, Provider, Usage
-from advtest_ext.providers.factory import ProviderConfig
+from advtest_ext.providers.base import (
+    ChatMessage,
+    ChatResponse,
+    Provider,
+    ProviderConfig,
+    Usage,
+)
 
 
 class _ScriptedProvider(Provider):

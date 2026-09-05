@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from advtest_ext.dashboard.intercepted_extract import extract_full_response
 
 
-def _write_jsonl(path: Path, entries: list[dict]) -> None:
+def _write_jsonl(path: Path, entries: list[dict[str, Any]]) -> None:
     path.write_text(
         "\n".join(json.dumps(e) for e in entries) + "\n",
         encoding="utf-8",

@@ -15,10 +15,12 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from advtest_ext.cli import (
+from advtest_ext._cli_factories import (
     _resolve_attack,
     _resolve_judge,
     _resolve_target,
+)
+from advtest_ext.cli import (
     app,
     load_run_config,
 )

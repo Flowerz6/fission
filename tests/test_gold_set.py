@@ -13,6 +13,8 @@ these round-trips hold there too.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from advtest_ext.storage import (
@@ -124,7 +126,7 @@ def test_expert_confidence_is_clamped_to_1_5() -> None:
 def test_invalid_enums_fail_loudly(kwargs) -> None:
     factory = _factory()
     _seed_run_with_trace(factory)
-    base = dict(
+    base: dict[str, Any] = dict(
         trace_id="t1",
         run_id="run-g",
         behavior_id="b",
@@ -211,7 +213,9 @@ def test_get_gold_label_by_id() -> None:
         s.flush()
         label_id = label.id
     with session_scope(factory) as s:
-        assert get_gold_label(s, label_id).expert_verdict == "partial"
+        fetched = get_gold_label(s, label_id)
+        assert fetched is not None
+        assert fetched.expert_verdict == "partial"
         assert get_gold_label(s, "missing") is None
 
 

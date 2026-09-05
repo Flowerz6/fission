@@ -16,7 +16,7 @@ Locator doubles so Playwright doesn't need to be installed. Coverage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -317,7 +317,7 @@ class _FakeContext:
     async def new_page(self) -> _FakePage:
         self.new_page_count += 1
         if self._page_factory is not None:
-            return self._page_factory()
+            return cast(_FakePage, self._page_factory())
         # Fall back to the constructor-injected page if no factory.
         if self.page is None:
             raise RuntimeError("_FakeContext has no page configured")
@@ -1034,7 +1034,7 @@ async def test_ui_mode_session_close_is_idempotent(
         ctx = _SessionFakeContext()
         # _launch_context stashes the driver as __advtest_pw — mirror
         # that so UiModeSession can stop the driver on close.
-        ctx.__advtest_pw = _FakeDriver()
+        ctx.__advtest_pw = _FakeDriver()  # type: ignore[attr-defined]
         return ctx
 
     monkeypatch.setattr(_session_module, "launch_context", _fake_launch)

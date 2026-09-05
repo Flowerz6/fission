@@ -33,6 +33,7 @@ from typing import Any
 import typer
 import yaml
 
+from advtest_ext._cli_calibrate import register as _register_calibrate
 from advtest_ext._cli_factories import (
     _resolve_attack,
     _resolve_behaviors,
@@ -271,6 +272,7 @@ app = typer.Typer(
 # account-pool derivation) travels with it.
 _register_run_recipe(app)
 _register_rescore(app)
+_register_calibrate(app)
 
 
 @app.callback()

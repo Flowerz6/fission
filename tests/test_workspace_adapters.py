@@ -979,3 +979,23 @@ async def test_integration_sheets_round_trip() -> None:
         assert resp.text
     finally:
         await target.teardown(ctx)
+
+
+async def test_gmail_api_mode_preserves_history_until_reset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gmail_stub = _GoogleApiStub()
+    _patch_get_service(monkeypatch, {"gmail": gmail_stub})
+    provider = _ScriptedGemini(text="reply")
+    target = GmailTarget(gemini_provider=provider)
+    ctx = await target.render_document(_doc_with_basic_blocks())
+
+    await target.invoke(ctx, "first")
+    await target.invoke(ctx, "second")
+    assert [m.role for m in provider.calls[1]] == ["user", "assistant", "user"]
+    assert provider.calls[1][-1].content == "second"
+
+    target.reset()
+    await target.invoke(ctx, "fresh")
+    assert len(provider.calls[2]) == 1
+    assert "fresh" in provider.calls[2][0].content

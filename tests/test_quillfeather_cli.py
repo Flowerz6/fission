@@ -8,11 +8,15 @@ would construct a real Anthropic client). No LLM, no browser.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from advtest_ext import _cli_factories, _cli_providers, cli
 from advtest_ext.core.models import load_seed_behaviors
 from advtest_ext.judges.heuristic import HeuristicJudge
 from advtest_ext.judges.retrieval_verdict_judge import RetrievalVerdictJudge
+
+if TYPE_CHECKING:
+    from advtest_ext.core.models import RunConfig
 
 _CONFIGS = Path(__file__).resolve().parents[1] / "configs"
 
@@ -87,7 +91,7 @@ def test_retrieval_verdict_judge_registered_and_resolves() -> None:
     from advtest_ext.judges.retrieval_verdict_judge import RetrievalVerdictJudge
 
     assert "retrieval_verdict" in _cli_factories._JUDGE_REGISTRY
-    judge = cli._resolve_judge("retrieval_verdict")
+    judge = cli._resolve_judge("retrieval_verdict")  # type: ignore[attr-defined]
     assert isinstance(judge, RetrievalVerdictJudge)
 
 
@@ -115,7 +119,7 @@ def test_model_override_env_mapping() -> None:
 # ----------------------------------------------------------------------
 
 
-def _two_phase_config(tmp_path: Path) -> object:
+def _two_phase_config(tmp_path: Path) -> RunConfig:
     from advtest_ext.core.models import RunConfig, RunPhase
 
     behaviors = [b.id for b in load_seed_behaviors()][:2]

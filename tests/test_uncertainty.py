@@ -10,13 +10,17 @@ NOT proof of refusal) is the subtle correctness point exercised here.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from advtest_ext.core.uncertainty import Uncertainty, score_uncertainty
 
 
 def _score(**kw) -> Uncertainty:
-    base = dict(judge_score=0.0, n_signals_fired=0, n_signals_total=0, threshold=0.5)
+    base: dict[str, Any] = dict(
+        judge_score=0.0, n_signals_fired=0, n_signals_total=0, threshold=0.5
+    )
     base.update(kw)
     return score_uncertainty(**base)
 

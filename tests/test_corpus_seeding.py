@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import base64
 from email import message_from_bytes
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -105,7 +105,7 @@ def _decode_parts(raw_b64: str) -> dict[str, str]:
     for part in msg.walk():
         ctype = part.get_content_type()
         if ctype in ("text/plain", "text/html"):
-            payload = part.get_payload(decode=True)
+            payload = cast("bytes | None", part.get_payload(decode=True))
             parts[ctype] = payload.decode("utf-8") if payload else ""
     return parts
 
@@ -194,7 +194,7 @@ def test_gmail_autogenerates_tokens_when_omitted() -> None:
 def art_raw(seeder: GmailCorpusSeeder) -> str:
     """Pull the raw of the most recent insert off the fake service."""
     fake: Any = seeder._service
-    return fake.inserts[-1]["body"]["raw"]
+    return cast(str, fake.inserts[-1]["body"]["raw"])
 
 
 def test_gmail_teardown_trashes_not_deletes() -> None:

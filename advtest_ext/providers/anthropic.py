@@ -24,6 +24,7 @@ from advtest_ext.providers.base import (
     Provider,
     Usage,
 )
+from advtest_ext.providers.cost import estimate_paid_cost_usd
 
 _DEFAULT_API_KEY_ENV = "ANTHROPIC_API_KEY"
 
@@ -84,6 +85,7 @@ class AnthropicProvider(Provider):
         chat_messages = self._messages_to_api(messages)
 
         kwargs: dict[str, Any] = {
+            **self.config.extra_kwargs,
             "model": self.config.model_id,
             "max_tokens": overrides.get("max_tokens", self.config.max_tokens),
             "messages": chat_messages,
@@ -146,8 +148,7 @@ class AnthropicProvider(Provider):
                     chunks.append(str(text))
         return "".join(chunks)
 
-    @staticmethod
-    def _extract_usage(response: Any) -> Usage:
+    def _extract_usage(self, response: Any) -> Usage:
         meta = getattr(response, "usage", None)
         if meta is None:
             return Usage()
@@ -157,6 +158,7 @@ class AnthropicProvider(Provider):
             prompt_tokens=prompt,
             completion_tokens=completion,
             total_tokens=prompt + completion,
+            cost_usd=estimate_paid_cost_usd("anthropic", self.config.model_id, prompt, completion),
         )
 
     @staticmethod

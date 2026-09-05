@@ -125,6 +125,16 @@ class DocumentTarget(ABC):
         tree nodes while keeping the warm session."""
         return None
 
+    def bind_carrier(self, **bindings: Any) -> None:
+        """Adopt a carrier staged out-of-band for the next branch."""
+        del bindings
+        raise NotImplementedError(f"{type(self).__name__} does not support carrier rebinding")
+
+    async def cleanup_bound_carrier(self, **bindings: Any) -> bool:
+        """Delete a dynamically staged carrier when the adapter can do so."""
+        del bindings
+        return False
+
     @abstractmethod
     def capabilities(self) -> DocumentCapabilities: ...
 

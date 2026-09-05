@@ -13,6 +13,7 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from advtest_ext.core.loaders.docx_loader import _extract_paragraphs
 from advtest_ext.dashboard.report_docx import (
@@ -45,13 +46,13 @@ class _StubTrace:
     verdict: str | None = "success"
     raw_request: str = "Please summarise this email thread."
     raw_response: str = "Here is the summary..."
-    raw_response_data: dict = field(
+    raw_response_data: dict[str, Any] = field(
         default_factory=lambda: {
             "screenshot_path": "/out/screenshots/abc.png",
             "intercepted_traffic_path": "/out/intercepted/abc.jsonl",
         }
     )
-    judge_scores: list = field(default_factory=lambda: [_StubJudgeScore()])
+    judge_scores: list[Any] = field(default_factory=lambda: [_StubJudgeScore()])
 
 
 @dataclass
@@ -70,14 +71,14 @@ class _StubSignal:
     kind: str = "token_appears"
     fired: bool = True
     reasoning: str = "found 'Engineer' at end"
-    evidence: dict = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class _StubRecipeStep:
     step_id: str = "s1"
     intent: str = "do the thing"
-    surface: dict = field(
+    surface: dict[str, Any] = field(
         default_factory=lambda: {
             "app": "docs",
             "region": "sidebar",
@@ -90,7 +91,7 @@ class _StubRecipeStep:
 @dataclass
 class _StubRecipe:
     name: str = "V1 - Test Recipe"
-    steps: list = field(default_factory=list)
+    steps: list[Any] = field(default_factory=list)
 
 
 def _save_and_reload(docx_bytes: bytes, tmp_path: Path) -> list[str]:

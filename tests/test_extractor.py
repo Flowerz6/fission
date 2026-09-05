@@ -28,7 +28,7 @@ class _StubResponse:
     text: str
     provider_type: str = "stub"
     model_id: str = "stub-model"
-    usage: dict = None  # type: ignore[assignment]
+    usage: dict[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.usage is None:
@@ -45,7 +45,7 @@ class _StubProvider:
 
     def __init__(self, response_text: str) -> None:
         self._response = response_text
-        self.calls: list[list] = []
+        self.calls: list[list[Any]] = []
 
     async def complete(self, messages, **kwargs: Any) -> _StubResponse:
         self.calls.append(list(messages))
@@ -136,7 +136,7 @@ def _well_shaped_recipe_response() -> str:
 @pytest.mark.asyncio
 async def test_extractor_parses_well_shaped_response() -> None:
     provider = _StubProvider(_well_shaped_recipe_response())
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     seed = _make_seed()
     recipe = await extractor.extract(seed)
 
@@ -152,7 +152,7 @@ async def test_extractor_parses_well_shaped_response() -> None:
 @pytest.mark.asyncio
 async def test_extractor_assigns_fresh_id_per_recipe() -> None:
     provider = _StubProvider(_well_shaped_recipe_response())
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     seed = _make_seed()
     r1 = await extractor.extract(seed)
     r2 = await extractor.extract(seed)
@@ -167,7 +167,7 @@ async def test_extractor_tolerates_markdown_fence() -> None:
     instructions. The Extractor should tolerate that."""
     fenced = f"Here is the recipe:\n```json\n{_well_shaped_recipe_response()}\n```\nDone."
     provider = _StubProvider(fenced)
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     recipe = await extractor.extract(_make_seed())
     assert recipe.name == "V1 - Test extraction"
 
@@ -180,7 +180,7 @@ async def test_extractor_tolerates_markdown_fence() -> None:
 @pytest.mark.asyncio
 async def test_extractor_raises_on_non_json_response() -> None:
     provider = _StubProvider("not json, just prose about Recipes")
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     with pytest.raises(ExtractorError, match="could not extract"):
         await extractor.extract(_make_seed())
 
@@ -189,7 +189,7 @@ async def test_extractor_raises_on_non_json_response() -> None:
 async def test_extractor_raises_on_missing_name_field() -> None:
     bad = json.dumps({"steps": []})  # no name
     provider = _StubProvider(bad)
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     with pytest.raises(ExtractorError, match="name"):
         await extractor.extract(_make_seed())
 
@@ -198,7 +198,7 @@ async def test_extractor_raises_on_missing_name_field() -> None:
 async def test_extractor_raises_on_missing_steps_field() -> None:
     bad = json.dumps({"name": "x"})  # no steps
     provider = _StubProvider(bad)
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     with pytest.raises(ExtractorError, match="steps"):
         await extractor.extract(_make_seed())
 
@@ -219,7 +219,7 @@ async def test_extractor_raises_on_malformed_step_surface() -> None:
         }
     )
     provider = _StubProvider(bad)
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     with pytest.raises(ExtractorError):
         await extractor.extract(_make_seed())
 
@@ -227,7 +227,7 @@ async def test_extractor_raises_on_malformed_step_surface() -> None:
 @pytest.mark.asyncio
 async def test_extractor_attaches_raw_response_to_error() -> None:
     provider = _StubProvider("garbage")
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     with pytest.raises(ExtractorError) as exc_info:
         await extractor.extract(_make_seed())
     assert exc_info.value.raw_response == "garbage"
@@ -241,7 +241,7 @@ async def test_extractor_attaches_raw_response_to_error() -> None:
 @pytest.mark.asyncio
 async def test_extractor_includes_seed_payload_in_prompt() -> None:
     provider = _StubProvider(_well_shaped_recipe_response())
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     seed = _make_seed()
     await extractor.extract(seed)
     sent_message = provider.calls[0][0].content
@@ -255,7 +255,7 @@ async def test_extractor_lists_available_operations_in_prompt() -> None:
     operations the Extractor was told about — useful for
     debugging Recipes that name nonexistent operations."""
     provider = _StubProvider(_well_shaped_recipe_response())
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     await extractor.extract(_make_seed())
     sent_message = provider.calls[0][0].content
     # The four bundled operations should all appear.
@@ -268,7 +268,7 @@ async def test_extractor_lists_available_operations_in_prompt() -> None:
 @pytest.mark.asyncio
 async def test_extractor_lists_signal_kinds_in_prompt() -> None:
     provider = _StubProvider(_well_shaped_recipe_response())
-    extractor = Extractor(provider=provider, operations=default_operations())
+    extractor = Extractor(provider=provider, operations=default_operations())  # type: ignore[arg-type]
     await extractor.extract(_make_seed())
     sent_message = provider.calls[0][0].content
     # Operator-facing signal kinds (not LlmJudgeVerdict, which is

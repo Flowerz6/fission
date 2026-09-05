@@ -60,10 +60,10 @@ from advtest_ext.core.sampling import stratified_sample
 from advtest_ext.core.uncertainty import Uncertainty, score_uncertainty
 from advtest_ext.document import AbstractDocument
 from advtest_ext.judges.base import JudgeBase
+from advtest_ext.providers.cost import CostLedger
 
 if TYPE_CHECKING:  # pragma: no cover
     from advtest_ext.document.target import DocumentTarget
-    from advtest_ext.providers.cost import CostLedger
 
 
 logger = get_logger(__name__)
@@ -355,10 +355,20 @@ class Orchestrator:
         self.judge = judge
         self.budget = budget or Budget()
         self.run_id = run_id or f"run-{uuid.uuid4().hex[:12]}"
-        self.cost_ledger = cost_ledger
+        # Always keep a live ledger. Integrated attacks (PAIR/TAP/Crescendo)
+        # make provider calls inside ``generate``; attaching the same ledger to
+        # them makes ``max_cost_usd`` observe those calls.
+        self.cost_ledger = cost_ledger or CostLedger()
+        for attack in self.attacks:
+            attack_with_ledger: Any = attack
+            if (
+                hasattr(attack_with_ledger, "_cost_ledger")
+                and attack_with_ledger._cost_ledger is None
+            ):
+                attack_with_ledger._cost_ledger = self.cost_ledger
         self._concurrency = max_concurrency
         self._events = _EventBus(events)
-        self._budget = _BudgetTracker(budget=self.budget, cost_ledger=cost_ledger)
+        self._budget = _BudgetTracker(budget=self.budget, cost_ledger=self.cost_ledger)
         self._persister = _TracePersister(output_dir, self.run_id)
         self._traces: list[AttackTrace] = []
         self._traces_lock = asyncio.Lock()
@@ -485,7 +495,11 @@ class Orchestrator:
         ``parent_id`` chains rewritten from in-memory node ids to
         persisted trace ids.
         """
-        await self._budget.reserve_one_query()
+        # Integrated multi-turn attacks reserve immediately before invoking
+        # the live target. Pop the private marker so it is never persisted.
+        pre_reserved = bool(attempt.metadata.pop("_query_pre_reserved", False))
+        if not pre_reserved:
+            await self._budget.reserve_one_query()
         await self._events.emit(
             "attempt_started",
             attack=attack.name,
@@ -569,6 +583,7 @@ class Orchestrator:
         # keeps a single shared judge (StrongREJECT) riding on top of the
         # signals without a loose regex silently over-claiming a full win.
         # No-op for configs without signals → verdict stays judge-only.
+        assert trace.verdict is not None
         upgraded = upgrade_verdict_for_signals(trace.verdict, fired_kinds)
         if upgraded != trace.verdict:
             trace.verdict = upgraded
@@ -922,7 +937,12 @@ class GridOrchestrator(Orchestrator):
 
     async def _iterate_pair(self, *, attack: AttackPlugin, behavior: Behavior) -> None:
         await self._events.emit("attack_started", attack=attack.name, behavior=behavior.id)
-        attempts_iter = attack.generate(behavior=behavior, target=self.target, budget=self.budget)
+        attempts_iter = attack.generate(
+            behavior=behavior,
+            target=self.target,
+            budget=self.budget,
+            context={"reserve_query": self._budget.reserve_one_query},
+        )
         # Per-(attack, behaviour) ``node_id → trace_id`` map. Scoped
         # to this iteration so TAP runs against different behaviours
         # don't accidentally cross-link via the shared synthetic
@@ -1078,7 +1098,12 @@ class MctsOrchestrator(Orchestrator):
             _Arm(
                 attack=a,
                 behavior=b,
-                iterator=a.generate(behavior=b, target=self.target, budget=self.budget),
+                iterator=a.generate(
+                    behavior=b,
+                    target=self.target,
+                    budget=self.budget,
+                    context={"reserve_query": self._budget.reserve_one_query},
+                ),
             )
             for a in self.attacks
             for b in self.behaviors
