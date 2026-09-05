@@ -97,6 +97,7 @@ def _parse_args() -> argparse.Namespace:
         "This is what the dashboard reads; pass --no-db to skip persistence.",
     )
     p.add_argument("--no-db", action="store_true", help="don't persist to a database")
+    p.add_argument("--run-id", help="use a caller-provided run id")
     p.add_argument(
         "--review-sample-budget",
         type=int,
@@ -121,6 +122,24 @@ def _parse_args() -> argparse.Namespace:
         help="mint the host doc through the logged-in browser (no Docs API / OAuth)",
     )
     p.add_argument("--doc-id", help="ground on an existing Doc/Sheet id (no API create)")
+    p.add_argument(
+        "--setup-var",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="template variable for setup_steps; repeat as needed",
+    )
+    p.add_argument(
+        "--skip-setup",
+        action="store_true",
+        help="do not execute the guide's setup_steps before the TAP run",
+    )
+    p.add_argument(
+        "--setup-settle-seconds",
+        type=float,
+        default=5.0,
+        help="wait after setup for Workspace indexing (default: 5)",
+    )
     return p.parse_args()
 
 
@@ -206,6 +225,13 @@ def main() -> None:
         _print_dry_run(guide, args.target_name, overrides, target_options)
         return
 
+    setup_variables: dict[str, str] = {}
+    for item in args.setup_var:
+        key, sep, value = item.partition("=")
+        if not sep or not key:
+            raise SystemExit(f"invalid --setup-var {item!r}; expected KEY=VALUE")
+        setup_variables[key] = value
+
     # DB persistence — what the dashboard reads and what the review queue /
     # PPI need. On by default; the review sampler is a no-op without it.
     session_factory = None
@@ -229,6 +255,10 @@ def main() -> None:
             output_dir=args.output_dir,
             session_factory=session_factory,
             review_sample_budget=args.review_sample_budget,
+            run_id=args.run_id,
+            execute_setup=not args.skip_setup,
+            setup_variables=setup_variables,
+            setup_settle_s=args.setup_settle_seconds,
             **overrides,
         )
     )
@@ -236,6 +266,8 @@ def main() -> None:
     stats = result.summary_stats
     print(f"\nrun {result.run_id}: {len(result.traces)} traces")
     print(f"summary: {stats.model_dump() if hasattr(stats, 'model_dump') else stats}")
+    if not result.traces:
+        raise SystemExit("assessment stopped before producing evidence")
     if args.output_dir:
         print(f"traces + replay bundles under {args.output_dir}")
     if session_factory is not None:
