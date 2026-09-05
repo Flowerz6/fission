@@ -2,75 +2,37 @@
 {% block title %}Runs · Fission{% endblock %}
 {% block content %}
 <style>
-  .runs-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-  .runs-head h1 { margin: 0; }
-  .runs-head .sub { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
-
-  .runlist { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
-  .runlist .head, .runlist .row {
-    display: grid;
-    grid-template-columns: 14px 1.6fr 1.2fr 0.8fr 0.7fr 1.4fr;
-    gap: 1rem; align-items: center; padding: 0.7rem 1rem;
-  }
-  .runlist .head { background: var(--surface-2); border-bottom: 1px solid var(--border); }
-  .runlist .head span { font-family: var(--sans); font-size: 0.75rem; text-transform: none; letter-spacing: normal; color: var(--muted); font-weight: 600; }
-  .runlist .row { border-top: 1px solid var(--border); text-decoration: none; color: inherit; transition: background 0.12s; }
-  .runlist .row:first-of-type { border-top: none; }
-  .runlist .row:hover { background: var(--surface-2); }
-
-  .st { width: 8px; height: 8px; flex: none; }
-  .st.done { background: var(--muted); } .st.live { background: var(--success); }
-  .rid { font-family: var(--font-mono); font-size: 0.86rem; font-weight: 600; color: var(--accent); }
-  .rmeta { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
-  .rtime, .rnum { font-family: var(--font-mono); font-size: 0.8rem; color: var(--fg-soft); font-variant-numeric: tabular-nums; }
-  .rnum .lo { color: var(--muted); }
-
-  .asr { display: flex; align-items: center; gap: 0.6rem; }
-  .asr .track { flex: 1; height: 7px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-  .asr .fill { height: 100%; }
-  .asr .val { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 650; font-variant-numeric: tabular-nums; width: 3.2em; text-align: right; }
-
-  .empty { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 2rem; color: var(--muted); font-size: 0.9rem; }
-  @media (max-width: 760px) {
-    .runlist .head, .runlist .row { grid-template-columns: 12px 1.4fr 0.9fr; }
-    .runlist .c-strat, .runlist .c-traces, .runlist .head .c-strat, .runlist .head .c-traces { display: none; }
-  }
+  .runs-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1.35rem}
+  .runs-head h1{margin:.15rem 0 0}.runs-head .sub{font:400 .76rem var(--mono);color:var(--muted)}
+  .surface-group{margin:0 0 1.4rem}.surface-summary{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.8rem 1rem;background:var(--surface-2);border:1px solid var(--border);border-bottom:0;border-radius:var(--r) var(--r) 0 0}
+  .surface-summary h2{font-size:1.05rem;margin:0}.surface-kpis{display:flex;gap:1.1rem;font:600 .72rem var(--mono);color:var(--muted)}
+  .runlist{border:1px solid var(--border);border-radius:0 0 var(--r) var(--r);overflow:hidden;background:var(--surface)}
+  .runlist .head,.runlist .row{display:grid;grid-template-columns:14px 1.7fr 1fr .65fr .7fr 1.15fr;gap:1rem;align-items:center;padding:.72rem 1rem}
+  .runlist .head{border-bottom:1px solid var(--border);color:var(--muted);font-size:.73rem;font-weight:600}.runlist .row{border-top:1px solid var(--border);text-decoration:none;color:inherit}.runlist .row:first-of-type{border-top:0}.runlist .row:hover{background:var(--surface-2)}
+  .st{width:8px;height:8px;background:var(--muted)}.st.live{background:var(--success)}
+  .rname{font-weight:650;color:var(--ink)}.rid,.rnum,.rtime{font-family:var(--mono);font-size:.73rem;color:var(--muted)}.rid{margin-top:.18rem}.rnum,.rtime{font-size:.8rem;color:var(--ink-soft)}
+  .asr{display:flex;align-items:center;gap:.55rem}.asr .track{flex:1;height:7px;background:var(--surface-2);border:1px solid var(--border);overflow:hidden}.asr .fill{height:100%}.asr .val{width:3.4em;text-align:right;font:650 .82rem var(--mono)}
+  .empty{border:1px dashed var(--border-strong);border-radius:var(--r);padding:2rem;color:var(--muted)}
+  @media(max-width:800px){.runlist .head,.runlist .row{grid-template-columns:12px 1.6fr .8fr}.c-time,.c-traces,.c-success{display:none}.surface-kpis{display:none}}
 </style>
-
-<p class="eyebrow">Campaign</p>
 <div class="runs-head">
-  <h1>Runs</h1>
-  <span class="sub">{{ runs|length }} run{{ 's' if runs|length != 1 }} · most recent first</span>
+  <div><p class="eyebrow">Assessment history</p><h1>Runs by surface</h1></div>
+  <span class="sub">{{ runs|length }} completed run{{ '' if runs|length == 1 else 's' }} with verified findings</span>
 </div>
-
-{% if runs %}
-<div class="runlist">
-  <div class="head">
-    <span></span><span>Run</span><span class="c-strat">Started · target</span>
-    <span class="c-traces">Traces</span><span>Success</span><span>Attack success rate</span>
+{% for group in groups %}
+<section class="surface-group">
+  <div class="surface-summary"><h2>{{ group.label }}</h2><div class="surface-kpis"><span>{{ group.runs|length }} run{{ "" if group.runs|length == 1 else "s" }}</span><span>{{ group.attempts }} attempts</span><span>{{ group.findings }} successful</span><span>{{ '%.1f'|format(group.asr * 100) }}% aggregate ASR</span></div></div>
+  <div class="runlist">
+    <div class="head"><span></span><span>Assessment</span><span class="c-time">Started</span><span class="c-traces">Attempts</span><span class="c-success">Success</span><span>Attack success rate</span></div>
+    {% for run in group.runs %}{% set asr = run.summary.get('overall_asr', 0.0) %}{% set pct = (asr * 100)|round(0, 'floor')|int %}
+    <a class="row" href="/runs/{{ run.id }}" onclick="return openRunPanel(event, '{{ run.id }}', '{{ run_display_name(run) }}')">
+      <span class="st {{ 'done' if run.finished_at else 'live' }}"></span>
+      <div><div class="rname">{{ run_display_name(run) }}</div><div class="rid">{{ run.id }} · {{ run.strategy }}</div></div>
+      <div class="rtime c-time">{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}</div>
+      <div class="rnum c-traces">{{ run.summary.get('total_traces', 0) }}</div><div class="rnum c-success">{{ run.summary.get('successful_traces', 0) }}</div>
+      <div class="asr"><span class="track"><span class="fill" style="width:{{ pct }}%;background:{{ 'var(--error)' if asr >= 0.66 else ('var(--partial)' if asr >= 0.33 else 'var(--refused)') }}"></span></span><span class="val">{{ '%.1f'|format(asr * 100) }}%</span></div>
+    </a>{% endfor %}
   </div>
-  {% for run in runs %}
-  {% set asr = run.summary.get('overall_asr', 0.0) %}
-  {% set pct = (asr * 100)|round(0, 'floor')|int %}
-  <a class="row" href="/runs/{{ run.id }}" onclick="return openRunPanel(event, '{{ run.id }}', '{{ run.id }}')">
-    <span class="st {{ 'done' if run.finished_at else 'live' }}" title="{{ 'finished' if run.finished_at else 'in progress' }}"></span>
-    <div>
-      <div class="rid">{{ run.id }}</div>
-      <div class="rmeta">{{ run.strategy }} · {{ run.target_name }}</div>
-    </div>
-    <div class="rtime c-strat">
-      {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}
-    </div>
-    <div class="rnum c-traces">{{ run.summary.get('total_traces', 0) }}</div>
-    <div class="rnum">{{ run.summary.get('successful_traces', 0) }}<span class="lo"> / {{ run.summary.get('total_traces', 0) }}</span></div>
-    <div class="asr">
-      <span class="track"><span class="fill" style="width: {{ pct }}%; background: {{ 'var(--error)' if asr >= 0.66 else ('var(--partial)' if asr >= 0.33 else 'var(--refused)') }}"></span></span>
-      <span class="val">{{ '%.0f'|format(asr * 100) }}%</span>
-    </div>
-  </a>
-  {% endfor %}
-</div>
-{% else %}
-<div class="empty">No runs yet. Start one with <code>advtest run --config &lt;path&gt;.yaml</code>.</div>
-{% endif %}
+</section>
+{% else %}<div class="empty">No runs yet. Completed assessments with verified findings will appear here.</div>{% endfor %}
 {% endblock %}

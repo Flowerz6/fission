@@ -34,7 +34,7 @@
     <div class="kpi"><div class="k">Exposed</div><div class="v" style="color:var(--crit)">{{ totals.exposed }}</div><div class="m">≥1 finding</div></div>
     <div class="kpi"><div class="k">Findings</div><div class="v">{{ totals.findings }}</div><div class="m">across surfaces</div></div>
     <div class="kpi"><div class="k">Attempts</div><div class="v">{{ totals.attempts }}</div><div class="m">{{ totals.runs }} runs</div></div>
-    <div class="kpi"><div class="k">Runs</div><div class="v">{{ totals.runs }}</div><div class="m">campaigns</div></div>
+    <div class="kpi"><div class="k">Runs</div><div class="v">{{ totals.runs }}</div><div class="m">completed</div></div>
     <div class="kpi"><div class="k">Gold set</div><div class="v">{{ totals.gold }}</div><div class="m">labelled traces</div></div>
   </div>
 </section>
@@ -53,7 +53,7 @@
           onclick="loadSurfacePanel('{{ s.target_name }}','{{ s.label }}')">
     <div class="surface-name"><span class="s-app">{{ s.label }}</span><span class="s-region">{{ s.region }}</span></div>
     <div class="inv-num">{{ s.attempts }}<span class="sub">traces</span></div>
-    <div class="inv-num">{{ s.runs }}<span class="sub">campaign{{ '' if s.runs == 1 else 's' }}</span></div>
+    <div class="inv-num">{{ s.runs }}<span class="sub">run{{ '' if s.runs == 1 else 's' }}</span></div>
     <div class="findings-chips">
       {% if s.sev_chips %}
         {% for sev, cnt in s.sev_chips %}

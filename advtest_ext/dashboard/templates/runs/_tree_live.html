@@ -14,8 +14,8 @@
 {# tree.css / tree.js are loaded globally in base.html (so this partial also
    mounts inside the slide-over, where injected <script> tags wouldn't run). #}
 {% set tg = tree_graph %}
-{% set ns = namespace(any=false) %}
-{% for phase in tg.phases %}{% if phase.cells %}{% set ns.any = true %}{% endif %}{% endfor %}
+{% set ns = namespace(any=false, cell_count=0) %}
+{% for phase in tg.phases %}{% if phase.cells %}{% set ns.any = true %}{% set ns.cell_count = ns.cell_count + (phase.cells | length) %}{% endif %}{% endfor %}
 
 <section id="run-tree-live">
   {% if not ns.any %}
@@ -24,13 +24,13 @@
     {% if not run.finished_at %}(this view updates live as branches land){% endif %}
   </p>
   {% else %}
-  <div class="tree-explorer"
+  <div class="tree-explorer{{ ' single-cell' if ns.cell_count == 1 }}"
        data-run-id="{{ run.id }}"
        data-live="{{ 0 if run.finished_at else 1 }}"
        data-tree-hash="{{ tg.hash }}">
 
     {# ---- navigator ---- #}
-    <div class="cell-nav">
+    {% if ns.cell_count > 1 %}<div class="cell-nav">
       {% for phase in tg.phases %}
       {% if phase.label %}<div class="cell-nav-group">{{ phase.label }} &middot; {{ phase.n_success }}/{{ phase.n_traces }}</div>{% endif %}
       {% for cell in phase.cells %}
@@ -44,7 +44,7 @@
       </button>
       {% endfor %}
       {% endfor %}
-    </div>
+    </div>{% endif %}
 
     {# ---- viewer ---- #}
     <div class="tree-viewer">
@@ -64,12 +64,11 @@
         <div class="tree-legend">
           <span class="lg"><span class="sw" style="background:#e8f3ee;border:1.5px solid #57a880"></span>success</span>
           <span class="lg"><span class="sw" style="background:#f8f0dd;border:1.5px solid #cf9a4c"></span>partial</span>
-          <span class="lg"><span class="sw" style="background:#f4f4f8;border:1.5px solid #948f9f"></span>refused</span>
-          <span class="lg"><span class="sw" style="background:#faebec;border:1.5px dashed #d5595b"></span>pruned</span>
+          <span class="lg"><span class="sw" style="background:#faebec;border:1.5px solid #d5595b"></span>refused</span>
         </div>
         <div class="tree-detail">
           <div class="td-h"><span class="td-t">Select a node</span></div>
-          <p class="td-hint">Each node is one conversation. Click a node to read its transcript.</p>
+          <p class="td-hint">Each node is one conversation turn. Select a node to inspect its prompt, response, verdict, and evidence.</p>
         </div>
         <script type="application/json" class="cell-data">{"nodes": {{ cell.nodes | tojson }}, "edges": {{ cell.edges | tojson }}}</script>
       </div>

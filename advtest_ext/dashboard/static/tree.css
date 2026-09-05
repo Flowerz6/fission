@@ -24,6 +24,7 @@
   overflow: hidden;
   margin-bottom: 1.35rem;
 }
+.tree-explorer.single-cell { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 760px) {
   .tree-explorer { grid-template-columns: 1fr; }
 }
@@ -166,10 +167,7 @@
   margin: 0.55rem 0.9rem;
   border: 1px solid var(--border, #dbe2df);
   border-radius: var(--radius-sm, 2px);
-  background:
-    radial-gradient(circle at 1px 1px, rgba(120, 120, 120, 0.12) 1px, transparent 0);
-  background-size: 22px 22px;
-  background-color: #fbfcfd;
+  background:#fbfcfd;
 }
 
 .tree-legend {

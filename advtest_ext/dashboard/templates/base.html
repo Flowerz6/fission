@@ -26,10 +26,11 @@
     @font-face{font-family:"Inter";font-weight:400;font-style:normal;font-display:swap;src:url('/static/fonts/inter-400.woff2') format('woff2');}
     @font-face{font-family:"Inter";font-weight:600;font-style:normal;font-display:swap;src:url('/static/fonts/inter-600.woff2') format('woff2');}
     @font-face{font-family:"Spectral";font-weight:600;font-style:normal;font-display:swap;src:url('/static/fonts/spectral-600.woff2') format('woff2');}
+    @font-face{font-family:"Source Serif 4";font-weight:600;font-style:normal;font-display:swap;src:url('/static/fonts/source-serif-4-600.ttf') format('truetype');}
 
     :root {
       /* Type families */
-      --serif:"Spectral", Georgia, "Times New Roman", serif;
+      --serif:"Source Serif 4", Georgia, "Times New Roman", serif;
       --sans:"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       --mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
       /* Legacy aliases used across the page templates */
@@ -56,11 +57,11 @@
       --error:#d5595b;   --error-bg:#faebec;
       --code-bg:#f7f4ed; --code-fg:#494339;
 
-      --shadow-sm:0 1px 2px rgba(90,70,45,0.05), 0 1px 3px rgba(90,70,45,0.04);
-      --shadow:0 2px 6px rgba(90,70,45,0.06), 0 10px 28px rgba(90,70,45,0.05);
-      --shadow-lg:0 12px 46px rgba(80,55,30,0.14);
-      --r:12px; --r-sm:8px; --r-pill:999px;
-      --radius:12px; --radius-sm:8px;
+      --shadow-sm:none;
+      --shadow:0 1px 3px rgba(33,30,26,0.08);
+      --shadow-lg:0 8px 24px rgba(33,30,26,0.12);
+      --r:6px; --r-sm:4px; --r-pill:999px;
+      --radius:6px; --radius-sm:4px;
     }
     /* Committed single light theme — a saved data-theme never darkens. */
     :root[data-theme="light"], :root[data-theme="dark"]{
@@ -109,6 +110,13 @@
       display: grid; place-items: center; font-size: 0.66rem; font-weight: 700; }
 
     main { min-width: 0; padding: 2.8rem 3rem 4.5rem; max-width: 1120px; }
+    .presentation-toggle { border:1px solid var(--border); background:var(--surface); color:var(--muted); padding:.35rem .55rem; border-radius:var(--r-sm); font:600 .68rem var(--sans); cursor:pointer; }
+    body.presentation .app { grid-template-columns:1fr; }
+    body.presentation aside.sidebar { display:none; }
+    body.presentation main { max-width:1380px; width:100%; margin:0 auto; padding:2.4rem 3.5rem 4rem; }
+    body.presentation .technical-id, body.presentation .developer-only { display:none !important; }
+    .presentation-exit { display:none; position:fixed; z-index:90; right:1.25rem; top:1rem; border:1px solid var(--border); background:var(--surface); color:var(--ink-soft); padding:.45rem .7rem; border-radius:var(--r-sm); font:600 .72rem var(--sans); cursor:pointer; box-shadow:var(--shadow); }
+    body.presentation .presentation-exit { display:block; }
 
     /* ---- Typography ---- */
     h1, h2, h3 { color: var(--ink); font-family: var(--serif); font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; text-wrap: balance; }
@@ -251,7 +259,7 @@
       color: var(--ink-soft); background: var(--surface); border: 1px solid var(--border-2); border-radius: var(--r-pill);
       text-decoration: none; transition: all 0.12s; cursor: pointer; }
     .btn:hover { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-soft); text-decoration: none; }
-    .hero-stats { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-top: 1.35rem; }
+    .hero-stats { display: grid; grid-template-columns: 1.8fr repeat(4, 1fr); gap: 1rem; margin-top: 1.35rem; }
     .hero-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1.25rem 1.4rem; }
     .hero-stat .label { font-size: 0.75rem; color: var(--muted); text-transform: none; letter-spacing: normal; font-weight: 600; }
     .hero-stat .value-xl { font-family: var(--serif); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 0.35rem; line-height: 1.05; }
@@ -492,19 +500,21 @@
           <a class="nav-item" href="/playbooks" data-path="/playbooks"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3h7a1 1 0 0 1 1 1v9l-4.5-2L3 13V4a1 1 0 0 1 1-1z"/></svg>Playbooks</a>
         </div></div>
 
-        <div class="nav-group"><button type="button" onclick="this.parentElement.classList.toggle('collapsed')">Campaign <span class="caret">&#9662;</span></button><div class="nav-list">
+        <div class="nav-group"><button type="button" onclick="this.parentElement.classList.toggle('collapsed')">Assessments <span class="caret">&#9662;</span></button><div class="nav-list">
+          <a class="nav-item" href="/runs/new" data-path="/runs/new"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l7 5-7 5z"/></svg>New run</a>
           <a class="nav-item" href="/runs" data-path="/runs"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2v6l4 2"/><circle cx="8" cy="8" r="6"/></svg>Runs</a>
           <a class="nav-item" href="/findings" data-path="/findings"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4h12M2 8h8M2 12h5"/></svg>Findings</a>
           <a class="nav-item" href="/hitl" data-path="/hitl"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 8l3.5 3.5L13 5"/></svg>Review</a>
         </div></div>
       </nav>
-      <div class="side-foot"><span class="who"><span class="av">OP</span>operator</span></div>
+      <div class="side-foot"><span class="who"><span class="av">AD</span>Admin</span></div>
     </aside>
 
     <main>
       {% block content %}{% endblock %}
     </main>
   </div>
+  <button type="button" class="presentation-exit" onclick="togglePresentation()">Exit presentation</button>
 
   {# Shared slide-over shell (design-system infrastructure). Pages may
      drive it via openPanel(title, html); inert until then. #}
@@ -515,6 +525,10 @@
   </aside>
 
   <script>
+    function applyPresentation() { document.body.classList.toggle("presentation", localStorage.getItem("fission-presentation") === "1"); }
+    function togglePresentation() { localStorage.setItem("fission-presentation", document.body.classList.contains("presentation") ? "0" : "1"); applyPresentation(); }
+    applyPresentation();
+
     // Slide-over open/close (shared shell).
     function openPanel(title, html) {
       var t = document.getElementById('p-title'); if (t) t.textContent = title || '';

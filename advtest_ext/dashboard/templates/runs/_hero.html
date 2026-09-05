@@ -10,13 +10,12 @@
         {% endif %}>
   <div class="run-header-row">
     <div>
-      <div class="muted" style="font-size: 0.78rem; text-transform: none; letter-spacing: normal; font-weight: 600;">Run</div>
-      <h1 style="margin: 0.15rem 0 0.4rem 0;"><code style="font-size: 0.95em; padding: 0;">{{ run.id }}</code>
+      <div class="muted" style="font-size: 0.78rem; font-weight: 600;">{{ surface_name }} · Assessment run</div>
+      <h1 style="margin: 0.15rem 0 0.25rem 0;">{{ run_name }}
         {% if not run.finished_at %}<span class="pill error" style="font-size: 0.6em; vertical-align: middle;">LIVE</span>{% endif %}
       </h1>
-      <p class="muted" style="margin: 0;">
-        Strategy <strong>{{ run.strategy }}</strong> &middot;
-        Target <strong>{{ run.target_name }}</strong> &middot;
+      <p class="muted" style="margin: 0;"><span class="technical-id">{{ run.id }} &middot; </span>
+        {{ run_metrics.scenarios }} scenarios &middot; {{ run_metrics.techniques }} techniques &middot;
         {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}
         {% if run.finished_at %}&rarr; {{ run.finished_at.strftime('%H:%M') }}{% endif %}
       </p>
@@ -76,9 +75,8 @@
       <div class="label">Successful</div>
       <div class="value">{{ run.summary.get('successful_traces', 0) }}<span class="unit"> / {{ run.summary.get('total_traces', 0) }}</span></div>
     </div>
-    <div class="hero-stat">
-      <div class="label">Findings</div>
-      <div class="value">{{ findings|length }}</div>
-    </div>
+    <div class="hero-stat"><div class="label">Conversations</div><div class="value">{{ run_metrics.conversations }}</div></div>
+    <div class="hero-stat"><div class="label">Techniques</div><div class="value">{{ run_metrics.techniques }}</div></div>
+    <div class="hero-stat"><div class="label">Findings</div><div class="value">{{ findings|length }}</div></div>
   </div>
 </header>

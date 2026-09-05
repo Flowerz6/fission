@@ -47,6 +47,15 @@ def _run_asr(run: Any) -> float:
         return 0.0
 
 
+def run_has_success(run: Any) -> bool:
+    """Whether a run has a non-zero attack success rate.
+
+    Zero-ASR runs remain durable and directly addressable, but are omitted
+    from the presentation-facing run history and overview.
+    """
+    return _run_asr(run) > 0.0
+
+
 def _drift_counts(traces: list[Any]) -> tuple[int, int]:
     """Count drift events recorded in trace metadata.
 
@@ -77,7 +86,7 @@ def _drift_counts(traces: list[Any]) -> tuple[int, int]:
 
 def build_overview(session: Session, *, run_limit: int = 200) -> OverviewStats:
     """Aggregate cross-run metrics for the landing page."""
-    runs = list_runs(session, limit=run_limit)
+    runs = [run for run in list_runs(session, limit=run_limit) if run_has_success(run)]
     findings = list_findings(session, limit=10_000)
 
     stats = OverviewStats()
@@ -140,4 +149,4 @@ def build_overview(session: Session, *, run_limit: int = 200) -> OverviewStats:
     return stats
 
 
-__all__ = ["OverviewStats", "build_overview"]
+__all__ = ["OverviewStats", "build_overview", "run_has_success"]

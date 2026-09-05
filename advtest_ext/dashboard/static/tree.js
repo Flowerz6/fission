@@ -26,8 +26,8 @@
   var COL = {
     success: { bg: "#e8f3ee", br: "#57a880", tx: "#1f5a3c" },
     partial: { bg: "#f8f0dd", br: "#cf9a4c", tx: "#7a5716" },
-    refused: { bg: "#f4f4f8", br: "#948f9f", tx: "#4a453d" },
-    pruned:  { bg: "#faebec", br: "#d5595b", tx: "#8a3030" },
+    refused: { bg: "#faebec", br: "#d5595b", tx: "#8a3030" },
+    pruned:  { bg: "#f1eaf5", br: "#9b6aaa", tx: "#64456f" },
     // The synthetic playbook root — a warm neutral "container" look, distinct
     // from the coloured verdict nodes it fans out into.
     root:    { bg: "#f3efe7", br: "#c7b49f", tx: "#5a5045" },
@@ -120,7 +120,12 @@
       ? '<a class="td-link" href="/traces/' + esc(d.trace_id) + '">open full trace &rarr;</a>'
       : "";
     var body;
-    if (d.u || d.a) {
+    if (d.email || d.injection) {
+      body = '<div class="td-transcript">' +
+        (d.email ? '<div><span class="u">delivered email:</span> ' + esc(d.email) + "</div>" : "") +
+        (d.injection ? '<div><span class="a">hidden white-text injection:</span> ' + esc(d.injection) + "</div>" : "") +
+        "</div>";
+    } else if (d.u || d.a) {
       body = '<div class="td-transcript">' +
         (d.u ? '<div><span class="u">prompt:</span> ' + esc(d.u) + "</div>" : "") +
         (d.a ? '<div><span class="a">response:</span> ' + esc(d.a) + "</div>" : "") +
@@ -138,7 +143,7 @@
     var el = panel.querySelector(".tree-detail");
     if (el) {
       el.innerHTML = '<div class="td-h"><span class="td-t">Select a node</span></div>' +
-        '<p class="td-hint">Each node is one conversation. Click a node to read its transcript.</p>';
+        '<p class="td-hint">Each node is one conversation turn. Select a node to inspect its prompt, response, verdict, and evidence.</p>';
     }
   }
 
@@ -254,6 +259,7 @@
           ctrl.userZoomed = false;  // user asked to reset the view
           ctrl.cy.animate({ fit: { padding: 28 } }, { duration: 260 });
         }
+        return;
       }
     });
 

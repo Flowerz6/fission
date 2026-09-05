@@ -2,12 +2,18 @@
 {% block title %}Overview · Fission{% endblock %}
 {% block content %}
 <style>
-  .ov-head { margin-bottom: 1.25rem; }
+  .ov-head { margin-bottom: 1.25rem; display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; }
   .ov-head h1 { margin: 0.3rem 0 0.2rem; }
   .ov-head .sub { color: var(--muted); font-family: var(--sans); font-size: 0.85rem; }
+  .ov-actions { display:flex; gap:.5rem; flex-wrap:wrap; padding-top:.25rem; }
+  .ov-action { display:inline-flex; align-items:center; padding:.48rem .8rem; border:1px solid var(--border-strong); border-radius:var(--r-sm); background:var(--surface); color:var(--ink-soft); font-size:.75rem; font-weight:600; white-space:nowrap; }
+  .ov-action:hover { text-decoration:none; border-color:var(--accent); color:var(--accent-ink); }
+  .ov-action.primary { color:#fff; background:var(--accent); border-color:var(--accent); }
+  .ov-action.primary:hover { color:#fff; background:var(--accent-hover); }
+  @media(max-width:720px){.ov-head{display:block}.ov-actions{margin-top:.9rem}}
 
   .ov-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-  .ov-kpis { grid-template-columns: 1.7fr 1fr 1fr; }
+  .ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   @media (max-width: 960px) { .ov-kpis { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 600px) { .ov-kpis { grid-template-columns: 1fr; } }
   .cell { background: var(--surface); padding: 1rem 1.15rem; min-width: 0; }
@@ -90,15 +96,21 @@
 </style>
 
 <div class="ov-head">
-  <div class="eyebrow">Command center</div>
-  {% if latest %}
-  <h1>{{ latest.target_name }}</h1>
-  <div class="sub">latest run <a href="/runs/{{ latest.id }}">{{ latest.id }}</a> ·
-    {{ s.total_runs }} runs · {{ s.total_traces }} traces</div>
-  {% else %}
-  <h1>Overview</h1>
-  <div class="sub">no runs yet</div>
-  {% endif %}
+  <div>
+    {% if latest %}
+    <h1>Command Center</h1>
+    <div class="sub">latest assessment <a href="/runs/{{ latest.id }}">{{ run_display_name(latest) }}</a> ·
+      {{ s.total_runs }} runs · {{ s.total_traces }} attempts</div>
+    {% else %}
+    <h1>Command Center</h1>
+    <div class="sub">no runs yet</div>
+    {% endif %}
+  </div>
+  <div class="ov-actions">
+    <a class="ov-action primary" href="/runs/new">New run</a>
+    {% if latest %}<a class="ov-action" href="/runs/{{ latest.id }}">View latest run</a>{% endif %}
+    <a class="ov-action" href="/findings">Review findings</a>
+  </div>
 </div>
 
 {% if not latest %}
@@ -109,59 +121,14 @@
 </div>
 {% else %}
 
+<div class="ov-grid" style="grid-template-columns:repeat({{ surface_rollup|length }},1fr);margin-bottom:1rem">
+{% for surface in surface_rollup %}<a class="cell" href="/runs" style="text-decoration:none"><div class="ch"><h3>{{ surface.label }}</h3></div><div class="num kbig">{{ "%.1f"|format(surface.asr * 100) }}<span class="u">%</span></div><div class="kmini">{{ surface.successes }} successful · {{ surface.attempts }} attempts</div></a>{% endfor %}
+</div>
+
 {# KPI row #}
 <div class="ov-grid ov-kpis">
-  <div class="cell hero">
-    <div class="ch">
-      <h3>Attack success rate</h3>
-      {% if ppi.method == 'ppi' %}<span class="tagline acc">PPI · calibrated</span>
-      {% else %}<span class="tagline warm">oracle · uncalibrated</span>{% endif %}
-    </div>
-    <div class="num big">{{ '%.1f'|format(ppi.asr * 100) }}<span class="u">%</span>
-      {% if ppi.method == 'ppi' %}<span class="pm">± {{ '%.1f'|format(ppi.ci_half_width * 100) }}</span>{% endif %}
-    </div>
-
-    {% if ppi.method == 'ppi' %}
-    {% set x = (ppi.asr * 520)|round(1) %}
-    {% set lo = (ppi.ci_low * 520)|round(1) %}
-    {% set hi = (ppi.ci_high * 520)|round(1) %}
-    {% set orc = (ppi.oracle_asr * 520)|round(1) %}
-    <div class="scale">
-      <svg viewBox="0 0 520 58" preserveAspectRatio="none" role="img"
-           aria-label="ASR {{ '%.1f'|format(ppi.asr*100) }} percent with 95 percent CI">
-        {% for gx in [0, 52, 104, 156, 208, 260, 312, 364, 416, 468, 519] %}
-        <line class="{{ 'tickmaj' if loop.index0 % 2 == 0 else 'tick' }}" x1="{{ gx }}" y1="{{ 34 if loop.index0 % 2 == 0 else 36 }}" x2="{{ gx }}" y2="42"/>
-        {% endfor %}
-        <text x="0" y="54">0</text><text x="240" y="54">50</text><text x="500" y="54">100</text>
-        <line class="fill" x1="0" y1="24" x2="{{ x }}" y2="24"/>
-        <line class="oracle" x1="{{ orc }}" y1="8" x2="{{ orc }}" y2="30"/>
-        <text x="{{ (orc + 4)|round(1) }}" y="14">oracle {{ '%.0f'|format(ppi.oracle_asr*100) }}</text>
-        <line class="cap" x1="{{ lo }}" y1="14" x2="{{ lo }}" y2="34"/>
-        <line class="cap" x1="{{ hi }}" y1="14" x2="{{ hi }}" y2="34"/>
-        <line class="cap" x1="{{ lo }}" y1="24" x2="{{ hi }}" y2="24" stroke-dasharray="1 2"/>
-        <line class="cap" x1="{{ x }}" y1="4" x2="{{ x }}" y2="30" stroke-width="2"/>
-      </svg>
-    </div>
-    <div class="dl">
-      <div><div class="k">Oracle ASR</div><div class="v">{{ '%.1f'|format(ppi.oracle_asr*100) }}%</div></div>
-      <div><div class="k">Rectifier</div><div class="v">{{ '%+.1f'|format(-ppi.rectifier*100) }}%</div></div>
-      <div><div class="k">Partial</div><div class="v">{{ n_partial }}</div></div>
-      <div><div class="k">Gold labels</div><div class="v">{{ ppi.n_labeled }}</div></div>
-      <div><div class="k">95% CI</div><div class="v">{{ '%.0f'|format(ppi.ci_low*100) }}–{{ '%.0f'|format(ppi.ci_high*100) }}</div></div>
-    </div>
-    {% else %}
-    <div class="kmini" style="margin-top:1rem">Uncalibrated — <a href="/hitl">label the review queue</a> for a rectified CI.</div>
-    <div class="dl">
-      <div><div class="k">Traces</div><div class="v">{{ ppi.n_total }}</div></div>
-      <div><div class="k">Partial</div><div class="v">{{ n_partial }}</div></div>
-      <div><div class="k">Gold labels</div><div class="v">{{ queue.gold }}</div></div>
-    </div>
-    {% endif %}
-  </div>
-
   <div class="cell">
-    <div class="ch"><h3>Findings</h3>
-      <span class="tagline warm">{{ s.findings_by_severity.get('critical', 0) }} critical</span></div>
+    <div class="ch"><h3>Findings</h3></div>
     <div class="num kbig">{{ s.total_findings }}</div>
     <div class="kmini">{{ s.findings_by_severity.get('high', 0) }} high · {{ s.findings_by_severity.get('med', 0) }} med</div>
   </div>

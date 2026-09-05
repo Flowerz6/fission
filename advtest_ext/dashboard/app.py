@@ -50,6 +50,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from advtest_ext.dashboard.live_tests import LiveTestController
+from advtest_ext.dashboard.presentation import (
+    run_display_name,
+    run_surface_key,
+    run_surface_label,
+    surface_label,
+)
 from advtest_ext.dashboard.registry import list_adapters, list_attacks
 from advtest_ext.dashboard.tree import (
     build_phase_forests as _build_phase_forests,
@@ -103,6 +110,34 @@ _STATIC_DIR = Path(__file__).resolve().parent / "static"
 # implementation and can't drift on family-bucketing or aggregation.
 
 
+def _full_responses_for_traces(traces: list[Any]) -> dict[str, str]:
+    """Return the best response text for each trace.
+
+    Legacy multi-turn runs reused capture filenames after every conversation
+    reset, so later nodes overwrote earlier JSONL files.  When a capture path
+    is shared, the persisted raw_response is the only response still tied to
+    the correct trace.  New runs have unique paths and retain the richer
+    intercepted stream.
+    """
+    from collections import Counter
+
+    from advtest_ext.dashboard.intercepted_extract import extract_full_response
+
+    rows = list(traces)
+    paths = [
+        str(path)
+        for trace in rows
+        if (path := (trace.raw_response_data or {}).get("intercepted_traffic_path"))
+    ]
+    counts = Counter(paths)
+    responses: dict[str, str] = {}
+    for trace in rows:
+        path = (trace.raw_response_data or {}).get("intercepted_traffic_path")
+        captured = extract_full_response(path) if path and counts[str(path)] == 1 else ""
+        responses[trace.id] = captured or trace.raw_response or ""
+    return responses
+
+
 def _tree_state_hash(phases: list[dict[str, Any]], *, finished: bool) -> str:
     """A short fingerprint of everything the live attack-tree renders:
     every node's id, verdict, depth, parent and score, plus whether the
@@ -144,6 +179,14 @@ class ReviewSubmission(BaseModel):
     reason: str = ""
     reviewer_id: str = ""
     review_seconds: int = Field(default=0, ge=0)
+
+
+class LiveTestStart(BaseModel):
+    """Explicit acknowledgement for a workflow that drives live accounts."""
+
+    confirmed: bool = False
+    playbook: str | None = None
+    branching_factor: int | None = Field(default=None, ge=1, le=5)
 
 
 def _hitl_blind_pct() -> int:
@@ -259,6 +302,17 @@ def build_overview_context(session: Session) -> dict[str, Any]:
         "first_asr": trend[0]["asr"] if trend else 0.0,
         "last_asr": trend[-1]["asr"] if trend else 0.0,
     }
+    surface_rollup: dict[str, dict[str, Any]] = {}
+    for item in stats.recent_runs:
+        label = run_surface_label(item)
+        slot = surface_rollup.setdefault(
+            label, {"label": label, "runs": 0, "attempts": 0, "successes": 0}
+        )
+        slot["runs"] += 1
+        slot["attempts"] += int((item.summary or {}).get("total_traces", 0) or 0)
+        slot["successes"] += int((item.summary or {}).get("successful_traces", 0) or 0)
+    for slot in surface_rollup.values():
+        slot["asr"] = slot["successes"] / slot["attempts"] if slot["attempts"] else 0.0
     return {
         "s": stats,
         "latest": latest,
@@ -271,6 +325,8 @@ def build_overview_context(session: Session) -> dict[str, Any]:
         "trend": trend,
         "trend_svg": trend_svg,
         "n_partial": n_partial,
+        "surface_rollup": list(surface_rollup.values()),
+        "run_display_name": run_display_name,
     }
 
 
@@ -318,12 +374,15 @@ def build_surfaces_context(session: Session) -> dict[str, Any]:
         .group_by(Trace.target_name)
         .all()
     )
-    finding_counts = dict(
-        session.query(Trace.target_name, func.count(Finding.id))
-        .join(Finding, Finding.trace_id == Trace.id)
-        .group_by(Trace.target_name)
-        .all()
-    )
+    finding_counts: dict[str, int] = {
+        name: count
+        for name, count in (
+            session.query(Trace.target_name, func.count(Finding.id))
+            .join(Finding, Finding.trace_id == Trace.id)
+            .group_by(Trace.target_name)
+            .all()
+        )
+    }
     sev_by_surface: dict[str, dict[str, int]] = defaultdict(dict)
     for tn, sev, cnt in (
         session.query(Trace.target_name, Finding.severity, func.count(Finding.id))
@@ -333,9 +392,7 @@ def build_surfaces_context(session: Session) -> dict[str, Any]:
     ):
         sev_by_surface[tn][sev] = cnt
     behaviors_by_surface: dict[str, list[str]] = defaultdict(list)
-    for tn, beh in (
-        session.query(Trace.target_name, Trace.behavior_id).distinct().all()
-    ):
+    for tn, beh in session.query(Trace.target_name, Trace.behavior_id).distinct().all():
         behaviors_by_surface[tn].append(beh)
 
     surfaces: list[dict[str, Any]] = []
@@ -446,7 +503,8 @@ def build_surface_panel_context(session: Session, target_name: str) -> dict[str,
         if fired:
             sig_rows[name][0] += int(cnt)
     signals = [
-        {"name": name, "fired": vals[0], "total": vals[1]} for name, vals in sorted(sig_rows.items())
+        {"name": name, "fired": vals[0], "total": vals[1]}
+        for name, vals in sorted(sig_rows.items())
     ]
     n_judged = int(
         session.query(func.count(func.distinct(JudgeScore.trace_id)))
@@ -484,6 +542,26 @@ def build_surface_panel_context(session: Session, target_name: str) -> dict[str,
     }
 
 
+def _load_search_report(run: Any) -> dict[str, Any] | None:
+    """Load a run's TAP search-coverage report (``tap_search_report.json``)
+    from its on-disk artifact root, if present. Returns ``None`` when the run
+    has no output_dir or the file is absent, so the coverage panel hides
+    gracefully rather than inventing numbers."""
+    import json
+
+    out_dir = getattr(run, "output_dir", None)
+    if not out_dir:
+        return None
+    path = Path(str(out_dir)) / "tap_search_report.json"
+    try:
+        if path.is_file():
+            data: dict[str, Any] = json.loads(path.read_text())
+            return data
+    except (OSError, ValueError):  # pragma: no cover - defensive
+        return None
+    return None
+
+
 def _load_judge_benchmark(output_dir: Path | None = None) -> dict[str, Any] | None:
     """Load the JailbreakBench held-out benchmark JSON, if present.
 
@@ -501,7 +579,8 @@ def _load_judge_benchmark(output_dir: Path | None = None) -> dict[str, Any] | No
     for path in candidates:
         try:
             if path.is_file():
-                return json.loads(path.read_text())
+                data: dict[str, Any] = json.loads(path.read_text())
+                return data
         except (OSError, ValueError):  # pragma: no cover - defensive
             continue
     return None
@@ -585,6 +664,7 @@ def create_app(
     output_dir: Path | None = None,
     engine: Engine | None = None,
     auth_token: str | None = None,
+    live_test_controller: LiveTestController | None = None,
 ) -> FastAPI:
     """Construct the FastAPI dashboard app.
 
@@ -605,6 +685,8 @@ def create_app(
     if engine is None:
         engine = make_engine(db_url)
     factory = make_session_factory(engine)
+    effective_db_url = db_url or engine.url.render_as_string(hide_password=False)
+    live_tests = live_test_controller or LiveTestController(effective_db_url)
 
     token = auth_token if auth_token is not None else os.environ.get("ADVTEST_DASHBOARD_TOKEN")
     if token:
@@ -700,8 +782,88 @@ def create_app(
         request: Request,
         session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
-        runs = list_runs(session)
-        return templates.TemplateResponse(request, "runs/index.html", {"runs": runs})
+        from advtest_ext.dashboard.overview import run_has_success
+
+        runs = [run for run in list_runs(session) if run_has_success(run)]
+        group_order = ("sheets", "docs", "cross-surface", "other")
+        groups = []
+        for key in group_order:
+            members = [run for run in runs if run_surface_key(run) == key]
+            if not members:
+                continue
+            attempts = sum(
+                int((run.summary or {}).get("total_traces", 0) or 0) for run in members
+            )
+            findings = sum(
+                int((run.summary or {}).get("successful_traces", 0) or 0)
+                for run in members
+            )
+            groups.append(
+                {
+                    "key": key,
+                    "label": run_surface_label(members[0]),
+                    "runs": members,
+                    "attempts": attempts,
+                    "findings": findings,
+                    "asr": findings / attempts if attempts else 0.0,
+                }
+            )
+        return templates.TemplateResponse(
+            request,
+            "runs/index.html",
+            {
+                "runs": runs,
+                "groups": groups,
+                "run_display_name": run_display_name,
+            },
+        )
+
+    @app.get("/live-tests", response_class=HTMLResponse, include_in_schema=False)
+    @app.get("/assessments/new", response_class=HTMLResponse)
+    @app.get("/runs/new", response_class=HTMLResponse)
+    async def live_tests_index(request: Request) -> Response:
+        """Launch a named, allow-listed surface assessment."""
+        return templates.TemplateResponse(
+            request,
+            "live_tests.html",
+            {
+                "tests": live_tests.specs,
+                "playbooks": live_tests.playbooks,
+                "state": live_tests.snapshot(),
+            },
+        )
+
+    @app.get("/live-tests/status")
+    async def live_tests_status() -> dict[str, Any]:
+        return live_tests.snapshot()
+
+    @app.post("/live-tests/stop")
+    async def live_tests_stop() -> JSONResponse:
+        try:
+            state = live_tests.stop()
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return JSONResponse(state, status_code=202)
+
+    @app.post("/live-tests/{test_id}/start")
+    async def live_tests_start(test_id: str, submission: LiveTestStart) -> JSONResponse:
+        if not submission.confirmed:
+            raise HTTPException(422, "confirm the live-account prerequisites before starting")
+        try:
+            state = live_tests.start(
+                test_id,
+                playbook=submission.playbook,
+                branching_factor=submission.branching_factor,
+            )
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(404, f"unknown live test {test_id!r}") from exc
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return JSONResponse(state, status_code=202)
 
     @app.get("/runs/{run_id}", response_class=HTMLResponse)
     async def runs_show(
@@ -767,10 +929,6 @@ def create_app(
         five HTMX polling partials below. Single source of truth so
         the partial's slice of the dashboard always matches what the
         full page would render."""
-        from advtest_ext.dashboard.intercepted_extract import (
-            extract_full_response,
-        )
-
         run = get_run(session, run_id)
         if run is None:
             raise HTTPException(404, f"run {run_id!r} not found")
@@ -779,12 +937,7 @@ def create_app(
         # Empty string when no capture exists (api_mode trace, interception
         # disabled, or pre-Phase-2 trace). Templates fall back to
         # ``trace.raw_response`` in that case.
-        full_responses: dict[str, str] = {}
-        for t in traces:
-            raw = t.raw_response_data or {}
-            path = raw.get("intercepted_traffic_path")
-            if path:
-                full_responses[t.id] = extract_full_response(path)
+        full_responses = _full_responses_for_traces(traces)
         heatmap = asr_heatmap_formatted(session, run_id)
         findings = list_findings(session, run_id=run_id)
 
@@ -837,8 +990,22 @@ def create_app(
 
         ppi = ppi_asr_for_run(session, run_id)
         tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
+        root_count = sum(1 for trace in traces if trace.parent_id is None)
+        duration_seconds = None
+        if run.started_at and run.finished_at:
+            duration_seconds = max(0, int((run.finished_at - run.started_at).total_seconds()))
+        run_metrics = {
+            "attempts": len(traces),
+            "conversations": root_count,
+            "techniques": len({trace.technique_id for trace in traces if trace.technique_id}),
+            "scenarios": len({trace.behavior_id for trace in traces if trace.behavior_id}),
+            "duration_seconds": duration_seconds,
+        }
         return {
             "run": run,
+            "run_name": run_display_name(run),
+            "surface_name": surface_label(run.target_name),
+            "run_metrics": run_metrics,
             "traces": traces,
             "heatmap": heatmap,
             "findings": findings,
@@ -847,6 +1014,7 @@ def create_app(
             "full_responses": full_responses,
             "phases": phases,
             "ppi": ppi,
+            "search_report": _load_search_report(run),
             "tree_hash": tree_hash,
             "tree_graph": _tree_graph_payload(
                 phases, finished=bool(run.finished_at), tree_hash=tree_hash
@@ -934,6 +1102,14 @@ def create_app(
             raise HTTPException(404, f"run {run_id!r} not found")
         traces = list_traces_for_run(session, run_id)
         phases = _build_phase_forests(_collapse_conversations(list(traces)))
+        for phase in phases:
+            forest = phase.get("forest")
+            if isinstance(forest, list):
+                forest.sort(
+                    key=lambda cell: (
+                        int(cell.get("n_success", 0)) == 0 if isinstance(cell, dict) else True
+                    )
+                )
         tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
         return templates.TemplateResponse(
             request,
@@ -966,9 +1142,7 @@ def create_app(
         traces = list_traces_for_run(session, run_id)
         phases = _build_phase_forests(_collapse_conversations(list(traces)))
         tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
-        payload = _tree_graph_payload(
-            phases, finished=bool(run.finished_at), tree_hash=tree_hash
-        )
+        payload = _tree_graph_payload(phases, finished=bool(run.finished_at), tree_hash=tree_hash)
         return JSONResponse(payload)
 
     @app.get("/runs/{run_id}/transcript", response_class=HTMLResponse)
@@ -982,19 +1156,13 @@ def create_app(
         shows the prompt, the FULL intercepted Gemini reply, and the
         score. tap_chain renders one conversation per replay round with
         the diagnoser's reason."""
-        from advtest_ext.dashboard.intercepted_extract import extract_full_response
         from advtest_ext.dashboard.transcript import build_transcript_groups
 
         run = get_run(session, run_id)
         if run is None:
             raise HTTPException(404, f"run {run_id!r} not found")
         traces = list(list_traces_for_run(session, run_id))
-        full_responses: dict[str, str] = {}
-        for t in traces:
-            raw = t.raw_response_data or {}
-            path = raw.get("intercepted_traffic_path")
-            if path:
-                full_responses[t.id] = extract_full_response(path)
+        full_responses = _full_responses_for_traces(traces)
         groups = build_transcript_groups(traces, full_responses)
         return templates.TemplateResponse(
             request,
@@ -1105,20 +1273,6 @@ def create_app(
         # If the trace was promoted to a finding, stash the finding
         # so the template can show the badge + replay-bundle link.
         finding = trace.finding if hasattr(trace, "finding") else None
-        # Phase 2 lands an intercepted-traffic JSONL per trace; the
-        # extractor pulls the full assembled response from the
-        # captured streamGenerate bodies. This is the ground-truth
-        # Gemini output — never truncated by Playwright's read-while-
-        # streaming race, unlike ``trace.raw_response``. Empty
-        # string when no capture (api_mode trace, interception
-        # disabled, or pre-Phase-2 trace).
-        from advtest_ext.dashboard.intercepted_extract import (
-            extract_full_response,
-        )
-
-        raw = trace.raw_response_data or {}
-        intercepted_path = raw.get("intercepted_traffic_path")
-        full_response = extract_full_response(intercepted_path) if intercepted_path else ""
         # Full conversation for THIS node: a tap_crescendo node is many turns
         # (each its own trace). Reconstruct the node's turns — with the complete
         # reply per turn — so the page shows the whole side-panel conversation,
@@ -1126,11 +1280,8 @@ def create_app(
         from advtest_ext.dashboard.transcript import build_transcript_groups
 
         run_traces = list(list_traces_for_run(session, trace.run_id))
-        conv_full: dict[str, str] = {}
-        for rt in run_traces:
-            p = (rt.raw_response_data or {}).get("intercepted_traffic_path")
-            if p:
-                conv_full[rt.id] = extract_full_response(p)
+        conv_full = _full_responses_for_traces(run_traces)
+        full_response = conv_full.get(trace.id, trace.raw_response or "")
         node_turns: list[Any] = []
         for group in build_transcript_groups(run_traces, conv_full):
             if any(turn.trace_id == trace_id for turn in group.turns):
@@ -1205,6 +1356,13 @@ def create_app(
             run_id=run_id,
             behavior_id=behavior_id,
         )
+        severity_order = {"critical": 0, "high": 1, "med": 2, "medium": 2, "low": 3}
+        findings.sort(
+            key=lambda f: (
+                severity_order.get((f.severity or "").lower(), 9),
+                -(max((s.score for s in f.trace.judge_scores), default=0.0) if f.trace else 0.0),
+            )
+        )
         run_options = list_finding_run_ids(session)
         # Behavior dropdown is scoped to the selected run when one is
         # picked, so "within the run by behaviour" only offers
@@ -1224,6 +1382,8 @@ def create_app(
                 "behavior_id": behavior_id,
                 "run_options": run_options,
                 "behavior_options": behavior_options,
+                "surface_label": surface_label,
+                "run_display_name": run_display_name,
             },
         )
 
@@ -1426,6 +1586,9 @@ def create_app(
         oracle = _oracle_snapshot(session, trace) if trace is not None else None
         signals = list_signals_for_trace(session, item.trace_id) if item.trace_id else []
         nxt = next_pending_hitl(session, exclude_id=item_id)
+        import secrets
+
+        reviewer_id = "reviewer-" + secrets.token_hex(4)
         return templates.TemplateResponse(
             request,
             "hitl_review.html",
@@ -1437,6 +1600,7 @@ def create_app(
                 "blind": _is_blind_review(item_id),
                 "verdicts": _REVIEW_VERDICTS,
                 "next_id": nxt.id if nxt else None,
+                "reviewer_id": reviewer_id,
                 "n_pending": count_hitl(session, status="pending"),
                 "n_gold": count_gold_labels(session),
             },
@@ -1618,8 +1782,10 @@ def create_app(
         # coverage map: attack class x technique x carrier surface x target
         # surface x effect).
         _app_display = {
-            "google_sheets": "Sheets", "google_docs": "Docs",
-            "gmail": "Gmail", "outlook": "Outlook",
+            "google_sheets": "Sheets",
+            "google_docs": "Docs",
+            "gmail": "Gmail",
+            "outlook": "Outlook",
         }
         roles: list[str] = []
         for r in [guide.target.account_role, *[s.account_role for s in guide.setup_steps]]:
@@ -1644,9 +1810,7 @@ def create_app(
         # YAML-style config document. ``kind`` drives styling: scalar / list /
         # map / block. Everything here is real guide content mapped onto the
         # report's field names — no fabricated values.
-        seed_chain = [
-            {"n": i + 1, "text": t} for i, t in enumerate(guide.exemplar_turns)
-        ]
+        seed_chain = [{"n": i + 1, "text": t} for i, t in enumerate(guide.exemplar_turns)]
         steps = [
             {
                 "n": i + 1,

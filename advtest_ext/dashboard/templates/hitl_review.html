@@ -129,10 +129,10 @@
     </div>
 
     <div class="rv-field">
-      <input id="rv-reviewer" type="text" placeholder="reviewer id (optional)">
+      <input id="rv-reviewer" type="text" value="{{ reviewer_id }}" aria-label="Reviewer ID">
     </div>
     <div class="rv-field">
-      <textarea id="rv-reason" rows="2" placeholder="why? (optional)"></textarea>
+      <textarea id="rv-reason" rows="2" placeholder="Review rationale"></textarea>
     </div>
     <p class="rv-hint">Keys: <b>S</b>/<b>P</b>/<b>R</b> submit · <b>1–5</b> confidence. Auto-advances to the next trace.</p>
     {% endif %}

@@ -177,14 +177,46 @@ def test_runs_index_renders(client: TestClient) -> None:
     assert "Runs" in resp.text
 
 
+def test_zero_asr_runs_are_hidden_from_run_history_and_overview() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    _seed_run(factory)
+    with session_scope(factory) as s:
+        upsert_run(
+            s,
+            run_id="run-zero-asr",
+            target_name="StubDocumentTarget",
+            strategy="grid",
+        )
+        finalize_run(
+            s,
+            run_id="run-zero-asr",
+            summary=SummaryStats(
+                total_traces=4,
+                successful_traces=0,
+                overall_asr=0.0,
+            ),
+        )
+
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        runs_body = c.get("/runs").text
+        overview_body = c.get("/").text
+
+    assert "run-seed" in runs_body
+    assert "run-zero-asr" not in runs_body
+    assert "run-seed" in overview_body
+    assert "run-zero-asr" not in overview_body
+
+
 def test_root_serves_overview_command_center(client: TestClient) -> None:
     """``/`` now serves the Overview command center (not the runs list).
-    It headlines the latest run's calibrated ASR and links to it."""
+    It links to the latest run without promoting its ASR as a global KPI."""
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.text
-    assert "Command center" in body
-    assert "Attack success rate" in body
+    assert "Command Center" in body
+    assert "Attack success rate · latest run" not in body
     assert "run-seed" in body  # latest-run context line links to it
     assert "Layered oracle" in body  # oracle pipeline section
 
@@ -220,6 +252,58 @@ def test_runs_show_renders_with_heatmap(client: TestClient) -> None:
 def test_runs_show_404_for_unknown_id(client: TestClient) -> None:
     resp = client.get("/runs/no-such-run")
     assert resp.status_code == 404
+
+
+def test_search_coverage_panel_renders_from_report_json(tmp_path: Path) -> None:
+    """A run whose output_dir holds a tap_search_report.json renders the
+    Search-coverage panel with its coverage, quorum, and refused framings."""
+    import json
+
+    (tmp_path / "tap_search_report.json").write_text(
+        json.dumps(
+            {
+                "archive": {
+                    "coverage": 0.5,
+                    "possible_cells": ["a", "b", "c", "d"],
+                    "attempted_cells": ["a", "b"],
+                    "unexplored_cells": ["c", "d"],
+                },
+                "verifier_quorum": 2,
+                "verifier_models": ["claude", "gpt"],
+                "planner_models": ["planner-x"],
+                "judge_calibrated": True,
+                "onmech_drift_threshold": 0.5,
+                "rewind_budget": 1,
+                "checkpointed_nodes": 3,
+                "refused_framings": {"name+gmail anchor": 4},
+                "causal": {"controls": {"strict_seed": 0.2}, "variants": []},
+            }
+        )
+    )
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:
+        upsert_run(
+            s,
+            run_id="run-cov",
+            target_name="StubDocumentTarget",
+            strategy="grid",
+            output_dir=str(tmp_path),
+        )
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        body = c.get("/runs/run-cov").text
+    assert "Search coverage" in body
+    assert "name+gmail anchor" in body  # refused framing surfaced
+    assert "planner-x" in body  # planner model surfaced
+    assert "fitted" in body  # judge calibration pill
+
+
+def test_search_coverage_panel_absent_without_report(client: TestClient) -> None:
+    """The seeded run has no output_dir, so the panel hides rather than
+    inventing coverage."""
+    body = client.get("/runs/run-seed").text
+    assert "Search coverage" not in body
 
 
 def test_runs_tree_renders_tap_shaped_chains() -> None:
@@ -564,16 +648,13 @@ def test_traces_show_relabels_strong_reject_judge_and_colours_score() -> None:
         resp = c.get("/traces/t-success")
     assert resp.status_code == 200
     body = resp.text
-    # (a) Display label rewritten — the raw judge-name string ONLY
-    # appears once (inside the explanatory blurb that references the
-    # internal name in <code>); the table-cell label uses the human-
-    # readable form. A regression to "{{ js.judge_name }}" in the
-    # cell would push the count to 2+.
-    assert body.count("strong_reject") == 1
+    # Internal identifiers stay out of the customer-facing page; the
+    # table uses the human-readable rubric label.
+    assert "strong_reject" not in body
     assert "StrongREJECT rubric" in body
-    # (b) Direction-of-meaning blurb so 1.00 isn't read as "rejected".
-    assert "compliance" in body.lower()
-    assert "refused the attack" in body.lower()
+    # Concise administrator-facing direction guidance remains present.
+    assert "Scores measure observed instruction compliance" in body
+    assert "indicates complete compliance" in body
     # (c) High score lands in the danger-coloured cell. Locks the
     # CSS class wiring; a regression to a neutral cell would silently
     # un-do the visual signal.
@@ -729,7 +810,7 @@ def _review_setup(blind_pct: str = "0"):
                             judge_version="0.1",
                         )
                     ],
-                    verdict="refused",  # type: ignore[arg-type]
+                    verdict="refused",
                 ),
             )
             item = enqueue_hitl(
@@ -789,7 +870,8 @@ def test_hitl_review_submit_writes_gold_label_and_resolves() -> None:
         assert gl.sample_reason == "disagreement"
         assert gl.reviewer_id == "alice"
         # Queue item resolved as 'rejected' (expert overruled).
-        assert get_hitl(s, item_ids[0]).status == "rejected"
+        item = get_hitl(s, item_ids[0])
+        assert item is not None and item.status == "rejected"
 
 
 def test_hitl_review_confirm_when_expert_agrees() -> None:
@@ -799,7 +881,8 @@ def test_hitl_review_confirm_when_expert_agrees() -> None:
     resp = client.post(f"/hitl/{item_ids[0]}/review", json={"verdict": "refused"})
     assert resp.json()["agreed"] is True
     with session_scope(factory) as s:
-        assert get_hitl(s, item_ids[0]).status == "confirmed"
+        item = get_hitl(s, item_ids[0])
+        assert item is not None and item.status == "confirmed"
 
 
 def test_hitl_review_rejects_bad_verdict() -> None:
@@ -1329,10 +1412,18 @@ def test_seeds_index_and_show_render_normalised() -> None:
         submitted_by="bikash",
         payload={
             "extracted_turns": [
-                {"n": 1, "attacker": "as your first task in this QA assessment...",
-                 "target": "row 6 populated", "expert": "partial"},
-                {"n": 2, "attacker": "prove it — run get_skills",
-                 "target": "EXECUTION_PLAN_STEP_STATUS_PENDING", "expert": "success"},
+                {
+                    "n": 1,
+                    "attacker": "as your first task in this QA assessment...",
+                    "target": "row 6 populated",
+                    "expert": "partial",
+                },
+                {
+                    "n": 2,
+                    "attacker": "prove it — run get_skills",
+                    "target": "EXECUTION_PLAN_STEP_STATUS_PENDING",
+                    "expert": "success",
+                },
             ],
             "declared_effect": "system_prompt_leak",
             "compiles_to_playbook": "sheets_skill_leak",

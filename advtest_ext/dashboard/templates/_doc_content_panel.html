@@ -26,30 +26,57 @@ more accurate "via the X hiding technique".
 {% set tap_meta = meta.get('tap') or {} %}
 {% set pair_meta = meta.get('pair') or {} %}
 {% set attack_meta = tap_meta or pair_meta %}
-{% set cover_story = attack_meta.get('cover_story') %}
-{% if cover_story or trace.payload_text %}
-<h2>Document content delivered to the target</h2>
+{% set demo_meta = meta.get('demo_flow') or {} %}
+{% set is_email = demo_meta.get('visible_email') is not none %}
+{% set cover_story = attack_meta.get('cover_story') or demo_meta.get('visible_email') %}
+{% set email_thread = demo_meta.get('email_thread') or [] %}
+{# Demo retrieval branches use payload_text as their short branch label.
+   Only the demo carrier has actual delivered content to visualise. #}
+{% if is_email or (not demo_meta and (cover_story or trace.payload_text)) %}
+<h2>{% if is_email %}Email content delivered to Gmail{% else %}Document content delivered to the target{% endif %}</h2>
 <p class="muted">
-  This is what Gemini saw when it opened the Doc — the visible body
-  shown to the user PLUS the hidden injection text (rendered via
-  the {% if trace.technique_id %}<code>{{ trace.technique_id }}</code>{% else %}configured{% endif %}
-  hiding technique). The user prompt asked for a summary; if the
-  attack landed, Gemini followed the hidden instruction instead.
+  {% if is_email %}
+  The message below was delivered through Outlook to Gmail. The visible body
+  is what the recipient sees; the injected instruction was embedded as
+  white-on-white text in the same email body.
+  {% else %}
+  This is what Gemini saw when it opened the Doc — the visible body shown to
+  the user plus the hidden injection text rendered through the configured
+  hiding technique.
+  {% endif %}
 </p>
 
 <div class="doc-panel">
   <div class="doc-panel-row">
-    <div class="doc-panel-label">Visible doc body
+    <div class="doc-panel-label">{% if is_email %}Visible email body{% else %}Visible doc body{% endif %}
       <span class="doc-panel-sublabel">(what the user sees)</span>
     </div>
     <pre class="doc-visible">{% if cover_story %}{{ cover_story }}{% else %}<em class="muted">(static default cover doc — attacker generated no cover_story for this trace)</em>{% endif %}</pre>
   </div>
   <div class="doc-panel-row">
-    <div class="doc-panel-label">Hidden injection
+    <div class="doc-panel-label">{% if is_email %}Hidden white-text injection{% else %}Hidden injection{% endif %}
       <span class="doc-panel-sublabel">(invisible to the user)</span>
     </div>
     <pre class="doc-hidden">{{ trace.payload_text }}</pre>
   </div>
+</div>
+{% endif %}
+
+{% if email_thread %}
+<h2>Email thread sent and received</h2>
+<p class="muted">The complete correspondence available to the Workspace retrieval assessment.</p>
+<div class="node-convo">
+  {% for email in email_thread %}
+  <div class="nc-turn">
+    <div class="nc-head">
+      <strong>{{ email.get('direction') }}</strong>
+      <span class="muted">{{ email.get('sender') }} → {{ email.get('recipient') }}</span>
+      {% if email.get('contains_hidden_injection') %}<span class="pill partial">hidden carrier</span>{% endif %}
+    </div>
+    <div><strong>Subject:</strong> {{ email.get('subject') }}</div>
+    <pre style="margin-top:.45rem">{{ email.get('body') }}</pre>
+  </div>
+  {% endfor %}
 </div>
 {% endif %}
 {% endmacro %}

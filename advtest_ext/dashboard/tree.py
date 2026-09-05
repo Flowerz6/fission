@@ -21,7 +21,7 @@ from typing import Any
 def _score_of(trace: Any) -> float:
     js = getattr(trace, "judge_scores", None)
     try:
-        return float(js[0].score) if js else 0.0
+        return max((float(score.score) for score in js), default=0.0) if js else 0.0
     except (AttributeError, TypeError, ValueError):
         return 0.0
 
@@ -103,7 +103,17 @@ def collapse_conversations(traces: list[Any]) -> list[Any]:
             )
         convs[key].append(trace)
 
-    rep = {key: max(convs[key], key=_score_of) for key in order}  # best turn per conversation
+    verdict_rank = {"success": 3, "partial": 2, "refused": 1, "error": 0}
+    rep = {
+        key: max(
+            convs[key],
+            key=lambda trace: (
+                verdict_rank.get(getattr(trace, "verdict", None) or "", 0),
+                _score_of(trace),
+            ),
+        )
+        for key in order
+    }  # best turn per conversation
     nodes: list[Any] = []
     for key in order:
         depth, parent_key, behavior, technique = info[key]
@@ -344,7 +354,7 @@ def _node_score(trace: Any) -> float | None:
     if not js:
         return None
     try:
-        return float(js[0].score)
+        return max(float(score.score) for score in js)
     except (AttributeError, TypeError, ValueError):
         return None
 
@@ -356,9 +366,54 @@ def _node_name(trace: Any, index: int) -> str:
     meta = getattr(trace, "extra_metadata", None)
     name = ""
     if isinstance(meta, dict):
+        demo_flow = meta.get("demo_flow")
+        if isinstance(demo_flow, dict):
+            name = str(
+                demo_flow.get("label")
+                or demo_flow.get("variant")
+                or ""
+            ).strip()
         tcr = meta.get("tap_crescendo")
-        if isinstance(tcr, dict):
+        if not name and isinstance(tcr, dict):
             name = str(tcr.get("strategy") or "").strip()
+        tap = meta.get("tap")
+        if not name and isinstance(tap, dict):
+            reasoning = str(tap.get("attacker_reasoning") or "").lower()
+            if "operator-provided seed" in reasoning:
+                family = "Seed prompt"
+            elif "chain-of-thought" in reasoning and any(
+                token in reasoning for token in ("yaml", "front-matter", "metadata")
+            ):
+                family = "Reasoning + YAML"
+            elif "chain-of-thought" in reasoning and any(
+                token in reasoning for token in ("footnote", "editorial", "annotation")
+            ):
+                family = "Reasoning footnote"
+            elif "chain-of-thought" in reasoning:
+                family = "Reasoning hijack"
+            elif any(token in reasoning for token in ("tool-call", "tool call", "function-")):
+                if "calendar" in reasoning:
+                    family = "Calendar API mimic"
+                elif "plugin" in reasoning:
+                    family = "Plugin response mimic"
+                else:
+                    family = "Tool-response mimic"
+            elif any(token in reasoning for token in ("yaml", "front-matter")):
+                family = "YAML metadata embed"
+            elif "audit-log" in reasoning:
+                family = "Audit-log directive"
+            elif any(token in reasoning for token in ("footnote", "editorial", "comment thread")):
+                family = "Editorial annotation"
+            elif "role confusion" in reasoning:
+                family = "Role confusion"
+            elif "conditional" in reasoning or "deferred trigger" in reasoning:
+                family = "Conditional trigger"
+            else:
+                family = "TAP variation"
+            depth = tap.get("depth")
+            branch = tap.get("branch")
+            suffix = f" · d{depth}/b{branch}" if depth is not None and branch is not None else ""
+            name = family + suffix
     if not name:
         name = str(getattr(trace, "technique_id", None) or "").strip()
     if not name:
@@ -411,7 +466,7 @@ def _cell_nodes_edges(
     prepended and parents every opening variant, so the tree has ONE top node —
     the playbook — that fans out into the attacker's approaches, instead of
     several unconnected sibling roots."""
-    lines = cell.get("lines", [])  # type: ignore[assignment]
+    lines = cell.get("lines", [])
     assert isinstance(lines, list)
     ids_in_cell = {getattr(ln["trace"], "id", None) for ln in lines}
 
@@ -436,6 +491,16 @@ def _cell_nodes_edges(
                     "trace_id": getattr(t, "id", None),
                     "u": _clip(getattr(t, "raw_request", None)),
                     "a": _clip(getattr(t, "raw_response", None)),
+                    "email": _clip(
+                        ((getattr(t, "extra_metadata", None) or {}).get("demo_flow") or {}).get(
+                            "visible_email"
+                        )
+                    ),
+                    "injection": _clip(
+                        ((getattr(t, "extra_metadata", None) or {}).get("demo_flow") or {}).get(
+                            "hidden_injection"
+                        )
+                    ),
                 }
             }
         )
@@ -501,7 +566,7 @@ def tree_graph_payload(
     for phase in phases:
         p_idx = phase.get("index", 0)
         cells_out: list[dict[str, Any]] = []
-        forest = phase.get("forest", [])  # type: ignore[assignment]
+        forest = phase.get("forest", [])
         assert isinstance(forest, list)
         for pos, cell in enumerate(forest, start=1):
             node_prefix = f"p{p_idx}c{pos}"

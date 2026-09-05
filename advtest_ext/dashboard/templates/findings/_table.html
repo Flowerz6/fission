@@ -2,8 +2,8 @@
 <table>
   <thead>
     <tr>
-      <th>Severity</th><th>Title</th><th>Run</th>
-      <th>Behaviour</th><th>Score</th><th>Promoted</th><th></th>
+      <th>Severity</th><th>Finding</th><th>Surface · assessment</th>
+      <th>Scenario</th><th>Score</th><th>Promoted</th><th></th>
     </tr>
   </thead>
   <tbody>
@@ -20,7 +20,7 @@
     <tr>
       <td><span class="pill severity-{{ f.severity }}">{{ f.severity }}</span></td>
       <td><a href="/findings/{{ f.id }}">{{ f.title or '(untitled)' }}</a></td>
-      <td><a href="/runs/{{ f.run_id }}">{{ f.run_id }}</a></td>
+      <td><strong>{{ surface_label(f.trace.target_name) if f.trace else "Unknown" }}</strong><br><a class="muted" href="/runs/{{ f.run_id }}">{{ run_display_name(f.run) }}</a></td>
       <td>{{ f.trace.behavior_id }}</td>
       <td>
         {% if top_score is not none %}
@@ -32,7 +32,7 @@
       <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') }}</td>
       <td>
         {% if f.replay_bundle_path %}
-        <a href="/findings/{{ f.id }}/replay">replay.zip</a>
+        <a href="/findings/{{ f.id }}/replay">Evidence</a>
         {% else %}
         <span class="muted">—</span>
         {% endif %}
