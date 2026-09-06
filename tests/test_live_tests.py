@@ -177,9 +177,7 @@ def test_read_env_file_is_non_executable_and_supports_quotes(tmp_path: Path) -> 
 
 
 def test_public_activity_feed_redacts_implementation_details() -> None:
-    assert _public_event("[9/12] exploit1 (docs_gemini)") == (
-        "Workspace retrieval turn executed"
-    )
+    assert _public_event("[9/12] exploit1 (docs_gemini)") == ("Workspace retrieval turn executed")
     event = _public_event("ANTHROPIC_API_KEY is not set. Export it")
     assert event == "Assessment could not start · Environment configuration is incomplete"
     assert "ANTHROPIC" not in event

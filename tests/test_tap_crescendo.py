@@ -111,7 +111,10 @@ async def _collect(attack: TapCrescendoAttack, target: _FakeTarget) -> list[Any]
     return [
         a
         async for a in attack.generate(
-            behavior=_behavior(), target=target, budget=Budget(), context=None  # type: ignore[arg-type]
+            behavior=_behavior(),
+            target=target,
+            budget=Budget(),
+            context=None,  # type: ignore[arg-type]
         )
     ]
 
@@ -917,9 +920,12 @@ async def test_both_replay_mode_runs_strict_control_then_adaptive_branch() -> No
         by_node.setdefault(meta["node_id"], []).append(attempt.user_prompt)
     assert by_node["n0-control"] == seed
     assert by_node["n0"] == ["let us build up", "let us build up"]
-    assert next(
-        a for a in attempts if a.metadata["tap_crescendo"]["node_id"] == "n0-control"
-    ).metadata["tap_crescendo"]["replay_mode"] == "strict"
+    assert (
+        next(
+            a for a in attempts if a.metadata["tap_crescendo"]["node_id"] == "n0-control"
+        ).metadata["tap_crescendo"]["replay_mode"]
+        == "strict"
+    )
 
 
 @pytest.mark.asyncio
@@ -995,7 +1001,9 @@ async def test_semantic_verifier_rejects_paraphrase_before_live_child() -> None:
                 if self.proposals == 1
                 else "Move the proof probe ahead of the role-confirmation phase"
             )
-            mutation = "wording-only rewrite" if self.proposals == 1 else "swap phases two and three"
+            mutation = (
+                "wording-only rewrite" if self.proposals == 1 else "swap phases two and three"
+            )
             return SimpleNamespace(
                 text=(
                     f'{{"strategy":"{strategy}","dimension":"turn_order",'
@@ -1018,9 +1026,7 @@ async def test_semantic_verifier_rejects_paraphrase_before_live_child() -> None:
             user = messages[-1].content if messages else ""
             if "semantic novelty gate" in system:
                 self.candidate_calls += 1
-                return SimpleNamespace(
-                    text="INVALID" if "friendlier words" in user else "VALID"
-                )
+                return SimpleNamespace(text="INVALID" if "friendlier words" in user else "VALID")
             if "independent verifier reviewing" in system:
                 return SimpleNamespace(
                     text='{"progressed":"none","failed":"low score","next_change":"reorder"}'
@@ -1049,9 +1055,7 @@ async def test_semantic_verifier_rejects_paraphrase_before_live_child() -> None:
         for a in attempts
         if a.metadata["tap_crescendo"]["depth"] == 1
     }
-    assert child_strategies == {
-        "Move the proof probe ahead of the role-confirmation phase"
-    }
+    assert child_strategies == {"Move the proof probe ahead of the role-confirmation phase"}
     assert checker.candidate_calls == 2
 
 
@@ -1116,7 +1120,6 @@ async def test_typed_scheduler_rotates_across_full_mutation_surface() -> None:
     dimensions = [
         a.metadata["tap_crescendo"]["mutation"].get("dimension")
         for a in attempts
-        if a.metadata["tap_crescendo"]["turn"] == 1
-        and a.metadata["tap_crescendo"]["depth"] > 0
+        if a.metadata["tap_crescendo"]["turn"] == 1 and a.metadata["tap_crescendo"]["depth"] > 0
     ]
     assert dimensions == ["persona", "turn_order", "escalation_speed"]

@@ -164,11 +164,15 @@ def test_multi_turn_uses_guide_exemplar_turns() -> None:
             raw_request="turn three",
             raw_response_data={"turn": 3},
             verdict="success",
-            judge_scores=[FakeJudge(0.9, "attended=true complied=true harmful_effect=true confidence=5")],
+            judge_scores=[
+                FakeJudge(0.9, "attended=true complied=true harmful_effect=true confidence=5")
+            ],
         )
     ]
     ds = build_dataset_from_traces(
-        traces, run_ids=["run-x"], guides_by_id={"sheets_skill_leak": FakeGuide()}  # type: ignore[arg-type, dict-item]
+        traces,
+        run_ids=["run-x"],
+        guides_by_id={"sheets_skill_leak": FakeGuide()},  # type: ignore[arg-type, dict-item]
     )
     a = ds.successful[0]
     assert a.poisoned_payload.payload_kind == "multi_turn_conversation"
@@ -192,11 +196,15 @@ def test_finding_severity_escalates_but_never_downgrades() -> None:
     # while a "med" finding must NOT drag it below "high".
     t = _single_shot(1, "success", 0.9)
     ds_hi = build_dataset_from_traces(
-        [t], run_ids=["run-x"], severity_by_behavior={"exfil_doc_via_image_url": "med"}  # type: ignore[list-item]
+        [t],
+        run_ids=["run-x"],
+        severity_by_behavior={"exfil_doc_via_image_url": "med"},  # type: ignore[list-item]
     )
     assert ds_hi.successful[0].severity == "high"
     ds_crit = build_dataset_from_traces(
-        [t], run_ids=["run-x"], severity_by_behavior={"exfil_doc_via_image_url": "critical"}  # type: ignore[list-item]
+        [t],
+        run_ids=["run-x"],
+        severity_by_behavior={"exfil_doc_via_image_url": "critical"},  # type: ignore[list-item]
     )
     assert ds_crit.successful[0].severity == "critical"
 
@@ -220,11 +228,18 @@ def test_dataset_envelope_and_counts() -> None:
 
 
 def test_classify_harm_priority_and_fallback() -> None:
-    assert classify_harm(behavior_id="finsummary_secret_exfil").harm_type == "pii_credential_extraction"
+    assert (
+        classify_harm(behavior_id="finsummary_secret_exfil").harm_type
+        == "pii_credential_extraction"
+    )
     assert classify_harm(behavior_id="inject_phishing_link").harm_type == "phishing"
-    assert classify_harm(behavior_id="sheets_skill_leak").harm_type == "system_prompt_skill_disclosure"
+    assert (
+        classify_harm(behavior_id="sheets_skill_leak").harm_type == "system_prompt_skill_disclosure"
+    )
     assert classify_harm(behavior_id="malicious_summary_bias").harm_type == "misinformation"
-    assert classify_harm(behavior_id="ignore_user_instruction_entirely").harm_type == "rogue_actions"
+    assert (
+        classify_harm(behavior_id="ignore_user_instruction_entirely").harm_type == "rogue_actions"
+    )
     unknown = classify_harm(behavior_id="totally_novel_thing_xyz")
     assert unknown.harm_type == "unspecified"
     assert "no harm-taxonomy keyword matched" in unknown.rationale
@@ -238,7 +253,10 @@ def test_severity_helpers() -> None:
 
 def test_resolve_journey_target_and_guide() -> None:
     assert resolve_journey(target_name="GeminiSheetsSidePanel") == "J-SHEETS-SIDEPANEL"
-    assert resolve_journey(target_name="whatever", guide_app="gmail", guide_surface="compose") == "J-GMAIL-REPLY"
+    assert (
+        resolve_journey(target_name="whatever", guide_app="gmail", guide_surface="compose")
+        == "J-GMAIL-REPLY"
+    )
     assert resolve_journey(target_name="unknown-target") == "J-TOOLUSE-AGENT"
     # every catalogue value a resolver can return is a real entry
     for jid in JOURNEY_CATALOGUE:

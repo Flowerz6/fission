@@ -34,8 +34,14 @@ def test_v1_guide_has_tool_bound_setup_steps_and_target_workspace() -> None:
     assert (steps["plant_email"].region, steps["plant_email"].operation) == ("gmail", "send_email")
     assert steps["plant_email"].account_role == "attacker_sender"
     assert (steps["ack_email"].region, steps["ack_email"].operation) == ("gmail", "reply")
-    assert (steps["open_carrier_doc"].region, steps["open_carrier_doc"].operation) == ("docs", "open_document")
-    assert (steps["drive_side_panel"].region, steps["drive_side_panel"].operation) == ("docs", "type_prompt")
+    assert (steps["open_carrier_doc"].region, steps["open_carrier_doc"].operation) == (
+        "docs",
+        "open_document",
+    )
+    assert (steps["drive_side_panel"].region, steps["drive_side_panel"].operation) == (
+        "docs",
+        "type_prompt",
+    )
     # The email step carries the real op's param names (to/subject/body).
     assert {"to", "subject", "body"} <= set(steps["plant_email"].params)
     # Inter-step reference to a prior step's output (Runner substitution shape).

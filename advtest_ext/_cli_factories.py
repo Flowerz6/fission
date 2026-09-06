@@ -484,9 +484,7 @@ def _tap_crescendo_attack_factory(options: dict[str, Any] | None = None) -> Atta
         checker=checker,
         checkers=extra_checkers,
         verifier_quorum=(
-            int(opts["verifier_quorum"])
-            if opts.get("verifier_quorum") is not None
-            else None
+            int(opts["verifier_quorum"]) if opts.get("verifier_quorum") is not None else None
         ),
         entity=str(opts.get("entity", "QUILLFEATHER")),
         canary=opts.get("canary"),

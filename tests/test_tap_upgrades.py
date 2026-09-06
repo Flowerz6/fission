@@ -203,9 +203,7 @@ async def test_judge_error_carries_forward_and_does_not_prune() -> None:
     target = _FakeTarget(_LOW)
     attempts = await _collect(attack, target)
     assert target.invokes == 5  # no early stuck-stop
-    assert all(
-        a.metadata.get("tap_crescendo", {}).get("judge_error") for a in attempts
-    )
+    assert all(a.metadata.get("tap_crescendo", {}).get("judge_error") for a in attempts)
 
 
 async def test_healthy_judge_zero_scores_still_stuck_stops() -> None:
@@ -229,9 +227,7 @@ async def test_judge_calibration_pulls_overconfident_score_below_threshold() -> 
     score is the search gradient."""
     attack = _attack(success_threshold=0.85, node_stuck_patience=2, node_max_turns=4)
     # High raw scores almost never actually succeeded; low ones did.
-    attack.fit_judge_calibration(
-        [(1.0, False)] * 8 + [(0.9, False)] * 8 + [(0.1, True)] * 4
-    )
+    attack.fit_judge_calibration([(1.0, False)] * 8 + [(0.9, False)] * 8 + [(0.1, True)] * 4)
     target = _FakeTarget(_CONVERGE)  # real judge would score this ~1.0
     attempts = await _collect(attack, target)
     # Calibrated below threshold => never declared success => keeps going.
@@ -279,9 +275,7 @@ async def test_rewind_replays_best_prefix_and_resets_target() -> None:
     target = _FakeTarget(_LOW)
     attempts = await _collect(attack, target)
     assert target.resets >= 2  # initial render + one rewind reset
-    assert any(
-        a.metadata.get("tap_crescendo", {}).get("replayed") for a in attempts
-    )
+    assert any(a.metadata.get("tap_crescendo", {}).get("replayed") for a in attempts)
 
 
 async def test_no_rewind_budget_leaves_behaviour_unchanged() -> None:
@@ -310,7 +304,7 @@ async def test_replay_prefix_resets_target_and_resends_prompts_in_order() -> Non
     assert ended is False
     assert ctx is not None
     assert target.resets == resets_before + 1  # exactly one reset
-    assert target.prompts[-len(prompts):] == prompts  # re-sent verbatim, in order
+    assert target.prompts[-len(prompts) :] == prompts  # re-sent verbatim, in order
     assert [t[1] for t in turns] == prompts  # rebuilt turn list matches
     assert len(replay_attempts) == len(prompts)
     assert all(a.metadata["tap_crescendo"]["replayed"] for a in replay_attempts)

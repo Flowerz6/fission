@@ -226,8 +226,8 @@ async def test_reset_mints_fresh_doc_per_node_and_close_deletes_all() -> None:
     counter = {"n": 0}
     deleted: list[str] = []
 
-
     calls: list[dict[str, Any]] = []
+
     def doc_factory() -> str:
         counter["n"] += 1
         return f"DOC-{counter['n']}"

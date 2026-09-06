@@ -106,17 +106,13 @@ def test_partial_calibrator_learns_conservative_weights_and_persists(tmp_path: A
     assert grounded > weak
     assert grounded_uncertainty > 0
     restored = PartialSignalCalibrator(path)
-    assert restored.weight("grounded", 0.2) == pytest.approx(
-        (grounded, grounded_uncertainty)
-    )
+    assert restored.weight("grounded", 0.2) == pytest.approx((grounded, grounded_uncertainty))
 
 
 def test_checkpoint_restores_completed_node_atomically(tmp_path: Any) -> None:
     path = tmp_path / "checkpoint.json"
     checkpoint = SearchCheckpointStore(path, "run")
-    checkpoint.save_node(
-        {"id": "n1", "score": 0.8, "strategy": "saved"}, operator_cursor=4
-    )
+    checkpoint.save_node({"id": "n1", "score": 0.8, "strategy": "saved"}, operator_cursor=4)
     restored = SearchCheckpointStore(path, "run")
     node = {"id": "n1", "strategy": "regenerated"}
     assert restored.restore_node(node) is True

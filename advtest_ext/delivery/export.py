@@ -195,7 +195,11 @@ def _max_turn(group: _Group) -> int:
     best = 1
     for t in group.traces:
         rrd = t.raw_response_data if isinstance(t.raw_response_data, dict) else {}
-        tc = (t.extra_metadata or {}).get("tap_crescendo", {}) if isinstance(t.extra_metadata, dict) else {}
+        tc = (
+            (t.extra_metadata or {}).get("tap_crescendo", {})
+            if isinstance(t.extra_metadata, dict)
+            else {}
+        )
         for v in (rrd.get("turn"), tc.get("turn")):
             if isinstance(v, int):
                 best = max(best, v)
@@ -208,7 +212,9 @@ def _distinct_variants(group: _Group) -> int:
         return len(texts)
     # multi-turn: distinct attacker phrasings actually tried (the per-turn rows
     # share no trial id, so this counts phrasing diversity, not trial count).
-    phrasings = {(t.raw_request or "").strip() for t in group.traces if (t.raw_request or "").strip()}
+    phrasings = {
+        (t.raw_request or "").strip() for t in group.traces if (t.raw_request or "").strip()
+    }
     return max(1, len(phrasings))
 
 
@@ -365,7 +371,9 @@ def build_dataset_from_traces(
     plausible.sort(key=lambda a: a.id)
 
     referenced = {a.user_journey_id for a in (*successful, *plausible)}
-    journeys = {jid: JOURNEY_CATALOGUE[jid] for jid in sorted(referenced) if jid in JOURNEY_CATALOGUE}
+    journeys = {
+        jid: JOURNEY_CATALOGUE[jid] for jid in sorted(referenced) if jid in JOURNEY_CATALOGUE
+    }
 
     counts = _count(successful, plausible)
     return PilotDataset(

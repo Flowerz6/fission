@@ -368,11 +368,7 @@ def _node_name(trace: Any, index: int) -> str:
     if isinstance(meta, dict):
         demo_flow = meta.get("demo_flow")
         if isinstance(demo_flow, dict):
-            name = str(
-                demo_flow.get("label")
-                or demo_flow.get("variant")
-                or ""
-            ).strip()
+            name = str(demo_flow.get("label") or demo_flow.get("variant") or "").strip()
         tcr = meta.get("tap_crescendo")
         if not name and isinstance(tcr, dict):
             name = str(tcr.get("strategy") or "").strip()

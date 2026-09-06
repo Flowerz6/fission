@@ -564,9 +564,7 @@ class TapCrescendoAttack(AttackPlugin):
                 self._operators.append(
                     MutationOperator(
                         dimension=left.dimension,
-                        boundary=(
-                            f"COMBINED CONTROL: {left.boundary}; AND {right.boundary}"
-                        ),
+                        boundary=(f"COMBINED CONTROL: {left.boundary}; AND {right.boundary}"),
                         name=f"combined:{left.name}+{right.name}",
                         mutable_fields=tuple(
                             dict.fromkeys([*left.mutable_fields, *right.mutable_fields])
@@ -580,9 +578,7 @@ class TapCrescendoAttack(AttackPlugin):
                             dict.fromkeys([*left.forbidden_changes, *right.forbidden_changes])
                         ),
                         dependent_invariants=tuple(
-                            dict.fromkeys(
-                                [*left.dependent_invariants, *right.dependent_invariants]
-                            )
+                            dict.fromkeys([*left.dependent_invariants, *right.dependent_invariants])
                         ),
                         cell_values=("combined",),
                     )
@@ -789,9 +785,7 @@ class TapCrescendoAttack(AttackPlugin):
                 if self._replay_mode == "strict"
                 else self._seed_adaptive
             )
-            root["replay_mode"] = (
-                "adaptive" if root["scripted_adaptive"] else "strict"
-            )
+            root["replay_mode"] = "adaptive" if root["scripted_adaptive"] else "strict"
         async for attempt in self._run_node(behavior, target, root, reserve_query=reserve_query):
             yield attempt
         logger.info("tap_crescendo.node", node="n0", depth=0, score=root.get("score"))
@@ -999,12 +993,8 @@ class TapCrescendoAttack(AttackPlugin):
             "checkpointed_nodes": len(self._checkpoint.state.get("nodes", {})),
             "operator_cursor": self._operator_cursor,
             "planner_models": [getattr(model, "model_id", "unknown") for model in self._planners],
-            "executor_models": [
-                getattr(model, "model_id", "unknown") for model in self._attackers
-            ],
-            "verifier_models": [
-                getattr(model, "model_id", "unknown") for model in self._checkers
-            ],
+            "executor_models": [getattr(model, "model_id", "unknown") for model in self._attackers],
+            "verifier_models": [getattr(model, "model_id", "unknown") for model in self._checkers],
             "verifier_quorum": self._verifier_quorum,
             "onmech_drift_threshold": self._onmech_drift_threshold,
             "rewind_budget": self._rewind_max,
@@ -1014,9 +1004,7 @@ class TapCrescendoAttack(AttackPlugin):
             ),
         }
 
-    def fit_partial_signal_calibration(
-        self, reviews: list[tuple[set[str], bool]]
-    ) -> None:
+    def fit_partial_signal_calibration(self, reviews: list[tuple[set[str], bool]]) -> None:
         """Learn partial-signal reliability from ``(fired_signal_names,
         was_success)`` pairs. Ground truth must be expert labels (see
         ``advtest_ext.core.search_calibration``), never the oracle's own
@@ -1308,9 +1296,7 @@ class TapCrescendoAttack(AttackPlugin):
                 reserve_query=reserve_query,
             )
             stop = ended
-            judge_error = bool(
-                attempt.metadata.get("tap_crescendo", {}).get("judge_error", False)
-            )
+            judge_error = bool(attempt.metadata.get("tap_crescendo", {}).get("judge_error", False))
             if not ended:
                 # Tempest-style leak tracking: record every partial-compliance
                 # signal that fired this turn so the next escalation turn can
@@ -1421,11 +1407,7 @@ class TapCrescendoAttack(AttackPlugin):
                     # and escalate again from there. Exploits the score
                     # trajectory the node already recorded instead of discarding
                     # every turn after the peak.
-                    if (
-                        rewind_left > 0
-                        and 0 < best_prefix_len < len(turns)
-                        and not judge_error
-                    ):
+                    if rewind_left > 0 and 0 < best_prefix_len < len(turns) and not judge_error:
                         rewind_left -= 1
                         yield attempt  # persist the stalled turn before rewinding
                         prefix_prompts = [t[1] for t in turns[:best_prefix_len]]
@@ -1902,9 +1884,7 @@ class TapCrescendoAttack(AttackPlugin):
             reflection = h.get("reflection") or {}
             next_change = reflection.get("next_change") if isinstance(reflection, dict) else None
             reflected = f" — verifier next: {next_change}" if next_change else ""
-            lines.append(
-                f"- [{h.get('score', 0.0):.2f}] {h.get('strategy', '')}{note}{reflected}"
-            )
+            lines.append(f"- [{h.get('score', 0.0):.2f}] {h.get('strategy', '')}{note}{reflected}")
         return "\n".join(lines)
 
     def _select_frontier(self, children: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1973,8 +1953,7 @@ class TapCrescendoAttack(AttackPlugin):
         ]
         prior = self._archive.attempted_strategies[-12:]
         prompt = _CANDIDATE_CHECK_USER.format(
-            invariants="\n".join(f"- {item}" for item in self._invariants)
-            or "(none declared)",
+            invariants="\n".join(f"- {item}" for item in self._invariants) or "(none declared)",
             dimension=candidate.dimension.value,
             boundary="; ".join(boundaries) or candidate.mutation,
             baseline=(
@@ -1982,9 +1961,7 @@ class TapCrescendoAttack(AttackPlugin):
                 if parent
                 else self._strategy_brief or "(control baseline)"
             ),
-            prior_strategies=(
-                "\n".join(f"- {item}" for item in prior) or "(none attempted)"
-            ),
+            prior_strategies=("\n".join(f"- {item}" for item in prior) or "(none attempted)"),
             strategy=candidate.strategy,
             mutation=(
                 f"{candidate.mutation}\nPlan: {list(candidate.plan_steps)}\n"
@@ -2076,9 +2053,7 @@ class TapCrescendoAttack(AttackPlugin):
             return ""
         return f"\n# Playbook — the approach known to work\n{self._strategy_brief}\n"
 
-    async def _check_on_mechanism(
-        self, behavior: Behavior, turns: list[_Turn]
-    ) -> float | None:
+    async def _check_on_mechanism(self, behavior: Behavior, turns: list[_Turn]) -> float | None:
         """Ask EVERY family-disjoint checker whether the branch is still
         tracking the attack mechanism, and return a graded drift fraction in
         ``[0, 1]``: the share of checkers that voted OFF. ``None`` when no

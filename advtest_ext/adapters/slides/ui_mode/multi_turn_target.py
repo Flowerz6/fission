@@ -349,7 +349,9 @@ class GeminiSlidesMultiTurnTarget(DocumentTarget):
 
         slides = get_service("slides", "v1", SLIDES_SCOPES)
         created = (
-            slides.presentations().create(body={"title": f"Scratch {uuid.uuid4().hex[:6]}"}).execute()
+            slides.presentations()
+            .create(body={"title": f"Scratch {uuid.uuid4().hex[:6]}"})
+            .execute()
         )
         return str(created["presentationId"])
 

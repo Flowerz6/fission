@@ -71,7 +71,9 @@ def _read_env_file(path: Path) -> dict[str, str]:
             if closing != -1:
                 value = value[1:closing]
         else:
-            value = "" if value.startswith("#") else re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+            value = (
+                "" if value.startswith("#") else re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+            )
         values[key] = value
     return values
 
@@ -201,7 +203,9 @@ class LiveTestController:
             else enabled
         )
         self._specs = {spec.id: spec for spec in live_test_catalog()}
-        self._playbooks = tuple(path.stem for path in sorted((_REPO_ROOT / "guides").glob("*.json")))
+        self._playbooks = tuple(
+            path.stem for path in sorted((_REPO_ROOT / "guides").glob("*.json"))
+        )
         self._lock = threading.Lock()
         self._process: subprocess.Popen[str] | None = None
         self._active_id: str | None = None

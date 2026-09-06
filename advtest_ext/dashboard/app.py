@@ -791,12 +791,9 @@ def create_app(
             members = [run for run in runs if run_surface_key(run) == key]
             if not members:
                 continue
-            attempts = sum(
-                int((run.summary or {}).get("total_traces", 0) or 0) for run in members
-            )
+            attempts = sum(int((run.summary or {}).get("total_traces", 0) or 0) for run in members)
             findings = sum(
-                int((run.summary or {}).get("successful_traces", 0) or 0)
-                for run in members
+                int((run.summary or {}).get("successful_traces", 0) or 0) for run in members
             )
             groups.append(
                 {

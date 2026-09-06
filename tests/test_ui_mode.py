@@ -1074,6 +1074,6 @@ async def test_human_type_enters_newlines_as_shift_enter_not_submit() -> None:
     typed = [c[1] for c in page.calls if c[0] == "keyboard.type"]
     pressed = [c[1] for c in page.calls if c[0] == "keyboard.press"]
     assert typed == ["line one", "line two", "line three"]  # per line, no blob
-    assert all("\n" not in t for t in typed)                # no raw newline typed
-    assert pressed == ["Shift+Enter", "Shift+Enter"]        # soft newlines between lines
-    assert "Enter" not in pressed                            # never a bare Enter (= submit)
+    assert all("\n" not in t for t in typed)  # no raw newline typed
+    assert pressed == ["Shift+Enter", "Shift+Enter"]  # soft newlines between lines
+    assert "Enter" not in pressed  # never a bare Enter (= submit)

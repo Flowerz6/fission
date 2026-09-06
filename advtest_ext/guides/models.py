@@ -252,9 +252,7 @@ class Guide(BaseModel):
                 tokens = path.split(".")
                 if tokens[0] not in type(self).model_fields:
                     raise ValueError(f"mutation operator references unknown Guide field: {path}")
-                if tokens[0] == "setup_steps" and (
-                    len(tokens) < 2 or tokens[1] not in step_ids
-                ):
+                if tokens[0] == "setup_steps" and (len(tokens) < 2 or tokens[1] not in step_ids):
                     raise ValueError(f"mutation operator references unknown setup step: {path}")
         return self
 

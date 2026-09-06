@@ -144,8 +144,10 @@ def parse_candidate(
     fallback_index: int = 0,
 ) -> MutationCandidate:
     """Parse a structured strategist response, retaining plain-text compatibility."""
-    default = operators[fallback_index % len(operators)] if operators else MutationOperator(
-        MutationDimension.WORDING, "wording"
+    default = (
+        operators[fallback_index % len(operators)]
+        if operators
+        else MutationOperator(MutationDimension.WORDING, "wording")
     )
     text = (raw or "").strip()
     try:
@@ -190,11 +192,7 @@ def parse_candidate(
 
 def strategy_similarity(left: str, right: str) -> float:
     def words(value: str) -> set[str]:
-        return {
-            token
-            for token in re.findall(r"[a-z0-9]+", value.lower())
-            if len(token) > 2
-        }
+        return {token for token in re.findall(r"[a-z0-9]+", value.lower()) if len(token) > 2}
 
     a, b = words(left), words(right)
     if not a or not b:
@@ -427,9 +425,7 @@ class DiversityArchive:
             "attempted_cells": sorted(attempted_cells),
             "unexplored_cells": sorted(possible - attempted_cells),
             "cell_attempts": dict(self._cell_attempts),
-            "elite_scores": {
-                cell: elite.score for cell, elite in sorted(self._elites.items())
-            },
+            "elite_scores": {cell: elite.score for cell, elite in sorted(self._elites.items())},
             "rejected_count": len(self._rejections),
             "rejections": list(self._rejections[-50:]),
         }
@@ -620,9 +616,7 @@ class SearchCheckpointStore:
         node.update(saved)
         return True
 
-    def find_child(
-        self, parent_id: str, depth: int, variant: int
-    ) -> dict[str, Any] | None:
+    def find_child(self, parent_id: str, depth: int, variant: int) -> dict[str, Any] | None:
         suffix = f"-{variant}"
         for node in self.state.get("nodes", {}).values():
             if (
@@ -637,11 +631,7 @@ class SearchCheckpointStore:
     def save_node(self, node: dict[str, Any], *, operator_cursor: int) -> None:
         if self.path is None:
             return
-        serializable = {
-            key: value
-            for key, value in node.items()
-            if key not in {"runtime_handle"}
-        }
+        serializable = {key: value for key, value in node.items() if key not in {"runtime_handle"}}
         self.state.setdefault("nodes", {})[str(node["id"])] = serializable
         self.state["operator_cursor"] = operator_cursor
         root: dict[str, Any] = {}
@@ -693,13 +683,9 @@ def calibrated_partial_score(
     success_threshold: float,
 ) -> tuple[float, dict[str, float]]:
     """Apply distinct, explicit partial-signal weights without creating success."""
-    applied = {
-        name: max(0.0, min(1.0, float(weights.get(name, default_floor)))) for name in fired
-    }
+    applied = {name: max(0.0, min(1.0, float(weights.get(name, default_floor)))) for name in fired}
     partial_component = (
-        min(max(applied.values()), max(0.0, success_threshold - 0.01))
-        if applied
-        else 0.0
+        min(max(applied.values()), max(0.0, success_threshold - 0.01)) if applied else 0.0
     )
     return max(base_score, partial_component), applied
 

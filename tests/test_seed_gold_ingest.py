@@ -36,7 +36,11 @@ class _StubJudge:
         hit = any(k in trace.raw_response for k in ("get_skills", "execute_plan", "EXECUTION_PLAN"))
         s = 0.9 if hit else 0.35
         return JudgeScore(
-            judge_name="decomposed_ipi", score=s, reasoning="stub", flagged=s >= 0.5, judge_version="stub"
+            judge_name="decomposed_ipi",
+            score=s,
+            reasoning="stub",
+            flagged=s >= 0.5,
+            judge_version="stub",
         )
 
 
@@ -76,7 +80,9 @@ def test_conversation_with_judge_folds_l2_onto_the_leaf(tmp_path: Path, monkeypa
     factory = make_session_factory(make_engine(url))
     with session_scope(factory) as s:
         rows = list_gold_labels(s, run_id=_RUN)
-        leaf = next(t for t in s.query(Trace).filter(Trace.run_id == _RUN).all() if t.id.endswith("t8"))
+        leaf = next(
+            t for t in s.query(Trace).filter(Trace.run_id == _RUN).all() if t.id.endswith("t8")
+        )
         leaf_judges = {js.judge_name for js in leaf.judge_scores}
 
     assert len(rows) == 1
@@ -115,7 +121,10 @@ def test_per_turn_with_judge_closes_the_gap(tmp_path: Path, monkeypatch) -> None
 
     factory = make_session_factory(make_engine(url))
     with session_scope(factory) as s:
-        rows = {cast(str, g.trace_id).split("-")[-1]: (g.oracle_verdict, g.sample_reason) for g in list_gold_labels(s, run_id=_RUN)}
+        rows = {
+            cast(str, g.trace_id).split("-")[-1]: (g.oracle_verdict, g.sample_reason)
+            for g in list_gold_labels(s, run_id=_RUN)
+        }
 
     assert len(rows) == 8
     # The stub judge reads persona turns as partial -> combined partial == expert.

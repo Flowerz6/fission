@@ -111,9 +111,7 @@ def register(app: typer.Typer) -> None:
                 rows = list_gold_labels(session, sample_reason=sample_reason, limit=100_000)
             else:
                 for rid in run_id:
-                    rows.extend(
-                        list_gold_labels(session, run_id=rid, sample_reason=sample_reason)
-                    )
+                    rows.extend(list_gold_labels(session, run_id=rid, sample_reason=sample_reason))
 
             # Resolve output paths while the session is open, so a single target
             # run can default to its own on-disk artifact directory — exactly
