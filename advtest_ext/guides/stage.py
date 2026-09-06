@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from advtest_ext.core.builtin_operations import default_operations
@@ -29,7 +31,75 @@ _ROLE = {
     "self": "recipient",
     "attacker": "attacker_sender",
     "attacker_sender": "attacker_sender",
+    "bystander": "bystander",
 }
+
+# Per-role operator conventions for resolving a concrete account: a Chrome
+# ``profile_dir`` (UI/side-panel ops) and a ``token_cache`` OAuth JSON (API ops
+# like gmail.send_email). Each is ``(env_var, default_under_~/.advtest)``. Set
+# the env var to point a role at a specific signed-in account; the defaults let
+# the common two-account setup work with zero config once the profiles/tokens
+# are placed at the conventional paths. Mirrors
+# ``_cli_run_recipe._build_account_pool_for_recipe`` and extends it with tokens.
+_ROLE_PROFILE_ENV: dict[str, tuple[str, str]] = {
+    "recipient": ("ADVTEST_PLAYWRIGHT_PROFILE_DIR", "playwright-profile"),
+    "attacker_sender": ("ADVTEST_PROFILE_ATTACKER_SENDER", "profile-attacker-sender"),
+    "bystander": ("ADVTEST_PROFILE_BYSTANDER", "profile-bystander"),
+}
+_ROLE_TOKEN_ENV: dict[str, tuple[str, str]] = {
+    "recipient": ("ADVTEST_OAUTH_TOKEN_CACHE", "oauth-token.json"),
+    "attacker_sender": ("ADVTEST_OAUTH_TOKEN_ATTACKER_SENDER", "oauth-token-attacker-sender.json"),
+    "bystander": ("ADVTEST_OAUTH_TOKEN_BYSTANDER", "oauth-token-bystander.json"),
+}
+_ADVTEST_HOME = Path.home() / ".advtest"
+
+
+def setup_roles(guide: Guide) -> set[str]:
+    """The distinct (mapped) account roles the guide's setup steps drive.
+
+    Empty when the guide has no setup steps. Raises for an unknown source
+    role — the same failure ``build_setup_recipe`` would raise, surfaced
+    earlier so pool construction fails loudly and consistently."""
+    roles: set[str] = set()
+    for step in guide.setup_steps:
+        role = _ROLE.get(step.account_role)
+        if role is None:
+            raise ValueError(f"unsupported setup account role {step.account_role!r}")
+        roles.add(role)
+    return roles
+
+
+def build_setup_account_pool(guide: Guide) -> AccountPool | None:
+    """Derive an :class:`AccountPool` for a guide's setup steps from the
+    per-role operator conventions above.
+
+    Returns ``None`` when the setup needs no distinct second account (no
+    setup steps, or only the ``recipient`` role) — the legacy single-account
+    path then applies and handlers fall back to the default identity. When a
+    step drives the ``attacker_sender`` (or ``bystander``) role, a pool is
+    built binding each referenced role to its conventional profile + OAuth
+    token, so e.g. gmail.send_email plants an email AS the attacker account
+    while the side-panel target stays the recipient."""
+    from advtest_ext.core.account_pool import AccountPool, AccountSlot
+
+    roles = setup_roles(guide)
+    if roles <= {"recipient"}:
+        return None
+    slots: list[AccountSlot] = []
+    for role in sorted(roles):
+        prof_env, prof_default = _ROLE_PROFILE_ENV[role]
+        tok_env, tok_default = _ROLE_TOKEN_ENV[role]
+        profile_dir = Path(os.environ.get(prof_env) or (_ADVTEST_HOME / prof_default))
+        token_cache = Path(os.environ.get(tok_env) or (_ADVTEST_HOME / tok_default))
+        slots.append(
+            AccountSlot(
+                role=cast("AccountRole", role),
+                profile_dir=profile_dir,
+                token_cache=token_cache,
+                label=None,
+            )
+        )
+    return AccountPool(slots=slots)
 
 
 def _render_variables(value: Any, variables: dict[str, str]) -> Any:

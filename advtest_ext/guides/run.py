@@ -249,9 +249,7 @@ async def run_guide(
             checker = _load_provider_role(
                 cfg_path,
                 checker_role,
-                missing_role_hint=(
-                    "add a family-disjoint verifier role or pass checker_role=None"
-                ),
+                missing_role_hint=("add a family-disjoint verifier role or pass checker_role=None"),
             )
         except Exception:
             checker = None
@@ -318,7 +316,18 @@ async def run_guide(
         **attack_overrides,
         run_id=run_id,
     )
-    return await orchestrator.run()
+    try:
+        return await orchestrator.run()
+    finally:
+        # The setup/mutation session pool (attacker's browser contexts) is
+        # driven throughout the run by staging and the mutation materializer,
+        # so it can only be torn down here — inside the same event loop, after
+        # the run completes. Closing it in the caller (after asyncio.run) would
+        # bind Playwright's Chromium to a closed loop and hang teardown.
+        if setup_session_pool is not None:
+            close = getattr(setup_session_pool, "close", None)
+            if close is not None:
+                await close()
 
 
 __all__ = ["build_guide_run", "default_target_name", "run_guide"]

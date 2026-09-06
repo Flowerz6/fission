@@ -244,6 +244,34 @@ def main() -> None:
     if args.review_sample_budget and session_factory is None:
         raise SystemExit("--review-sample-budget requires DB persistence (drop --no-db)")
 
+    # Multi-account setup. When a guide's setup steps drive a second account
+    # (e.g. an attacker mailbox that plants the bait email), build the account
+    # pool + session pool so those steps act AS that account: gmail.send_email
+    # picks the attacker's OAuth token from its slot; UI setup steps open the
+    # attacker's browser profile lazily. Roles resolve from the operator
+    # conventions in advtest_ext.guides.stage (ADVTEST_PROFILE_ATTACKER_SENDER /
+    # ADVTEST_OAUTH_TOKEN_ATTACKER_SENDER, etc.). run_guide() owns closing the
+    # session pool inside its event loop.
+    setup_account_pool = None
+    setup_session_pool = None
+    setup_operations = None
+    if not args.skip_setup and guide.setup_steps:
+        from advtest_ext.guides.stage import build_setup_account_pool
+
+        setup_account_pool = build_setup_account_pool(guide)
+        if setup_account_pool is not None:
+            from advtest_ext.adapters._ui_mode_common import UiModeSessionPool
+            from advtest_ext.adapters.google_docs.ui_mode import UiModeSession
+            from advtest_ext.core.builtin_operations import default_operations
+
+            def _setup_session_factory(profile_dir: Path) -> object:
+                return UiModeSession(profile_dir=profile_dir)
+
+            setup_operations = default_operations()
+            setup_session_pool = UiModeSessionPool(setup_account_pool, _setup_session_factory)
+            roles = ", ".join(sorted(slot.role for slot in setup_account_pool))
+            print(f"  setup will drive extra accounts: {roles}")
+
     print(f"running guide {guide.id!r} against {args.target_name or guide.target.app} …")
     result = asyncio.run(
         run_guide(
@@ -259,6 +287,9 @@ def main() -> None:
             execute_setup=not args.skip_setup,
             setup_variables=setup_variables,
             setup_settle_s=args.setup_settle_seconds,
+            setup_operations=setup_operations,
+            setup_account_pool=setup_account_pool,
+            setup_session_pool=setup_session_pool,
             **overrides,
         )
     )

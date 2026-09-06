@@ -155,7 +155,9 @@ def _cache_covers_scopes(cache_path: Path, scopes: tuple[str, ...]) -> bool:
     return set(scopes).issubset(granted)
 
 
-def _build_oauth_user_credentials(scopes: tuple[str, ...]) -> Credentials:
+def _build_oauth_user_credentials(
+    scopes: tuple[str, ...], token_cache: Path | None = None
+) -> Credentials:
     """OAuth2 installed-app flow. On a cache hit the refresh token
     is exercised silently; on a cache miss (or corrupt cache) we
     pop the browser for consent. The token is rewritten on disk
@@ -164,7 +166,7 @@ def _build_oauth_user_credentials(scopes: tuple[str, ...]) -> Credentials:
     from google.oauth2.credentials import Credentials as UserCreds
     from google_auth_oauthlib.flow import InstalledAppFlow
 
-    cache_path = _resolve_oauth_token_cache()
+    cache_path = token_cache if token_cache is not None else _resolve_oauth_token_cache()
     # Drop the cache up-front when the on-disk grant doesn't cover
     # what we're now asking for. Otherwise we'd happily hand back
     # creds whose ``valid`` is True but whose server-side grant is
@@ -207,13 +209,21 @@ def _persist_oauth_token(creds: Any, cache_path: Path) -> None:
 
 
 @cache
-def _credentials_for(mode: str, scopes: tuple[str, ...]) -> Credentials:
+def _credentials_for(
+    mode: str, scopes: tuple[str, ...], token_cache: Path | None = None
+) -> Credentials:
     """Cached builder. Re-import the module (or call
-    :func:`clear_credentials_cache`) to invalidate."""
+    :func:`clear_credentials_cache`) to invalidate.
+
+    ``token_cache`` overrides the OAuth token JSON for the ``oauth_user``
+    mode, so distinct accounts (e.g. an ``attacker_sender`` vs the
+    ``recipient``) resolve to distinct credentials. It is part of the
+    cache key, so per-account creds don't collide. Ignored under
+    ``service_account`` mode (use ``ADVTEST_SA_IMPERSONATE`` there)."""
     if mode == "service_account":
         return _build_service_account_credentials(scopes)
     if mode == "oauth_user":
-        return _build_oauth_user_credentials(scopes)
+        return _build_oauth_user_credentials(scopes, token_cache)
     raise RuntimeError(
         f"unknown {_ENV_MODE} value {mode!r}; expected 'service_account' or 'oauth_user'"
     )
@@ -231,7 +241,12 @@ def clear_credentials_cache() -> None:
 # ----------------------------------------------------------------------
 
 
-def get_service(api_name: str, api_version: str, scopes: Sequence[str]) -> Any:
+def get_service(
+    api_name: str,
+    api_version: str,
+    scopes: Sequence[str],
+    token_cache: Path | None = None,
+) -> Any:
     """Build an authorised ``googleapiclient.discovery.Resource`` for
     ``(api_name, api_version)`` using the configured auth mode and the
     requested ``scopes``.
@@ -240,12 +255,19 @@ def get_service(api_name: str, api_version: str, scopes: Sequence[str]) -> Any:
     callers asking for distinct scope sets get distinct credentials —
     the Workspace adapters do this when one needs Docs+Drive while
     another needs Gmail-only.
+
+    ``token_cache`` selects a specific OAuth token JSON (``oauth_user``
+    mode), which is how an operation acts as a *particular* account —
+    e.g. a Recipe/Guide setup step sending an email as the
+    ``attacker_sender`` while the side-panel target drives the
+    ``recipient``. When ``None`` the process-wide default token cache
+    (``ADVTEST_OAUTH_TOKEN_CACHE``) is used, preserving legacy behaviour.
     """
     mode = _require_env(
         _ENV_MODE,
         hint="set ADVTEST_AUTH_MODE to 'service_account' or 'oauth_user'",
     )
-    creds = _credentials_for(mode, tuple(scopes))
+    creds = _credentials_for(mode, tuple(scopes), token_cache)
     from googleapiclient.discovery import build
 
     # ``cache_discovery=False`` avoids the noisy "file_cache is
