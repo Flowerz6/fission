@@ -57,14 +57,29 @@ class GuideMutationMaterializer:
 
     async def apply(self, node: dict[str, Any]) -> MaterializedMutation | None:
         mutation = node.get("mutation") or {}
-        patch = mutation.get("artifact_patch") or {}
+        operator_name = mutation.get("operator_name")
+        operator = next(
+            (op for op in self.guide.mutation_operators if op.name == operator_name),
+            None,
+        )
+        # Deterministic carrier transforms (e.g. TIP encoding) compute the patch
+        # in code from the ORIGINAL carrier content, rather than trusting the
+        # strategist's free-text artifact_patch. This keeps the encoding correct
+        # and reproducible: "tip:base64" re-encodes the seed's carrier byte-for-
+        # byte the same way every run. Convention: mutation["transform"] =
+        # "tip:<scheme>" (append ":dp" for the depersonalisation lever).
+        transform = mutation.get("transform")
+        if isinstance(transform, str) and transform.startswith("tip:") and operator is not None:
+            patch = self._tip_patch(operator, transform)
+        else:
+            patch = mutation.get("artifact_patch") or {}
         if not isinstance(patch, dict) or not patch:
             return None
         allowed = {
             field
-            for operator in self.guide.mutation_operators
-            if operator.name == mutation.get("operator_name")
-            for field in operator.mutable_fields
+            for op in self.guide.mutation_operators
+            if op.name == operator_name
+            for field in op.mutable_fields
         }
         unknown = set(patch) - allowed
         if unknown:
@@ -155,6 +170,37 @@ class GuideMutationMaterializer:
         }
         return record
 
+    def _tip_patch(self, operator: Any, transform: str) -> dict[str, Any]:
+        """Build a deterministic Task-in-Prompt patch for ``operator``.
+
+        Reads each of the operator's mutable fields from the ORIGINAL guide and
+        rewrites it as ``x_task + E(u)`` (see ``attacks.tip_encoding``). So the
+        planted carrier for this branch is the seed's carrier content, encoded
+        with the named scheme and wrapped in a decode-and-act task. ``transform``
+        is ``"tip:<scheme>"`` with an optional ``":dp"`` suffix for the
+        depersonalisation framing."""
+        from advtest_ext.attacks.tip_encoding import supported_schemes, tip_transform
+
+        parts = transform.split(":")
+        scheme = parts[1] if len(parts) > 1 else ""
+        depersonalise = len(parts) > 2 and parts[2] == "dp"
+        if scheme not in supported_schemes():
+            raise RuntimeError(
+                f"unknown TIP scheme in transform {transform!r}; supported: {supported_schemes()}"
+            )
+        if not operator.mutable_fields:
+            raise RuntimeError(f"TIP operator {operator.name!r} declares no mutable_fields")
+        patch: dict[str, Any] = {}
+        for field_path in operator.mutable_fields:
+            current = _get_guide_path(self.guide, field_path)
+            if not isinstance(current, str) or not current:
+                raise RuntimeError(
+                    f"TIP transform needs a non-empty string at {field_path!r}; "
+                    f"got {type(current).__name__}"
+                )
+            patch[field_path] = tip_transform(current, scheme, depersonalise=depersonalise)
+        return patch
+
     async def cleanup(self, record: MaterializedMutation | None) -> None:
         if record is None:
             return
@@ -166,6 +212,30 @@ class GuideMutationMaterializer:
         if inspect.isawaitable(result):
             await result
         record.cleanup_status = "cleaned"
+
+
+def _get_guide_path(guide: Guide, path: str) -> Any:
+    """Read an explicitly allow-listed dotted Guide field path. Mirrors the
+    traversal in :func:`_set_guide_path` (list items keyed by ``id``, dict keys,
+    attributes) so a transform can read the value it is about to rewrite."""
+    tokens = [token for token in path.split(".") if token]
+    if not tokens:
+        raise ValueError("empty mutable field path")
+    current: Any = guide
+    for token in tokens:
+        if isinstance(current, list):
+            current = next((item for item in current if getattr(item, "id", None) == token), None)
+            if current is None:
+                raise ValueError(f"mutable field path references unknown step {token!r}")
+        elif isinstance(current, dict):
+            if token not in current:
+                raise ValueError(f"mutable field path references unknown key {token!r}")
+            current = current[token]
+        else:
+            if not hasattr(current, token):
+                raise ValueError(f"mutable field path references unknown field {token!r}")
+            current = getattr(current, token)
+    return current
 
 
 def _set_guide_path(guide: Guide, path: str, value: Any) -> None:

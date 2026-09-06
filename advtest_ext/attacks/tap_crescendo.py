@@ -557,6 +557,17 @@ class TapCrescendoAttack(AttackPlugin):
         self._mutation_surface = list(mutation_surface or [])
         self._invariants = list(invariants or [])
         self._operators = typed_operators(self._mutation_surface, mutation_operators)
+        # Deterministic Task-in-Prompt carrier variants, derived from any
+        # operator that declares a ``tip:<scheme>`` transform. Each becomes a
+        # sibling of the seed slot that reproduces the seed conversation against
+        # a TIP-encoded carrier (see ``_run_seed_carrier_variants``). Empty
+        # unless a guide opts in, so existing runs are unchanged.
+        self._tip_variants: list[tuple[str, str]] = [
+            (operator.name, transform)
+            for operator in self._operators
+            for transform in operator.allowed_transformations
+            if transform.startswith("tip:")
+        ]
         if causal_controls and len(self._operators) > 1:
             base_operators = list(self._operators)
             for index in range(len(base_operators) - 1):
@@ -849,6 +860,25 @@ class TapCrescendoAttack(AttackPlugin):
                     if self._stop_on_success and child.get("success"):
                         converged = True
                         break
+                # After the normal breadth for this parent, inject deterministic
+                # TIP carrier variants of the just-replicated seed. Guarded: a
+                # no-op unless the guide declares a TIP operator AND a
+                # materializer exists, so existing behaviour is unchanged.
+                if not converged:
+                    pre = len(children)
+                    async for attempt in self._run_seed_carrier_variants(
+                        behavior,
+                        target,
+                        depth,
+                        p_idx,
+                        parent,
+                        children,
+                        history,
+                        reserve_query=reserve_query,
+                    ):
+                        yield attempt
+                    if self._stop_on_success and any(c.get("success") for c in children[pre:]):
+                        converged = True
                 if converged:
                     break
             if converged:
@@ -1118,6 +1148,69 @@ class TapCrescendoAttack(AttackPlugin):
     # One node = one Crescendo conversation. Mutates ``node`` with the
     # resulting score / transcript; yields one attempt per turn.
     # ------------------------------------------------------------------
+
+    async def _run_seed_carrier_variants(
+        self,
+        behavior: Behavior,
+        target: DocumentTarget,
+        depth: int,
+        p_idx: int,
+        parent: dict[str, Any],
+        children: list[dict[str, Any]],
+        history: list[dict[str, Any]],
+        *,
+        reserve_query: _ReserveQuery | None = None,
+    ) -> AsyncIterator[AttackAttempt]:
+        """Inject Task-in-Prompt carrier mutations right after the seed slot.
+
+        For each declared ``tip:<scheme>`` transform, run one node that REPLAYS
+        the documented seed conversation (``scripted``) but against a carrier the
+        materializer has re-encoded as ``x_task + E(u)`` (see
+        ``guides.mutation_runtime._tip_patch``). This is the paper's TIP attack
+        applied to indirect injection: same proven chain, obfuscated carrier.
+
+        Guarded to a no-op unless the guide opted in (a TIP operator exists), a
+        materializer can realise the carrier, and this is the seed slot's
+        position in the tree — so non-TIP runs are byte-for-byte unchanged."""
+        if (
+            not self._tip_variants
+            or self._mutation_materializer is None
+            or not self._seed_chain
+            or depth != self._seed_chain_depth
+            or p_idx != 0
+        ):
+            return
+        for vi, (operator_name, transform) in enumerate(self._tip_variants, start=1):
+            scheme = transform.split(":", 2)[1] if ":" in transform else transform
+            strategy = f"reproduce the seed conversation against a {transform} carrier"
+            # Seed the candidate metadata so _run_node attaches the mutation and
+            # the materializer computes the deterministic TIP patch.
+            self._candidate_metadata[strategy] = {
+                "operator_name": operator_name,
+                "dimension": "carrier_placement",
+                "feature_value": scheme,
+                "transform": transform,
+                "mutation": f"TIP: re-encode the carrier as {transform}",
+                "artifact_patch": {},
+                "preserved_invariants": [],
+            }
+            child: dict[str, Any] = {
+                "id": f"n{depth}-{p_idx}-tip{vi}",
+                "parent_id": parent["id"],
+                "depth": depth,
+                "strategy": strategy,
+                "scripted": list(self._seed_chain or []),
+            }
+            if self._node_settle_s:
+                await asyncio.sleep(self._node_settle_s)
+            async for attempt in self._run_node(
+                behavior, target, child, reserve_query=reserve_query
+            ):
+                yield attempt
+            children.append(child)
+            history.append(self._history_entry(child))
+            if self._stop_on_success and child.get("success"):
+                break
 
     async def _run_node(
         self,

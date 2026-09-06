@@ -589,8 +589,8 @@ async def test_pair_indirect_composes_payload_into_document() -> None:
 
     # N supported techniques x max_rounds=1. Against _KeywordTarget
     # (formatting/comments/multimodal/all block_types true; tool_use
-    # false), only tool_format_mimicry is filtered — so 26 attempts.
-    assert len(attempts) == 26
+    # false), only tool_format_mimicry is filtered — so 27 attempts.
+    assert len(attempts) == 27
 
     seen_techniques: set[str] = set()
     for a in attempts:
@@ -673,8 +673,8 @@ async def test_indirect_injection_consumes_upstream_payload() -> None:
 
     # No YAML payloads — only the upstream one — through every supported
     # technique. StubDocumentTarget has tool_use=False so
-    # tool_format_mimicry is filtered → 26 techniques.
-    assert len(attempts) == 26
+    # tool_format_mimicry is filtered → 27 techniques.
+    assert len(attempts) == 27
     for a in attempts:
         assert a.payload.id == "custom-upstream"
         assert a.document is not None
