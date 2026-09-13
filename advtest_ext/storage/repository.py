@@ -315,8 +315,19 @@ def enqueue_hitl(
 # ----------------------------------------------------------------------
 
 
-def list_runs(session: Session, *, limit: int = 100) -> list[Run]:
-    return list(session.scalars(select(Run).order_by(desc(Run.started_at)).limit(limit)))
+def list_runs(session: Session, *, limit: int = 100, guide_id: str | None = None) -> list[Run]:
+    stmt = select(Run).order_by(desc(Run.started_at))
+    if guide_id is not None:
+        stmt = stmt.where(Run.guide_id == guide_id)
+    return list(session.scalars(stmt.limit(limit)))
+
+
+def set_run_guide(session: Session, *, run_id: str, guide_id: str) -> None:
+    """Tag a Run with the guide it was launched from. No-op if the row is
+    missing. Idempotent — overwrites with the same value on a re-run."""
+    run = session.get(Run, run_id)
+    if run is not None:
+        run.guide_id = guide_id
 
 
 def get_run(session: Session, run_id: str) -> Run | None:

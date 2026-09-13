@@ -317,7 +317,19 @@ async def run_guide(
         run_id=run_id,
     )
     try:
-        return await orchestrator.run()
+        result = await orchestrator.run()
+        # Tag the run with the guide it came from so the dashboard can list
+        # only same-guide runs (e.g. the authenticity check compares apples to
+        # apples). Best-effort: a tagging failure never sinks a completed run.
+        if session_factory is not None:
+            try:
+                from advtest_ext.storage import session_scope, set_run_guide
+
+                with session_scope(session_factory) as s:
+                    set_run_guide(s, run_id=result.run_id, guide_id=guide.id)
+            except Exception:  # pragma: no cover - best-effort tagging
+                pass
+        return result
     finally:
         # The setup/mutation session pool (attacker's browser contexts) is
         # driven throughout the run by staging and the mutation materializer,

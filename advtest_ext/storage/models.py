@@ -75,6 +75,10 @@ class Run(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     target_name: Mapped[str] = mapped_column(String(128))
     strategy: Mapped[str] = mapped_column(String(32))
+    guide_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    """The guide/playbook this run was launched from, when any. Lets the
+    authenticity view list only same-guide runs so cross-run comparisons
+    are apples-to-apples. Null for ad-hoc config runs."""
     output_dir: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     """Frozen RunConfig dump (target_name, attacks, behaviors,

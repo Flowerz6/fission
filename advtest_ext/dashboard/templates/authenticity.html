@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Authenticity · Fission{% endblock %}
+{% block content %}
+<style>
+  main{max-width:1100px}
+  .auth-intro{color:var(--muted);font-size:.9rem;margin:.2rem 0 1.3rem;max-width:70ch}
+  .auth-form{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-sm);padding:1.1rem 1.25rem;margin-bottom:1.4rem}
+  .auth-row{display:grid;grid-template-columns:1fr 1fr 140px;gap:1rem;margin-bottom:1rem}
+  @media (max-width:820px){.auth-row{grid-template-columns:1fr}}
+  .auth-form label{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);display:block;margin-bottom:.3rem}
+  .auth-form select,.auth-form input{width:100%;padding:.55rem;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--ink);font-size:.9rem}
+  .run-pick{border:1px solid var(--border);border-radius:var(--r-sm);max-height:230px;overflow:auto;background:var(--surface-2)}
+  .run-pick label{display:flex;gap:.55rem;align-items:baseline;text-transform:none;letter-spacing:0;color:var(--ink);font-size:.82rem;padding:.4rem .7rem;border-bottom:1px solid var(--border);margin:0}
+  .run-pick label:last-child{border-bottom:0}
+  .run-pick input{width:auto}
+  .run-pick .rid{font:.78rem var(--mono,ui-monospace,monospace)}
+  .run-pick .rmeta{color:var(--muted);font-size:.72rem;margin-left:auto}
+  .auth-go{border:0;border-radius:var(--r-sm);padding:.62rem 1.1rem;background:var(--accent);color:#fff;font:600 .85rem var(--sans);cursor:pointer}
+  .auth-go:hover{background:var(--accent-hover)}
+  .verdict-card{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow-sm)}
+  .verdict-head{padding:1rem 1.25rem;display:flex;align-items:center;gap:1rem;border-bottom:1px solid var(--border)}
+  .vbadge{font:700 .82rem var(--sans);text-transform:uppercase;letter-spacing:.05em;padding:.3rem .7rem;border-radius:var(--r-sm);border:1px solid var(--border)}
+  .vbadge.real{color:#176b42;background:#dcf6e9;border-color:#a6e0c2}
+  .vbadge.suspect{color:#a12b31;background:#fde5e6;border-color:#eabbbe}
+  .vbadge.inconclusive{color:var(--muted);background:var(--surface-2)}
+  .verdict-why{color:var(--ink-soft);font-size:.9rem}
+  .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border)}
+  .metric{background:var(--surface);padding:.8rem 1.25rem}
+  .metric .n{font:700 1.35rem var(--mono,ui-monospace,monospace);color:var(--ink)}
+  .metric .k{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:.15rem}
+  .art-row{padding:.7rem 1.25rem;border-top:1px solid var(--border);font-size:.82rem}
+  .art-tag{font:.68rem var(--mono,ui-monospace,monospace);border:1px solid var(--border);border-radius:var(--r-sm);padding:.12rem .4rem;margin-right:.3rem;color:var(--muted)}
+  .art-tag.stable{color:#176b42;border-color:#a6e0c2;background:#f0fbf5}
+  .art-tag.drift{color:#a12b31;border-color:#eabbbe;background:#fdf2f3}
+</style>
+
+<div class="page-head">
+  <div class="eyebrow">Oracle</div>
+  <h1>Authenticity check</h1>
+</div>
+<p class="auth-intro">
+  For self-extraction attacks (skill leak, schema, system prompt) there is no planted canary, so a
+  string match can't tell a real leak from a confident hallucination. Compare several runs of the
+  same guide — ideally different accounts, but fresh sessions on one account also work. Real internals
+  recur across runs; a hallucination drifts. The fake-module probe is the tie-breaker: a real system
+  errors on a module that doesn't exist, a hallucinating one invents content for it.
+</p>
+
+<form class="auth-form" method="get" action="/authenticity">
+  <div class="auth-row">
+    <div>
+      <label>Guide (self-extraction)</label>
+      <select name="guide" onchange="this.form.submit()">
+        <option value="">— select —</option>
+        {% for g in guides %}
+        <option value="{{ g.id }}" {% if g.id == selected_guide %}selected{% endif %}>{{ g.id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Fake-module marker (negative control)</label>
+      <input type="text" name="control_marker" value="{{ control_marker }}" placeholder="e.g. cell_encryption">
+    </div>
+    <div>
+      <label>Min consistency</label>
+      <input type="number" name="min_consistency" min="0" max="1" step="0.05" value="{{ min_consistency }}">
+    </div>
+  </div>
+  <label>Runs to compare (tick 2 or more of the same guide)</label>
+  <div class="run-pick">
+    {% for r in runs %}
+    <label>
+      <input type="checkbox" name="runs" value="{{ r.run_id }}" {% if r.run_id in chosen_runs %}checked{% endif %}>
+      <span class="rid">{{ r.run_id }}</span>
+      <span class="rmeta">{{ r.target }} · {{ r.started_at.strftime('%Y-%m-%d %H:%M') if r.started_at else '' }}</span>
+    </label>
+    {% else %}
+    <label><span class="muted">{% if selected_guide %}No runs tagged to this guide yet — launch it a few times, then come back.{% else %}Select a guide above to see its runs.{% endif %}</span></label>
+    {% endfor %}
+  </div>
+  <div style="margin-top:1rem"><button class="auth-go" type="submit">Check authenticity</button></div>
+</form>
+
+{% if report %}
+{% set v = report.verdict %}
+<div class="verdict-card">
+  <div class="verdict-head">
+    <span class="vbadge {{ v }}">{{ v }}</span>
+    <span class="verdict-why">{{ report.reasoning }}</span>
+  </div>
+  <div class="metrics">
+    <div class="metric"><div class="n">{{ report.n_runs }}</div><div class="k">Runs compared</div></div>
+    <div class="metric"><div class="n">{{ '%.2f' % report.consistency }}</div><div class="k">Cross-run consistency</div></div>
+    <div class="metric"><div class="n" style="font-size:1rem">{{ report.control | replace('_',' ') }}</div><div class="k">Fake-module control</div></div>
+  </div>
+  {% if report.stable_artifacts %}
+  <div class="art-row"><strong>Stable artifacts</strong> (recur across runs — evidence of real internals):<br>
+    {% for a in report.stable_artifacts %}<span class="art-tag stable">{{ a }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {% if report.volatile_artifacts %}
+  <div class="art-row"><strong>Drifting artifacts</strong> (appear in only one run — hallucination smell):<br>
+    {% for a in report.volatile_artifacts %}<span class="art-tag drift">{{ a }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  <div class="art-row muted">
+    Real means the leak is defensible as a finding. Suspect means it likely hallucinated — do not report it.
+    Harvested candidate seeds from these runs live under <a href="/seeds?kind=harvested">Catalogue → Harvested</a>.
+  </div>
+</div>
+{% elif selected_guide and chosen_runs %}
+<p class="muted">Could not compute a report — the selected guide has no pattern/token success signals to key on.</p>
+{% endif %}
+{% endblock %}

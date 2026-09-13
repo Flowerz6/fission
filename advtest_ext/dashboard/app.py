@@ -32,11 +32,12 @@ from __future__ import annotations
 
 import hmac
 import os
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -1793,6 +1794,69 @@ def create_app(
             request,
             "seeds/show.html",
             {"seed": seed, "recipes": recipes},
+        )
+
+    @app.get("/authenticity", response_class=HTMLResponse)
+    async def authenticity_index(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+        guide: str | None = None,
+        runs: list[str] | None = Query(default=None),  # noqa: B008
+        control_marker: str | None = None,
+        min_consistency: float = 0.5,
+    ) -> Response:
+        """Judge whether a self-extraction leak (skill/schema/system prompt) is REAL
+        or a hallucination, by comparing several runs of the same guide: cross-run
+        consistency + the fake-module negative control. See
+        ``advtest_ext/core/authenticity.py``."""
+        from advtest_ext.core.authenticity import authenticity_report_for_runs
+        from advtest_ext.guides.corpus import load_guides
+
+        guides_dir = Path(__file__).resolve().parents[2] / "guides"
+        guides = load_guides(guides_dir) if guides_dir.exists() else []
+        selected = next((g for g in guides if g.id == guide), None)
+
+        # Only the SELECTED guide's runs are offered, so a comparison is always
+        # apples-to-apples — you cannot accidentally mix runs of different guides.
+        recent = list_runs(session, limit=100, guide_id=guide) if guide else []
+        run_rows = [
+            {"run_id": r.id, "started_at": r.started_at, "target": r.target_name} for r in recent
+        ]
+
+        report = None
+        chosen_runs = [r for r in (runs or []) if r]
+        if selected is not None and len(chosen_runs) >= 1:
+            # Artifact patterns come from the guide's own L0 success signals.
+            patterns: list[str] = []
+            for sig in selected.success.signals:
+                pat = sig.get("pattern")
+                tok = sig.get("token") or sig.get("canary")
+                if pat:
+                    patterns.append(str(pat))
+                elif tok:
+                    patterns.append(re.escape(str(tok)))
+            if patterns:
+                rep = authenticity_report_for_runs(
+                    factory,
+                    chosen_runs,
+                    artifact_patterns=patterns,
+                    control_marker=control_marker or None,
+                    min_consistency=min_consistency,
+                )
+                report = rep.to_dict()
+
+        return templates.TemplateResponse(
+            request,
+            "authenticity.html",
+            {
+                "guides": guides,
+                "selected_guide": guide,
+                "runs": run_rows,
+                "chosen_runs": chosen_runs,
+                "control_marker": control_marker or "",
+                "min_consistency": min_consistency,
+                "report": report,
+            },
         )
 
     @app.get("/recipes", response_class=HTMLResponse)
