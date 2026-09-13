@@ -834,6 +834,99 @@ def create_app(
     async def live_tests_status() -> dict[str, Any]:
         return live_tests.snapshot()
 
+    @app.get("/live-tests/progress")
+    async def live_tests_progress() -> dict[str, Any]:
+        """Snapshot + live turn-by-turn progress for the active run.
+
+        The controller streams a vendor-neutral console; this endpoint adds the
+        structured view the operator actually wants during a run: each executed
+        turn with its verdict, judge score, and which signals fired — read
+        straight from the DB for the active ``run_id``, so it reflects real
+        persisted evidence rather than parsed stdout. A turn is
+        ``signal_verified`` when a *deterministic* (non-LLM) signal fired, which
+        separates ground-truth wins from oracle-only calls."""
+        snap = live_tests.snapshot()
+        run_id = snap.get("run_id")
+        turns: list[dict[str, Any]] = []
+        summary = {"turns": 0, "successes": 0, "verified": 0, "best_score": 0.0}
+        if run_id:
+            session = factory()
+            try:
+                traces = list_traces_for_run(session, run_id)
+                for idx, t in enumerate(traces):
+                    sigs = list_signals_for_trace(session, t.id)
+                    signal_view = [
+                        {"name": s.name, "kind": s.kind, "fired": bool(s.fired)} for s in sigs
+                    ]
+                    verified = any(
+                        s.fired and s.kind != "llm_judge_verdict" for s in sigs
+                    )
+                    scores = [js.score for js in t.judge_scores]
+                    score = max(scores) if scores else 0.0
+                    is_success = (t.verdict or "").lower() == "success"
+                    turns.append(
+                        {
+                            "index": idx + 1,
+                            "depth": t.depth,
+                            "verdict": t.verdict or "pending",
+                            "score": round(float(score), 3),
+                            "signals": signal_view,
+                            "signal_verified": verified,
+                            "trace_id": t.id,
+                        }
+                    )
+                    summary["turns"] += 1
+                    summary["best_score"] = max(summary["best_score"], round(float(score), 3))
+                    if is_success:
+                        summary["successes"] += 1
+                        if verified:
+                            summary["verified"] += 1
+            except Exception:  # pragma: no cover - progress is best-effort
+                turns = []
+            finally:
+                session.close()
+        # Summary spans the whole run; only the most recent turns are streamed to
+        # keep the poll light on a long crescendo (a run can be hundreds of turns).
+        turns = turns[-80:]
+        return {**snap, "turns": turns, "summary": summary}
+
+    @app.get("/live-tests/plan/{playbook}")
+    async def live_tests_plan(playbook: str) -> dict[str, Any]:
+        """The declared staging plan for a playbook: the setup steps that will
+        replay through the tool ops, the deterministic success signals, and the
+        seed-chain length. Lets the run screen show *what will happen* before the
+        first turn, so an operator sees the carrier being planted, not a blank
+        console."""
+        from advtest_ext.guides.corpus import load_guides
+        from advtest_ext.guides.models import display_title
+
+        guides_dir = Path(__file__).resolve().parents[2] / "guides"
+        guides = load_guides(guides_dir) if guides_dir.exists() else []
+        guide = next((g for g in guides if g.id == playbook), None)
+        if guide is None:
+            raise HTTPException(404, f"playbook {playbook!r} not found")
+        steps = [
+            {
+                "n": i + 1,
+                "op": f"{st.region}:{st.operation}",
+                "account": st.account_role or "—",
+                "intent": st.intent,
+            }
+            for i, st in enumerate(guide.setup_steps)
+        ]
+        signals = [
+            {"kind": s.get("kind", "—"), "name": s.get("name", "—")}
+            for s in guide.success.signals
+        ]
+        return {
+            "id": guide.id,
+            "title": display_title(guide),
+            "target": "Gemini in " + guide.target.app.replace("google_", "").title(),
+            "steps": steps,
+            "signals": signals,
+            "seed_turns": len(guide.exemplar_turns),
+        }
+
     @app.post("/live-tests/stop")
     async def live_tests_stop() -> JSONResponse:
         try:
