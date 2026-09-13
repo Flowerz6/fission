@@ -858,9 +858,7 @@ def create_app(
                     signal_view = [
                         {"name": s.name, "kind": s.kind, "fired": bool(s.fired)} for s in sigs
                     ]
-                    verified = any(
-                        s.fired and s.kind != "llm_judge_verdict" for s in sigs
-                    )
+                    verified = any(s.fired and s.kind != "llm_judge_verdict" for s in sigs)
                     scores = [js.score for js in t.judge_scores]
                     score = max(scores) if scores else 0.0
                     is_success = (t.verdict or "").lower() == "success"
@@ -915,8 +913,7 @@ def create_app(
             for i, st in enumerate(guide.setup_steps)
         ]
         signals = [
-            {"kind": s.get("kind", "—"), "name": s.get("name", "—")}
-            for s in guide.success.signals
+            {"kind": s.get("kind", "—"), "name": s.get("name", "—")} for s in guide.success.signals
         ]
         return {
             "id": guide.id,

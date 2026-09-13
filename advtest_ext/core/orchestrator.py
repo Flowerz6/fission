@@ -90,6 +90,7 @@ EventType = Literal[
     "mcts_select",
     "signals_evaluated",
     "review_sample_enqueued",
+    "seeds_harvested",
 ]
 
 
@@ -143,6 +144,111 @@ def _build_signal_stack(specs: Sequence[dict[str, Any]]) -> list[Any]:
     from advtest_ext.judges.signals import build_signal
 
     return [build_signal(spec) for spec in specs]
+
+
+def harvest_verified_seeds(
+    session_factory: Any,
+    run_id: str,
+    *,
+    max_per_run: int = 20,
+    max_turn_chars: int = 4000,
+) -> int:
+    """Promote signal-verified winning trajectories from a completed run into the
+    seed corpus, returning the count of NEW seeds written.
+
+    Closes the flywheel's back half — a crescendo variant that actually landed
+    becomes a reusable, replayable seed — and is deliberately GATED so it
+    sharpens the corpus instead of polluting it:
+
+    - **Validity gate** — only ``verdict == 'success'`` traces where a
+      *deterministic* (non-``llm_judge_verdict``) signal fired. This is the same
+      SIGNAL-VERIFIED bar the run UI shows; it stops the over-calling LLM oracle
+      from flooding the corpus with unverified "wins".
+    - **Novelty gate** — the seed id is a content hash of the trajectory, so a
+      duplicate trajectory (this run or a prior one) is skipped, not re-added.
+    - **Provenance** — written as ``kind='harvested'`` / ``source_format=
+      'tap_harvest'`` with ``submitted_by='harvest:tap:<run>'`` and
+      ``status='candidate'`` in the payload, so harvested hypotheses stay
+      distinct from human-authored chains and are revalidated before use.
+    """
+    import hashlib
+
+    from advtest_ext.core.seed import Seed
+    from advtest_ext.storage import (
+        get_seed,
+        insert_seed,
+        list_signals_for_trace,
+        list_traces_for_run,
+        session_scope,
+    )
+
+    harvested = 0
+    with session_scope(session_factory) as s:
+        rows = list_traces_for_run(s, run_id)
+        by_id = {r.id: r for r in rows}
+        for row in rows:
+            if harvested >= max_per_run:
+                break
+            if (row.verdict or "").lower() != "success":
+                continue
+            sigs = list_signals_for_trace(s, row.id)
+            verified = [
+                f"{sig.kind}:{sig.name}"
+                for sig in sigs
+                if sig.fired and sig.kind != "llm_judge_verdict"
+            ]
+            if not verified:
+                continue  # oracle-only success — not harvested
+            # Walk parent_id root->leaf to reconstruct the escalation path.
+            chain: list[Any] = []
+            cursor: Any = row
+            seen: set[str] = set()
+            while cursor is not None and cursor.id not in seen:
+                seen.add(cursor.id)
+                chain.append(cursor)
+                cursor = by_id.get(cursor.parent_id) if cursor.parent_id else None
+            chain.reverse()
+            attacker_texts = [(t.payload_text or "")[:max_turn_chars] for t in chain]
+            turns = [
+                {
+                    "n": i + 1,
+                    "attacker": attacker_texts[i],
+                    "target": (t.raw_response or "")[:max_turn_chars],
+                }
+                for i, t in enumerate(chain)
+            ]
+            digest = hashlib.sha1(
+                (row.behavior_id + " " + " ".join(attacker_texts)).encode("utf-8", "ignore")
+            ).hexdigest()[:12]
+            seed = Seed(
+                id=f"harvested-{digest}",
+                kind="harvested",
+                title=f"harvested: {row.behavior_id} ({row.attack_name}, run {run_id[:8]})",
+                source_format="tap_harvest",
+                raw_artefact_path=f"trace://{row.id}",
+                taxonomy_hints=["harvested", row.behavior_id]
+                + ([row.technique_id] if row.technique_id else []),
+                submitted_by=f"harvest:tap:{run_id}",
+                payload={
+                    "extracted_turns": turns,
+                    "harvested": True,
+                    "declared_metadata": {
+                        "status": "candidate",
+                        "run_id": run_id,
+                        "trace_id": row.id,
+                        "behavior_id": row.behavior_id,
+                        "attack": row.attack_name,
+                        "technique_id": row.technique_id,
+                        "worked_on": row.target_name,
+                        "verified_signals": verified,
+                    },
+                },
+            )
+            if get_seed(s, seed.id) is not None:
+                continue  # novelty gate: this trajectory is already harvested
+            insert_seed(s, seed=seed)
+            harvested += 1
+    return harvested
 
 
 # ----------------------------------------------------------------------
@@ -462,6 +568,7 @@ class Orchestrator:
         self._persister.write_run_result(result)
         self._db_finalize_run(result.summary_stats)
         await self._enqueue_review_sample()
+        await self._harvest_verified_seeds()
         await self._events.emit(
             "run_completed",
             run_id=self.run_id,
@@ -813,6 +920,25 @@ class Orchestrator:
             n_uniform=len(plan.uniform),
             n_disagreement=len(plan.disagreement),
         )
+
+    async def _harvest_verified_seeds(self) -> None:
+        """Promote signal-verified winning trajectories back into the seed corpus.
+
+        Closes the flywheel's back half: a crescendo variant that actually landed
+        becomes a reusable, replayable seed. Runs once at run completion and is
+        deliberately GATED (see :func:`harvest_verified_seeds`) so it sharpens the
+        corpus instead of polluting it. Off with ``ADVTEST_HARVEST_SEEDS=0``.
+        No-op without a DB sink.
+        """
+        import os
+
+        if self._session_factory is None:
+            return
+        if os.environ.get("ADVTEST_HARVEST_SEEDS", "1").lower() in {"0", "false", "no"}:
+            return
+        count = harvest_verified_seeds(self._session_factory, self.run_id)
+        if count:
+            await self._events.emit("seeds_harvested", run_id=self.run_id, count=count)
 
     def _maybe_promote_finding(self, trace: AttackTrace) -> None:
         """Auto-promote a successful trace to a Finding. The DB sink
