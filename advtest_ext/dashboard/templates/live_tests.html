@@ -247,10 +247,19 @@
   });
 
   buttons.forEach(button => button.addEventListener("click", async () => {
-    const title = button.closest(".test-card").querySelector("h2").textContent;
     const card = button.closest(".test-card");
-    const playbook = card.querySelector(".playbook-select")?.value || null;
+    const title = card.querySelector("h2").textContent;
+    const selectEl = card.querySelector(".playbook-select");
+    const playbook = selectEl ? (selectEl.value || null) : null;
+    if (selectEl && !playbook) {
+      consoleEl.textContent = "Select a playbook before launching. If the dropdown is empty, hard-refresh the page (Ctrl-Shift-R) and try again.";
+      return;
+    }
     const branchingFactor = card.querySelector(".branching-factor")?.valueAsNumber || null;
+    if (branchingFactor !== null && (branchingFactor < 1 || branchingFactor > 5)) {
+      consoleEl.textContent = "Branching factor must be between 1 and 5.";
+      return;
+    }
     if (!window.confirm(`Launch ${title}? This will interact with the configured test accounts.`)) return;
     buttons.forEach(item => item.disabled = true);
     consoleEl.textContent = "Starting…";
