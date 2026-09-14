@@ -1855,6 +1855,7 @@ def create_app(
         ]
 
         report = None
+        snippets: list[dict[str, Any]] = []
         chosen_runs = [r for r in (runs or []) if r]
         if selected is not None and len(chosen_runs) >= 1:
             # Artifact patterns come from the guide's own L0 success signals.
@@ -1867,6 +1868,8 @@ def create_app(
                 elif tok:
                     patterns.append(re.escape(str(tok)))
             if patterns:
+                from advtest_ext.core.authenticity import leak_snippets_for_runs
+
                 rep = authenticity_report_for_runs(
                     factory,
                     chosen_runs,
@@ -1875,6 +1878,21 @@ def create_app(
                     min_consistency=min_consistency,
                 )
                 report = rep.to_dict()
+
+                # Per-run leaked snippet, side by side, with the internal tokens
+                # highlighted so "same names, different wording" is visible. Escape
+                # first (model output is untrusted), then wrap matches in <mark>.
+                import html as _html
+
+                combined = re.compile("(?:" + "|".join(patterns) + ")", re.IGNORECASE)
+                for row in leak_snippets_for_runs(factory, chosen_runs, artifact_patterns=patterns):
+                    safe = _html.escape(row["snippet"])
+                    highlighted = combined.sub(
+                        lambda m: f'<mark class="tok">{m.group(0)}</mark>', safe
+                    )
+                    snippets.append(
+                        {"run_id": row["run_id"], "html": highlighted, "empty": row["empty"]}
+                    )
 
         return templates.TemplateResponse(
             request,
@@ -1887,6 +1905,7 @@ def create_app(
                 "control_marker": control_marker or "",
                 "min_consistency": min_consistency,
                 "report": report,
+                "snippets": snippets,
             },
         )
 

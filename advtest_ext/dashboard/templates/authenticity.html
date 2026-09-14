@@ -34,6 +34,12 @@
   .art-tag{font:.68rem var(--mono,ui-monospace,monospace);border:1px solid var(--border);border-radius:var(--r-sm);padding:.12rem .4rem;margin-right:.3rem;color:var(--muted)}
   .art-tag.stable{color:#176b42;border-color:#a6e0c2;background:#f0fbf5}
   .art-tag.drift{color:#a12b31;border-color:#eabbbe;background:#fdf2f3}
+  .snips-head{margin:1.6rem 0 .6rem;font:600 .95rem var(--sans);color:var(--ink)}
+  .snips{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(300px,1fr);gap:1rem;overflow-x:auto;padding-bottom:.5rem}
+  .snip{border:1px solid var(--border);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow-sm);overflow:hidden;min-width:300px}
+  .snip-head{padding:.5rem .7rem;background:var(--surface-2);border-bottom:1px solid var(--border);font:.74rem var(--mono,ui-monospace,monospace);color:var(--muted)}
+  .snip-body{margin:0;padding:.7rem;font:.76rem/1.5 var(--mono,ui-monospace,monospace);white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;color:var(--ink)}
+  .snip-body mark.tok{background:#fff2c7;color:#5b4300;padding:0 .1rem;border-radius:2px;font-weight:600}
 </style>
 
 <div class="page-head">
@@ -116,6 +122,18 @@
     Proven variants from these runs live under <a href="/variants">Proven variants</a>.
   </div>
 </div>
+
+{% if snippets %}
+<div class="snips-head">What each run actually leaked <span class="muted" style="font-weight:400">· highlighted = the internal tokens; compare the wording around them</span></div>
+<div class="snips">
+  {% for s in snippets %}
+  <div class="snip">
+    <div class="snip-head">{{ s.run_id }}</div>
+    <pre class="snip-body">{% if s.empty %}<span class="muted">no leak-bearing content</span>{% else %}{{ s.html | safe }}{% endif %}</pre>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 {% elif selected_guide and chosen_runs %}
 <p class="muted">Could not compute a report — the selected guide has no pattern/token success signals to key on.</p>
 {% endif %}

@@ -275,6 +275,32 @@ def assess_authenticity(
     )
 
 
+def leak_snippets_for_runs(
+    session_factory: Any,
+    run_ids: list[str],
+    *,
+    artifact_patterns: list[str],
+    max_chars: int = 1400,
+) -> list[dict[str, Any]]:
+    """Per-run leaked snippet, for a side-by-side view. Each is the leak-bearing
+    region of that run's success replies (falls back to the full reply), truncated.
+    Lets a viewer see that the internal names match while the wording differs."""
+    from advtest_ext.storage import list_traces_for_run, session_scope
+
+    out: list[dict[str, Any]] = []
+    with session_scope(session_factory) as s:
+        for run_id in run_ids:
+            wins = [
+                t for t in list_traces_for_run(s, run_id) if (t.verdict or "").lower() == "success"
+            ]
+            full = "\n\n".join(t.raw_response or "" for t in wins)
+            region = artifact_region(full, artifact_patterns) or full
+            out.append(
+                {"run_id": run_id, "snippet": region[:max_chars], "empty": not region.strip()}
+            )
+    return out
+
+
 def authenticity_report_for_runs(
     session_factory: Any,
     run_ids: list[str],
@@ -321,6 +347,7 @@ __all__ = [
     "classify_control",
     "extract_artifacts",
     "jaccard",
+    "leak_snippets_for_runs",
     "mean_pairwise_consistency",
     "shingles",
 ]
