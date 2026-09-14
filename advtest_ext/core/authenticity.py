@@ -65,6 +65,7 @@ class AuthenticityReport:
     consistency: float
     n_runs: int
     control: Control
+    artifact_recurrence: float = 0.0
     stable_artifacts: list[str] = field(default_factory=list)
     volatile_artifacts: list[str] = field(default_factory=list)
     reasoning: str = ""
@@ -73,6 +74,7 @@ class AuthenticityReport:
         return {
             "verdict": self.verdict,
             "consistency": round(self.consistency, 4),
+            "artifact_recurrence": round(self.artifact_recurrence, 4),
             "n_runs": self.n_runs,
             "control": self.control,
             "stable_artifacts": self.stable_artifacts,
@@ -121,6 +123,19 @@ def extract_artifacts(text: str, patterns: list[str]) -> set[str]:
         for m in re.finditer(pat, text, flags=re.IGNORECASE):
             found.add(m.group(0).lower())
     return found
+
+
+def artifact_region(text: str, patterns: list[str]) -> str:
+    """The leak-bearing part of a reply: the lines that actually contain an
+    internal-artifact match, joined together. Comparing consistency over THIS
+    (not the whole reply) stops the model's varying chatty wrapper from dragging
+    the score down, while the differing specifics on those lines still count.
+    Returns "" when nothing matches (caller falls back to the full reply)."""
+    if not patterns:
+        return ""
+    combined = "(?:" + "|".join(patterns) + ")"
+    kept = [line for line in text.splitlines() if re.search(combined, line, flags=re.IGNORECASE)]
+    return "\n".join(kept)
 
 
 def classify_control(
@@ -176,7 +191,21 @@ def assess_authenticity(
     stable = sorted(a for a, c in counts.items() if c >= majority and n >= 2)
     volatile = sorted(a for a, c in counts.items() if c == 1 and n >= 2)
 
-    consistency = mean_pairwise_consistency(leak_texts, k=k)
+    # How much the specific internal identifiers (not the prose) recur across runs.
+    # High recurrence + low content consistency = same names, reworded each time.
+    _pairs = list(combinations(fingerprints, 2))
+    artifact_recurrence = sum(jaccard(a, b) for a, b in _pairs) / len(_pairs) if _pairs else 0.0
+
+    # Measure consistency over the leak-bearing lines when we can locate them, so
+    # the varying chatty wrapper doesn't mask a stable underlying leak. Fall back
+    # to the whole reply only when no artifact lines are found.
+    regions = [artifact_region(t, artifact_patterns) for t in leak_texts]
+    if any(r.strip() for r in regions):
+        consistency = mean_pairwise_consistency(regions, k=k)
+        consistency_basis = "leaked content"
+    else:
+        consistency = mean_pairwise_consistency(leak_texts, k=k)
+        consistency_basis = "reply text"
 
     controls = [
         classify_control(
@@ -214,19 +243,30 @@ def assess_authenticity(
             else "; no negative-control probe captured (lower confidence)"
         )
         reasoning = (
-            f"specific leaked content recurs across {n} runs "
+            f"the {consistency_basis} recurs across {n} runs "
             f"(consistency {consistency:.2f} >= {min_consistency}){tail}"
+        )
+    elif artifact_recurrence >= 0.5:
+        verdict = "suspect"
+        reasoning = (
+            f"the same internal tokens recur across runs (recurrence "
+            f"{artifact_recurrence:.2f}), but the {consistency_basis} is reworded each time "
+            f"(consistency {consistency:.2f} < {min_consistency}) — it names the same "
+            "internals without reproducing a fixed schema, the partial-confabulation pattern; "
+            "confirm with a run that reproduces the exact schema"
         )
     else:
         verdict = "suspect"
         reasoning = (
-            f"low cross-run consistency ({consistency:.2f} < {min_consistency}): the "
-            "disclosures diverge between sessions like a hallucination, not a fixed leak"
+            f"low cross-run consistency of the {consistency_basis} "
+            f"({consistency:.2f} < {min_consistency}): it diverges between sessions like a "
+            "hallucination, not a fixed leak"
         )
 
     return AuthenticityReport(
         verdict=verdict,
         consistency=consistency,
+        artifact_recurrence=artifact_recurrence,
         n_runs=n,
         control=control,
         stable_artifacts=stable,
