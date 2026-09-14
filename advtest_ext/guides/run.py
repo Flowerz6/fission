@@ -316,6 +316,9 @@ async def run_guide(
         **attack_overrides,
         run_id=run_id,
     )
+    # Label the orchestrator with the guide so a winning node can be harvested as a
+    # proven VARIANT of this guide (parented, not a loose seed / new playbook).
+    orchestrator._guide_id = guide.id
     try:
         result = await orchestrator.run()
         # Tag the run with the guide it came from so the dashboard can list

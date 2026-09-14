@@ -1796,6 +1796,37 @@ def create_app(
             {"seed": seed, "recipes": recipes},
         )
 
+    @app.get("/variants", response_class=HTMLResponse)
+    async def variants_index(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+        guide_id: str | None = None,
+        status: str | None = None,
+    ) -> Response:
+        """Proven variants harvested from runs — winning trajectories parented to the
+        guide they came from (not seeds, not new playbooks). Grouped by guide."""
+        from advtest_ext.storage import list_guide_variants
+
+        rows = list_guide_variants(session, guide_id=guide_id, status=status)
+        by_guide: dict[str, list[dict[str, Any]]] = {}
+        for v in rows:
+            by_guide.setdefault(v.guide_id, []).append(
+                {
+                    "id": v.id,
+                    "behavior_id": v.behavior_id,
+                    "status": v.status,
+                    "turns": len(v.seed_chain or []),
+                    "signals": (v.provenance or {}).get("verified_signals", []),
+                    "run_id": (v.provenance or {}).get("run_id", ""),
+                    "created_at": v.created_at,
+                }
+            )
+        return templates.TemplateResponse(
+            request,
+            "variants.html",
+            {"by_guide": by_guide, "total": len(rows), "status": status},
+        )
+
     @app.get("/authenticity", response_class=HTMLResponse)
     async def authenticity_index(
         request: Request,

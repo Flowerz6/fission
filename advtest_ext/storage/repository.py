@@ -322,6 +322,60 @@ def list_runs(session: Session, *, limit: int = 100, guide_id: str | None = None
     return list(session.scalars(stmt.limit(limit)))
 
 
+def upsert_guide_variant(
+    session: Session,
+    *,
+    variant_id: str,
+    guide_id: str,
+    behavior_id: str,
+    seed_chain: list[dict[str, Any]],
+    provenance: dict[str, Any],
+    status: str = "candidate",
+) -> Any:
+    """Insert a proven variant of a guide, or upgrade an existing one's status.
+    Idempotent on ``variant_id`` (a trajectory hash): a re-harvested win is not
+    duplicated, but its status can advance (candidate → verified_by_reproduction).
+    """
+    from advtest_ext.storage.models import GuideVariant
+
+    row = session.get(GuideVariant, variant_id)
+    if row is None:
+        row = GuideVariant(
+            id=variant_id,
+            guide_id=guide_id,
+            behavior_id=behavior_id,
+            status=status,
+            seed_chain=seed_chain,
+            provenance=provenance,
+        )
+        session.add(row)
+        return row
+    # Existing: only ever advance the status / refresh provenance, keep the chain.
+    if status != "candidate":
+        row.status = status
+        row.provenance = {**row.provenance, **provenance}
+    return row
+
+
+def list_guide_variants(
+    session: Session, *, guide_id: str | None = None, status: str | None = None, limit: int = 500
+) -> list[Any]:
+    from advtest_ext.storage.models import GuideVariant
+
+    stmt = select(GuideVariant).order_by(desc(GuideVariant.created_at))
+    if guide_id is not None:
+        stmt = stmt.where(GuideVariant.guide_id == guide_id)
+    if status is not None:
+        stmt = stmt.where(GuideVariant.status == status)
+    return list(session.scalars(stmt.limit(limit)))
+
+
+def get_guide_variant(session: Session, variant_id: str) -> Any:
+    from advtest_ext.storage.models import GuideVariant
+
+    return session.get(GuideVariant, variant_id)
+
+
 def set_run_guide(session: Session, *, run_id: str, guide_id: str) -> None:
     """Tag a Run with the guide it was launched from. No-op if the row is
     missing. Idempotent — overwrites with the same value on a re-run."""

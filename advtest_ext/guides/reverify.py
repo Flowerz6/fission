@@ -187,45 +187,35 @@ def promote_reproduced(
     *,
     guide_id: str,
 ) -> bool:
-    """Bank a reproduced suspect as a verified harvested seed (kind='harvested',
-    provenance 'reverify'), so it joins the verified set the harvest and the
-    cell-performance gate read. No-op if not reproduced. Returns True if written."""
+    """Promote a reproduced suspect to a verified variant of its guide. If the win
+    was already harvested as a ``candidate`` variant, this advances its status to
+    ``verified_by_reproduction``; otherwise it creates it at that status. No-op if
+    not reproduced. Returns True if a variant was written or advanced."""
     if not result.reproduced:
         return False
-    import hashlib
+    from advtest_ext.core.orchestrator import variant_id_for
+    from advtest_ext.storage import session_scope, upsert_guide_variant
 
-    from advtest_ext.core.seed import Seed
-    from advtest_ext.storage import get_seed, insert_seed, session_scope
-
-    digest = hashlib.sha1(
-        (suspect.behavior_id + " " + suspect.artifact).encode("utf-8", "ignore")
-    ).hexdigest()[:12]
-    seed = Seed(
-        id=f"harvested-reverified-{digest}",
-        kind="harvested",
-        title=f"reverified: {suspect.behavior_id} ({guide_id})",
-        source_format="tap_harvest",
-        raw_artefact_path=f"trace://{suspect.trace_id}",
-        taxonomy_hints=["harvested", "reverified", suspect.behavior_id],
-        submitted_by=f"reverify:{result.mode}:{suspect.run_id}",
-        payload={
-            "extracted_turns": [{"n": i + 1, **t} for i, t in enumerate(suspect.trajectory)],
-            "harvested": True,
-            "declared_metadata": {
-                "status": "verified_by_reproduction",
+    turns = [{"n": i + 1, **t} for i, t in enumerate(suspect.trajectory)]
+    vid = variant_id_for(suspect.behavior_id, turns)
+    with session_scope(session_factory) as s:
+        upsert_guide_variant(
+            s,
+            variant_id=vid,
+            guide_id=guide_id,
+            behavior_id=suspect.behavior_id,
+            seed_chain=turns,
+            provenance={
+                "run_id": suspect.run_id,
+                "trace_id": suspect.trace_id,
                 "reverify_mode": result.mode,
                 "reverify_score": round(result.score, 4),
                 "n_reruns": result.n_reruns,
-                "trace_id": suspect.trace_id,
-                "behavior_id": suspect.behavior_id,
                 "artifact_tokens": suspect.artifact_tokens,
+                "harvested_by": "reverify",
             },
-        },
-    )
-    with session_scope(session_factory) as s:
-        if get_seed(s, seed.id) is not None:
-            return False
-        insert_seed(s, seed=seed)
+            status="verified_by_reproduction",
+        )
     return True
 
 

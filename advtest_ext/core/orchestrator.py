@@ -146,48 +146,74 @@ def _build_signal_stack(specs: Sequence[dict[str, Any]]) -> list[Any]:
     return [build_signal(spec) for spec in specs]
 
 
-def harvest_verified_seeds(
+def variant_id_for(behavior_id: str, turns: list[dict[str, Any]]) -> str:
+    """Deterministic id for a proven variant: a content hash of the behaviour and
+    the attacker turns. The per-node path and the whole-run backfill mint the SAME
+    id for the same trajectory, which is what makes harvesting idempotent."""
+    import hashlib
+
+    joined = behavior_id + " " + " ".join(str(t.get("attacker", "")) for t in turns)
+    return "var-" + hashlib.sha1(joined.encode("utf-8", "ignore")).hexdigest()[:12]
+
+
+def turns_from_chain(chain: list[Any], *, max_turn_chars: int = 4000) -> list[dict[str, Any]]:
+    """Winning turns ``[{n, attacker, target}]`` from a root->leaf trace chain.
+    Works for both DB ``Trace`` rows (``payload_text``) and in-memory
+    ``AttackTrace`` (``payload.text``)."""
+    turns: list[dict[str, Any]] = []
+    for i, t in enumerate(chain):
+        attacker = getattr(t, "payload_text", None)
+        if attacker is None:
+            payload = getattr(t, "payload", None)
+            attacker = getattr(payload, "text", "") if payload is not None else ""
+        turns.append(
+            {
+                "n": i + 1,
+                "attacker": (attacker or "")[:max_turn_chars],
+                "target": (getattr(t, "raw_response", "") or "")[:max_turn_chars],
+            }
+        )
+    return turns
+
+
+def harvest_verified_variants(
     session_factory: Any,
+    guide_id: str,
     run_id: str,
     *,
     max_per_run: int = 20,
     max_turn_chars: int = 4000,
 ) -> int:
-    """Promote signal-verified winning trajectories from a completed run into the
-    seed corpus, returning the count of NEW seeds written.
+    """Harvest signal-verified winning trajectories from a run as proven VARIANTS
+    of ``guide_id``, returning the count of NEW variants written.
 
-    Closes the flywheel's back half — a crescendo variant that actually landed
-    becomes a reusable, replayable seed — and is deliberately GATED so it
-    sharpens the corpus instead of polluting it:
+    A proven variant is parented to the guide it came from (not a seed, not a new
+    top-level guide) and carries the winning turns as its replayable seed chain.
+    Gated so it sharpens rather than clutters:
 
     - **Validity gate** — only ``verdict == 'success'`` traces where a
-      *deterministic* (non-``llm_judge_verdict``) signal fired. This is the same
-      SIGNAL-VERIFIED bar the run UI shows; it stops the over-calling LLM oracle
-      from flooding the corpus with unverified "wins".
-    - **Novelty gate** — the seed id is a content hash of the trajectory, so a
-      duplicate trajectory (this run or a prior one) is skipped, not re-added.
-    - **Provenance** — written as ``kind='harvested'`` / ``source_format=
-      'tap_harvest'`` with ``submitted_by='harvest:tap:<run>'`` and
-      ``status='candidate'`` in the payload, so harvested hypotheses stay
-      distinct from human-authored chains and are revalidated before use.
+      *deterministic* (non-``llm_judge_verdict``) signal fired: the same
+      SIGNAL-VERIFIED bar the run UI shows, so the over-calling LLM oracle can't
+      mint variants on its own.
+    - **Novelty gate** — the variant id is a content hash of the trajectory, so a
+      duplicate (this run or a prior one) is skipped.
+    - **Provenance** — ``status='candidate'`` + the run/trace/signals it came from,
+      kept distinct from the canonical guide until re-verified.
     """
-    import hashlib
-
-    from advtest_ext.core.seed import Seed
     from advtest_ext.storage import (
-        get_seed,
-        insert_seed,
+        get_guide_variant,
         list_signals_for_trace,
         list_traces_for_run,
         session_scope,
+        upsert_guide_variant,
     )
 
-    harvested = 0
+    written = 0
     with session_scope(session_factory) as s:
         rows = list_traces_for_run(s, run_id)
         by_id = {r.id: r for r in rows}
         for row in rows:
-            if harvested >= max_per_run:
+            if written >= max_per_run:
                 break
             if (row.verdict or "").lower() != "success":
                 continue
@@ -198,8 +224,7 @@ def harvest_verified_seeds(
                 if sig.fired and sig.kind != "llm_judge_verdict"
             ]
             if not verified:
-                continue  # oracle-only success — not harvested
-            # Walk parent_id root->leaf to reconstruct the escalation path.
+                continue  # oracle-only success — not a verified variant
             chain: list[Any] = []
             cursor: Any = row
             seen: set[str] = set()
@@ -208,47 +233,29 @@ def harvest_verified_seeds(
                 chain.append(cursor)
                 cursor = by_id.get(cursor.parent_id) if cursor.parent_id else None
             chain.reverse()
-            attacker_texts = [(t.payload_text or "")[:max_turn_chars] for t in chain]
-            turns = [
-                {
-                    "n": i + 1,
-                    "attacker": attacker_texts[i],
-                    "target": (t.raw_response or "")[:max_turn_chars],
-                }
-                for i, t in enumerate(chain)
-            ]
-            digest = hashlib.sha1(
-                (row.behavior_id + " " + " ".join(attacker_texts)).encode("utf-8", "ignore")
-            ).hexdigest()[:12]
-            seed = Seed(
-                id=f"harvested-{digest}",
-                kind="harvested",
-                title=f"harvested: {row.behavior_id} ({row.attack_name}, run {run_id[:8]})",
-                source_format="tap_harvest",
-                raw_artefact_path=f"trace://{row.id}",
-                taxonomy_hints=["harvested", row.behavior_id]
-                + ([row.technique_id] if row.technique_id else []),
-                submitted_by=f"harvest:tap:{run_id}",
-                payload={
-                    "extracted_turns": turns,
-                    "harvested": True,
-                    "declared_metadata": {
-                        "status": "candidate",
-                        "run_id": run_id,
-                        "trace_id": row.id,
-                        "behavior_id": row.behavior_id,
-                        "attack": row.attack_name,
-                        "technique_id": row.technique_id,
-                        "worked_on": row.target_name,
-                        "verified_signals": verified,
-                    },
+            turns = turns_from_chain(chain, max_turn_chars=max_turn_chars)
+            vid = variant_id_for(row.behavior_id, turns)
+            if get_guide_variant(s, vid) is not None:
+                continue  # novelty gate
+            upsert_guide_variant(
+                s,
+                variant_id=vid,
+                guide_id=guide_id,
+                behavior_id=row.behavior_id,
+                seed_chain=turns,
+                provenance={
+                    "run_id": run_id,
+                    "trace_id": row.id,
+                    "attack": row.attack_name,
+                    "technique_id": row.technique_id,
+                    "worked_on": row.target_name,
+                    "verified_signals": verified,
+                    "harvested_by": "signal",
                 },
+                status="candidate",
             )
-            if get_seed(s, seed.id) is not None:
-                continue  # novelty gate: this trajectory is already harvested
-            insert_seed(s, seed=seed)
-            harvested += 1
-    return harvested
+            written += 1
+    return written
 
 
 # ----------------------------------------------------------------------
@@ -461,6 +468,10 @@ class Orchestrator:
         self.judge = judge
         self.budget = budget or Budget()
         self.run_id = run_id or f"run-{uuid.uuid4().hex[:12]}"
+        # The guide this run came from, when any. Set by the guide runner after
+        # construction; enables harvesting a winning node as a proven VARIANT of
+        # that guide. None for ad-hoc config runs (nothing is harvested then).
+        self._guide_id: str | None = None
         # Always keep a live ledger. Integrated attacks (PAIR/TAP/Crescendo)
         # make provider calls inside ``generate``; attaching the same ledger to
         # them makes ``max_cost_usd`` observe those calls.
@@ -568,7 +579,6 @@ class Orchestrator:
         self._persister.write_run_result(result)
         self._db_finalize_run(result.summary_stats)
         await self._enqueue_review_sample()
-        await self._harvest_verified_seeds()
         await self._events.emit(
             "run_completed",
             run_id=self.run_id,
@@ -702,6 +712,14 @@ class Orchestrator:
         # (stable, not the upgraded verdict) so it is order-independent.
         self._score_and_persist_uncertainty(trace, n_fired)
         self._maybe_promote_finding(trace)
+        # Harvest a proven variant the moment a node's run ends — a signal-verified
+        # win is banked immediately (parented to its guide), so a later crash in the
+        # run can't lose it.
+        variant_id = self._harvest_trace_if_verified(trace, fired_kinds)
+        if variant_id is not None:
+            await self._events.emit(
+                "seeds_harvested", run_id=self.run_id, count=1, variant_id=variant_id
+            )
 
     def _score_and_persist_uncertainty(self, trace: AttackTrace, n_fired: int) -> None:
         """Compute the trace's review-priority score and stash it on the
@@ -921,24 +939,57 @@ class Orchestrator:
             n_disagreement=len(plan.disagreement),
         )
 
-    async def _harvest_verified_seeds(self) -> None:
-        """Promote signal-verified winning trajectories back into the seed corpus.
-
-        Closes the flywheel's back half: a crescendo variant that actually landed
-        becomes a reusable, replayable seed. Runs once at run completion and is
-        deliberately GATED (see :func:`harvest_verified_seeds`) so it sharpens the
-        corpus instead of polluting it. Off with ``ADVTEST_HARVEST_SEEDS=0``.
-        No-op without a DB sink.
-        """
+    def _harvest_trace_if_verified(self, trace: AttackTrace, fired_kinds: Any) -> str | None:
+        """Bank a signal-verified winning trace as a proven variant of the guide it
+        came from, the moment the node ends. Gated: needs a DB sink, a parent guide
+        (``self._guide_id``, set by the guide runner — ad-hoc config runs harvest
+        nothing), a ``success`` verdict, and a deterministic (non-LLM) signal fired.
+        Deduped by trajectory hash. Off with ``ADVTEST_HARVEST_SEEDS=0``. Returns
+        the variant id when a NEW one was written, else None."""
         import os
 
-        if self._session_factory is None:
-            return
+        if self._session_factory is None or not self._guide_id:
+            return None
         if os.environ.get("ADVTEST_HARVEST_SEEDS", "1").lower() in {"0", "false", "no"}:
-            return
-        count = harvest_verified_seeds(self._session_factory, self.run_id)
-        if count:
-            await self._events.emit("seeds_harvested", run_id=self.run_id, count=count)
+            return None
+        if (trace.verdict or "").lower() != "success":
+            return None
+        verified = [k for k in (fired_kinds or []) if k != "llm_judge_verdict"]
+        if not verified:
+            return None  # oracle-only success — not a verified variant
+
+        by_id = {t.id: t for t in self._traces}
+        chain: list[Any] = []
+        cursor: Any = trace
+        seen: set[str] = set()
+        while cursor is not None and cursor.id not in seen:
+            seen.add(cursor.id)
+            chain.append(cursor)
+            cursor = by_id.get(cursor.parent_id) if cursor.parent_id else None
+        chain.reverse()
+        turns = turns_from_chain(chain)
+        vid = variant_id_for(trace.behavior_id, turns)
+
+        from advtest_ext.storage import get_guide_variant, session_scope, upsert_guide_variant
+
+        with session_scope(self._session_factory) as s:
+            if get_guide_variant(s, vid) is not None:
+                return None  # already harvested this trajectory
+            upsert_guide_variant(
+                s,
+                variant_id=vid,
+                guide_id=self._guide_id,
+                behavior_id=trace.behavior_id,
+                seed_chain=turns,
+                provenance={
+                    "run_id": self.run_id,
+                    "trace_id": trace.id,
+                    "verified_signals": verified,
+                    "harvested_by": "signal",
+                },
+                status="candidate",
+            )
+        return vid
 
     def _maybe_promote_finding(self, trace: AttackTrace) -> None:
         """Auto-promote a successful trace to a Finding. The DB sink

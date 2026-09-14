@@ -17,7 +17,7 @@
   <label>kind:
     <select name="kind">
       <option value="">all</option>
-      {% for k in ('human_chat', 'dataset_entry', 'harvested') %}
+      {% for k in ('human_chat', 'dataset_entry') %}
       <option value="{{ k }}" {% if kind == k %}selected{% endif %}>{{ k }}</option>
       {% endfor %}
     </select>

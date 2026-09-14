@@ -18,7 +18,7 @@ from advtest_ext.guides.reverify import (
 from advtest_ext.storage import (
     insert_signal_records,
     insert_trace,
-    list_seeds,
+    list_guide_variants,
     make_engine,
     make_session_factory,
     session_scope,
@@ -92,15 +92,15 @@ def test_winagain_reproduction() -> None:
     assert reverify_winagain(sw, [], min_winrate=0.5).reproduced is False
 
 
-def test_promote_reproduced_writes_verified_seed() -> None:
+def test_promote_reproduced_writes_verified_variant() -> None:
     factory = _factory()
     sw = _suspect()
     good = reverify_content(sw, [_LEAK, _LEAK])
     assert promote_reproduced(factory, sw, good, guide_id="sheets_skill_leak") is True
     with session_scope(factory) as s:
-        seeds = list_seeds(s, kind="harvested")
-    assert len(seeds) == 1
-    assert seeds[0].payload["declared_metadata"]["status"] == "verified_by_reproduction"
+        variants = list_guide_variants(s, guide_id="sheets_skill_leak")
+    assert len(variants) == 1
+    assert variants[0].status == "verified_by_reproduction"
 
 
 def test_promote_skips_when_not_reproduced() -> None:
@@ -109,4 +109,4 @@ def test_promote_skips_when_not_reproduced() -> None:
     bad = reverify_winagain(sw, [False, False])
     assert promote_reproduced(factory, sw, bad, guide_id="g") is False
     with session_scope(factory) as s:
-        assert list_seeds(s, kind="harvested") == []
+        assert list_guide_variants(s, guide_id="g") == []

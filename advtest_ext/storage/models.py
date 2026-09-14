@@ -513,12 +513,36 @@ class RecipeStepRow(Base):
     recipe: Mapped[RecipeRow] = relationship(back_populates="steps")
 
 
+class GuideVariant(Base):
+    """A proven winning variant of a guide, harvested from a real run.
+
+    Not a seed (raw inbox) and not a new top-level guide (corpus clutter): a
+    variant is parented to the guide it descends from (``guide_id``) and carries
+    the winning trajectory as its seed chain, so it is directly replayable while
+    keeping its lineage. Deduped by ``id`` (a content hash of the trajectory).
+    ``status``: candidate → verified_by_reproduction → canonical.
+    """
+
+    __tablename__ = "guide_variants"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    guide_id: Mapped[str] = mapped_column(String(128), index=True)
+    behavior_id: Mapped[str] = mapped_column(String(128), index=True)
+    status: Mapped[str] = mapped_column(String(48), default="candidate", index=True)
+    seed_chain: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    """The winning turns [{n, attacker, target}] — replayed as the variant's opening moves."""
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    """run_id, trace_id, verified_signals, worked_on, reverify_* — audit trail."""
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
 __all__ = [
     "Base",
     "CalibrationExample",
     "CalibrationResult",
     "Finding",
     "GoldLabel",
+    "GuideVariant",
     "HitlItem",
     "JudgeScore",
     "RecipeRow",
