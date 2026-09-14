@@ -6,8 +6,13 @@ fresh sessions/accounts (the re-runs). This finds the suspect wins in the origin
 (success, no hard signal), saves their evidence, and keeps only the ones that
 reproduce in the re-runs.
 
+    # against re-runs you already launched
     poetry run python scripts/reverify.py --guide sheets_skill_leak \
         --original-runs sk-1 --rerun-runs sk-2,sk-3 --mode content --promote
+
+    # OR let it launch the fresh re-runs itself (live browser; needs the env set)
+    poetry run python scripts/reverify.py --guide sheets_skill_leak \
+        --original-runs sk-1 --auto-rerun 3 --mode content --promote
 
 Modes:
   content  — leaks: the extracted artifact must recur across re-runs (default).
@@ -23,7 +28,9 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -41,11 +48,52 @@ def _artifact_patterns(guide) -> list[str]:  # type: ignore[no-untyped-def]
     return patterns
 
 
+def _launch_reruns(guide_id: str, n: int, branching_factor: int, db_url: str) -> list[str]:
+    """Launch N fresh runs of the guide, each a new session, via the same
+    run_guide.py entrypoint the dashboard uses. Live: drives a real browser and
+    costs LLM calls; needs ANTHROPIC_API_KEY (and the signed-in profile) in the
+    environment. Runs sequentially (one browser). Returns the run ids that
+    completed; skips any that failed."""
+    run_ids: list[str] = []
+    for i in range(n):
+        run_id = f"rerun-{uuid.uuid4().hex[:12]}"
+        print(f"launching re-run {i + 1}/{n}: {run_id} …", flush=True)
+        argv = [
+            sys.executable,
+            str(_REPO_ROOT / "scripts" / "run_guide.py"),
+            "--guide",
+            guide_id,
+            "--browser-mint",
+            "--branching-factor",
+            str(branching_factor),
+            "--run-id",
+            run_id,
+            "--db-url",
+            db_url,
+        ]
+        proc = subprocess.run(argv, cwd=str(_REPO_ROOT), env=os.environ.copy(), check=False)
+        if proc.returncode == 0:
+            run_ids.append(run_id)
+        else:
+            print(f"  re-run {run_id} failed (exit {proc.returncode}) — skipping", flush=True)
+    return run_ids
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--guide", required=True)
     ap.add_argument("--original-runs", required=True, help="run id(s) that produced the suspects")
-    ap.add_argument("--rerun-runs", required=True, help="fresh-session run id(s) to check against")
+    ap.add_argument("--rerun-runs", help="existing fresh-session run id(s) to check against")
+    ap.add_argument(
+        "--auto-rerun",
+        type=int,
+        default=0,
+        metavar="N",
+        help="launch N fresh runs of the guide automatically (live browser) and use them",
+    )
+    ap.add_argument(
+        "--branching-factor", type=int, default=1, help="branching factor for auto re-runs"
+    )
     ap.add_argument("--mode", choices=["content", "winagain"], default="content")
     ap.add_argument("--min-consistency", type=float, default=0.5)
     ap.add_argument("--min-winrate", type=float, default=0.5)
@@ -71,14 +119,22 @@ def main() -> None:
     guide = next((g for g in load_guides(_REPO_ROOT / "guides") if g.id == args.guide), None)
     if guide is None:
         sys.exit(f"guide {args.guide!r} not found")
+    if not args.rerun_runs and not args.auto_rerun:
+        sys.exit("pass --rerun-runs <ids> or --auto-rerun <N>")
     original = [r.strip() for r in args.original_runs.split(",") if r.strip()]
-    reruns = [r.strip() for r in args.rerun_runs.split(",") if r.strip()]
+    reruns = [r.strip() for r in (args.rerun_runs or "").split(",") if r.strip()]
     factory = make_session_factory(make_engine(args.db_url))
 
     suspects = find_suspect_wins(factory, original, artifact_patterns=_artifact_patterns(guide))
     if not suspects:
         print("no suspect (oracle-only) wins in the original run(s).")
         return
+
+    # Only spend live re-runs once we know there ARE suspects worth checking.
+    if args.auto_rerun:
+        reruns += _launch_reruns(args.guide, args.auto_rerun, args.branching_factor, args.db_url)
+    if not reruns:
+        sys.exit("no re-run runs available (auto re-runs may have all failed)")
 
     # Gather the re-run evidence once.
     rerun_artifacts: list[str] = []
