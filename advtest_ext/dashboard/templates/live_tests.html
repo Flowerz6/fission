@@ -118,7 +118,7 @@
     <div class="panel-head">Staging plan · <span id="plan-title">select a playbook</span></div>
     <div class="plan-body" id="plan-steps"></div>
     <div class="panel-head" style="border-top:1px solid var(--border)">Success signals (L0 deterministic)</div>
-    <div class="sig-row" id="plan-signals"><span class="sig-tag">—</span></div>
+    <div class="sig-row" id="plan-signals"><span class="sig-tag"> </span></div>
   </div>
   <div class="panel">
     <div class="panel-head">Crescendo turns · live from evidence store</div>
@@ -187,10 +187,10 @@
       const vd = esc((t.verdict || "pending").toLowerCase());
       const chips = (t.signals || []).map(s =>
         `<span class="sig-chip ${s.fired ? "fired" : ""}">${esc(s.name || s.kind)}${s.fired ? " ✓" : ""}</span>`
-      ).join("") || '<span class="muted" style="font-size:.72rem">—</span>';
+      ).join("") || '<span class="muted" style="font-size:.72rem"> </span>';
       const prov = t.signal_verified
         ? '<span class="prov signal">SIGNAL-VERIFIED</span>'
-        : ((t.verdict || "").toLowerCase() === "success" ? '<span class="prov judge">JUDGE-ONLY</span>' : '<span class="muted" style="font-size:.7rem">—</span>');
+        : ((t.verdict || "").toLowerCase() === "success" ? '<span class="prov judge">JUDGE-ONLY</span>' : '<span class="muted" style="font-size:.7rem"> </span>');
       const move = t.move ? `<span class="move-tag">${esc(t.move)}</span>` : '<span class="muted" style="font-size:.7rem">seed</span>';
       return `<tr>
         <td class="num">${esc(t.index)}<span class="plan-acct"> · d${esc(t.depth)}</span></td>
@@ -217,9 +217,9 @@
         `<div class="plan-step"><span class="plan-num">${esc(s.n)}</span><span>
           <span class="plan-op">${esc(s.op)}</span> <span class="plan-acct">[${esc(s.account)}]</span>
           <span class="plan-intent">${esc(s.intent)}</span></span></div>`
-      ).join("") || '<div class="plan-step"><span class="plan-num">—</span><span class="plan-intent">Direct chat — no out-of-band staging.</span></div>';
+      ).join("") || '<div class="plan-step"><span class="plan-num"> </span><span class="plan-intent">Direct chat, no out-of-band staging.</span></div>';
       stepsEl.innerHTML += `<div class="plan-step"><span class="plan-num">↳</span><span class="plan-intent">then ${esc(plan.seed_turns)} seed turn(s), then adaptive crescendo → ${esc(plan.target)}</span></div>`;
-      sigEl.innerHTML = (plan.signals || []).map(s => `<span class="sig-tag">${esc(s.kind)}:${esc(s.name)}</span>`).join("") || '<span class="sig-tag">—</span>';
+      sigEl.innerHTML = (plan.signals || []).map(s => `<span class="sig-tag">${esc(s.kind)}:${esc(s.name)}</span>`).join("") || '<span class="sig-tag"> </span>';
     } catch (e) { titleEl.textContent = playbook; }
   }
 

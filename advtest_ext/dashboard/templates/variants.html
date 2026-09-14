@@ -26,10 +26,10 @@
   <h1>Proven variants</h1>
 </div>
 <p class="v-intro">
-  Winning trajectories harvested from real runs, each parented to the guide it came from and
-  carrying the successful turns as a replayable seed chain. Only signal-verified wins are banked.
-  A variant is a <strong>candidate</strong> until a re-run reproduces it, then
-  <strong>verified by reproduction</strong>, and can be promoted to <strong>canonical</strong>.
+  Winning trajectories harvested from runs, each parented to its guide and stored as a replayable
+  seed chain. Only signal-verified wins are banked. A variant stays a <strong>candidate</strong>
+  until a re-run reproduces it (<strong>verified by reproduction</strong>), and can then be promoted
+  to <strong>canonical</strong>.
 </p>
 
 {% if total == 0 %}
@@ -52,7 +52,7 @@
       <tr>
         <td><span class="st {{ v.status }}">{{ v.status | replace('_',' ') }}</span></td>
         <td class="v-id">{{ v.turns }}</td>
-        <td>{% for s in v.signals %}<span class="sig-chip">{{ s }}</span>{% else %}<span class="muted">—</span>{% endfor %}</td>
+        <td>{% for s in v.signals %}<span class="sig-chip">{{ s }}</span>{% else %}<span class="muted"> </span>{% endfor %}</td>
         <td class="v-id">{{ v.run_id }}</td>
         <td class="v-id">{{ v.id }}</td>
       </tr>

@@ -4,7 +4,7 @@
 <div class="page-head">
   <p class="eyebrow">Assessment</p>
   <h1>Findings</h1>
-  <p>Flagged traces — promoted from successful or HITL-confirmed attempts.</p>
+  <p>Flagged traces, promoted from successful or HITL-confirmed attempts.</p>
 </div>
 
 <form class="filter-bar" hx-get="/findings" hx-target="#findings-table" hx-swap="innerHTML" hx-trigger="change">
@@ -17,7 +17,7 @@
     </select>
   </label>
   <label>run:
-    {# Picking a run scopes the behaviour dropdown — re-render the
+    {# Picking a run scopes the behaviour dropdown, re-render the
        whole index (not just the table) so the behaviour options
        update. Behaviour selection stays a partial swap since its
        options don't change when behaviour changes. #}

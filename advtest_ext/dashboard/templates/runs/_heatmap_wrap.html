@@ -1,5 +1,5 @@
 {# HTMX-pollable wrapper around the heatmap include. The heatmap
-   itself is rendered by the shared _heatmap.html include — this
+   itself is rendered by the shared _heatmap.html include, this
    wrapper exists only to give HTMX a stable target id and to opt
    into polling while the run is in flight. #}
 <section id="run-heatmap"
@@ -9,7 +9,7 @@
          hx-swap="outerHTML"
          {% endif %}>
   <div class="section-head">
-    <h2>Heatmap — technique &times; payload family</h2>
+    <h2>Heatmap, technique &times; payload family</h2>
     <span class="muted">Cell colour intensity scales with ASR. Hover for absolute counts.</span>
   </div>
   {% include "_heatmap.html" %}

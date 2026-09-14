@@ -28,7 +28,7 @@
     <a class="row" href="/runs/{{ run.id }}" onclick="return openRunPanel(event, '{{ run.id }}', '{{ run_display_name(run) }}')">
       <span class="st {{ 'done' if run.finished_at else 'live' }}"></span>
       <div><div class="rname">{{ run_display_name(run) }}</div><div class="rid">{{ run.id }} · {{ run.strategy }}</div></div>
-      <div class="rtime c-time">{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}</div>
+      <div class="rtime c-time">{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else ', ' }}</div>
       <div class="rnum c-traces">{{ run.summary.get('total_traces', 0) }}</div><div class="rnum c-success">{{ run.summary.get('successful_traces', 0) }}</div>
       <div class="asr"><span class="track"><span class="fill" style="width:{{ pct }}%;background:{{ 'var(--error)' if asr >= 0.66 else ('var(--partial)' if asr >= 0.33 else 'var(--refused)') }}"></span></span><span class="val">{{ '%.1f'|format(asr * 100) }}%</span></div>
     </a>{% endfor %}

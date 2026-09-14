@@ -17,7 +17,7 @@
 {% endif %}
 <p>
   <a href="/findings/{{ finding.id }}/report.docx">⤓ Download report (DOCX)</a>
-  <span class="muted">— mirrors the Google Red Team Report shape; operator-editable.</span>
+  <span class="muted"> mirrors the Google Red Team Report shape; operator-editable.</span>
 </p>
 
 {% if finding.description %}
@@ -33,7 +33,7 @@
   <tr><th>Target</th><td>{{ trace.target_name }}</td></tr>
   <tr><th>Verdict</th><td><span class="pill {{ trace.verdict or 'refused' }}">{{ trace.verdict or '-' }}</span></td></tr>
   <tr><th>Depth</th><td>{{ trace.depth }}</td></tr>
-  <tr><th>Parent</th><td>{% if trace.parent_id %}<a href="/traces/{{ trace.parent_id }}"><code>{{ trace.parent_id }}</code></a>{% else %}—{% endif %}</td></tr>
+  <tr><th>Parent</th><td>{% if trace.parent_id %}<a href="/traces/{{ trace.parent_id }}"><code>{{ trace.parent_id }}</code></a>{% else %}, {% endif %}</td></tr>
   <tr><th>Full trace</th><td><a href="/traces/{{ trace.id }}"><code>{{ trace.id }}</code></a></td></tr>
 </table>
 
@@ -50,7 +50,7 @@
 <pre class="full-response" style="white-space: pre-wrap;">{{ full_response or trace.raw_response }}</pre>
 {% if not full_response and not (trace.raw_response_data or {}).get('intercepted_traffic_path') %}
 <p class="muted" style="font-size: 0.85em;">
-  Rendered side-panel text (api_mode / interception disabled — no intercepted
+  Rendered side-panel text (api_mode / interception disabled, no intercepted
   stream captured for this trace).
 </p>
 {% endif %}

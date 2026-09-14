@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Fission — Seed ledger{% endblock %}
+{% block title %}Fission, Seed ledger{% endblock %}
 {% block content %}
 <style>
-  /* Right-align + tabular numerals so per-seed counts line up — a
+  /* Right-align + tabular numerals so per-seed counts line up, a
      measurement table with ragged digits undercuts the claim. */
   table td.num, table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
@@ -19,7 +19,7 @@
   <div class="big">No seeds have run yet</div>
   Each attack trace is tagged with the seed it came from. Once a run completes,
   its seeds appear here with their conversion rate, near-misses, refusals and
-  drift — and a triage recommendation for the ones that need a human.
+  drift, and a triage recommendation for the ones that need a human.
 </div>
 {% else %}
 
@@ -32,7 +32,7 @@
   <div class="metric is-good">
     <div class="label">Converging</div>
     <div class="value">{{ ledger.converging }}</div>
-    <div class="sub">landing — no action needed</div>
+    <div class="sub">landing, no action needed</div>
   </div>
   <div class="metric is-drift">
     <div class="label">Triage queue</div>
@@ -43,7 +43,7 @@
 
 <div class="card">
   <h2>Per-seed effectiveness</h2>
-  <p class="card-hint">Ordered for triage: <strong>near-miss first</strong>, then
+  <p class="card-hint">Ordered for triage: <strong>near-miss first</strong> then
     refused, drifting, no-traction; converging last.</p>
   <table>
     <thead>
@@ -91,7 +91,7 @@
     <div class="sev-row"><span class="sev-name" style="width:110px">Refused</span>
       <span class="muted">craft a bypass; harvest the refusal phrasings for L0</span></div>
     <div class="sev-row"><span class="sev-name" style="width:110px">Drifting</span>
-      <span class="muted">the playbook doesn't fit — rework strategy / exemplars</span></div>
+      <span class="muted">the playbook doesn't fit, rework strategy / exemplars</span></div>
     <div class="sev-row"><span class="sev-name" style="width:110px">Converging</span>
       <span class="muted">promote the winning angle back into the catalogue</span></div>
   </div>

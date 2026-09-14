@@ -26,7 +26,7 @@
         {% if top_score is not none %}
         <span class="score-cell {{ score_class }}">{{ '%.2f'|format(top_score) }}</span>
         {% else %}
-        <span class="muted">—</span>
+        <span class="muted"> </span>
         {% endif %}
       </td>
       <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') }}</td>
@@ -34,7 +34,7 @@
         {% if f.replay_bundle_path %}
         <a href="/findings/{{ f.id }}/replay">Evidence</a>
         {% else %}
-        <span class="muted">—</span>
+        <span class="muted"> </span>
         {% endif %}
       </td>
     </tr>

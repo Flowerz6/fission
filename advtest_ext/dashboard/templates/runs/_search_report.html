@@ -24,7 +24,7 @@
     </div>
     <div class="hero-stat">
       <div class="label">Verifier quorum</div>
-      <div class="value">{{ search_report.verifier_quorum if search_report.verifier_quorum is not none else '—' }}</div>
+      <div class="value">{{ search_report.verifier_quorum if search_report.verifier_quorum is not none else ', ' }}</div>
       <div class="muted" style="font-size: 0.72rem; margin-top: 0.4rem;">{{ (search_report.verifier_models or [])|length }} checker(s)</div>
     </div>
     <div class="hero-stat">
@@ -68,7 +68,7 @@
     <thead><tr><th>Control / variant cell</th><th style="width: 7rem; text-align: right;">Best score</th><th style="width: 7rem; text-align: right;">Δ vs control</th></tr></thead>
     <tbody>
       {% for kind, score in causal.controls.items() %}
-      <tr><td><span class="pill grey">control</span> {{ kind }}</td><td style="text-align: right; font-variant-numeric: tabular-nums;">{{ '%.2f'|format(score) }}</td><td class="muted" style="text-align: right;">—</td></tr>
+      <tr><td><span class="pill grey">control</span> {{ kind }}</td><td style="text-align: right; font-variant-numeric: tabular-nums;">{{ '%.2f'|format(score) }}</td><td class="muted" style="text-align: right;"> </td></tr>
       {% endfor %}
       {% for variant in causal.variants %}
       <tr><td>{{ variant.cell }}</td><td style="text-align: right; font-variant-numeric: tabular-nums;">{{ '%.2f'|format(variant.score) }}</td><td style="text-align: right; font-variant-numeric: tabular-nums;">{{ '%+.2f'|format(variant.delta) }}</td></tr>

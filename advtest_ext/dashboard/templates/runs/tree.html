@@ -39,16 +39,14 @@
   <a href="/runs/{{ run.id }}">&larr; back to run</a>
 </p>
 <p>
-  One tree per <strong>(behaviour, technique)</strong> cell. Each node is
-  a persisted trace; edges are reconstructed from <code>Trace.parent_id</code>.
-  Node colour is the trace's verdict: <span class="pill success">success</span>
+  One tree per behaviour and technique. Node colour shows the verdict:
+  <span class="pill success">success</span>
   <span class="pill partial">partial</span>
-  <span class="pill refused">refused</span>. Click any node to jump to its
-  detail page (cover doc, hidden injection, Gemini's response).
-  {% if not run.finished_at %}This view updates live as branches land while the run is in flight.{% endif %}
+  <span class="pill refused">refused</span>. Select a node to open its detail.
+  {% if not run.finished_at %}Updates live as branches land.{% endif %}
 </p>
 
-{# Live Cytoscape explorer — mounts client-side and updates incrementally
+{# Live Cytoscape explorer, mounts client-side and updates incrementally
    from /runs/{id}/_tree.json while the run is in flight (see static/tree.js). #}
 {% include "runs/_tree_live.html" %}
 
@@ -69,8 +67,7 @@
       <code>{{ cell.behavior_id }}</code>
       &times;
       <code>{{ cell.technique_id }}</code>
-      <span class="muted">
-        &mdash; {{ cell.n_success }}/{{ cell.n_traces }} success
+      <span class="muted"> {{ cell.n_success }}/{{ cell.n_traces }} success
       </span>
     </h3>
 <pre class="tree-pre">{% for line in cell.lines -%}

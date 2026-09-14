@@ -16,7 +16,7 @@
       </h1>
       <p class="muted" style="margin: 0;"><span class="technical-id">{{ run.id }} &middot; </span>
         {{ run_metrics.scenarios }} scenarios &middot; {{ run_metrics.techniques }} techniques &middot;
-        {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}
+        {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else ', ' }}
         {% if run.finished_at %}&rarr; {{ run.finished_at.strftime('%H:%M') }}{% endif %}
       </p>
     </div>
@@ -67,7 +67,7 @@
       {% else %}
       <div class="bar-wrap"><div class="bar-fill" style="width: {{ asr_pct }}%;"></div></div>
       {% if ppi %}<div class="muted" style="font-size:0.72rem; margin-top:0.35rem;">
-        Uncalibrated — <a href="/hitl">label the review queue</a> for a rectified CI.
+        Uncalibrated, <a href="/hitl">label the review queue</a> for a rectified CI.
       </div>{% endif %}
       {% endif %}
     </div>

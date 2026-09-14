@@ -5,7 +5,7 @@
 
    The graph is rendered entirely client-side (see /static/tree.js). While the
    run is in flight the client polls ``/runs/{id}/_tree.json`` and adds only
-   the new nodes/edges — no full repaint, so branches settle smoothly instead
+   the new nodes/edges, no full repaint, so branches settle smoothly instead
    of the old Mermaid flicker. The component is self-contained: it loads its
    own vendored libraries and stylesheet and does NOT depend on base.html.
 
@@ -20,7 +20,7 @@
 <section id="run-tree-live">
   {% if not ns.any %}
   <p class="muted">
-    No traces yet — waiting for the first branch to land.
+    No traces yet, waiting for the first branch to land.
     {% if not run.finished_at %}(this view updates live as branches land){% endif %}
   </p>
   {% else %}
@@ -54,7 +54,7 @@
            data-cell="{{ cell.cell_index }}" data-cell-key="{{ cell.key }}">
         <div class="tree-panel-head">
           <code>{{ cell.behavior_id }}</code> &times; <code>{{ cell.technique_id }}</code>
-          <span class="muted">&mdash; <span class="th-count">{{ cell.n_success }}/{{ cell.n_traces }} success</span></span>
+          <span class="muted"> <span class="th-count">{{ cell.n_success }}/{{ cell.n_traces }} success</span></span>
         </div>
         <div class="tree-toolbar">
           <button type="button" class="tree-btn" data-tree-fit>Fit</button>

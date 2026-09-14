@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>advtest report — run {{ run.id }}</title>
+  <title>advtest report, run {{ run.id }}</title>
   <style>
     @page { size: A4; margin: 22mm 18mm; }
     body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; font-size: 10pt; line-height: 1.45; }
@@ -102,7 +102,7 @@
     {% for c in summary.get('asr_by_carrier', []) %}
     <tr>
       <td style="text-align:left">{{ c.carrier_id }}</td>
-      <td>{{ c.attack_class or '—' }}</td>
+      <td>{{ c.attack_class or ', ' }}</td>
       <td>{{ '%.2f'|format(c.asr) }}</td>
       <td>{{ c.successes }} / {{ c.attempts }}</td>
     </tr>
@@ -164,9 +164,7 @@
     a persisted trace; edges are reconstructed from <code>parent_id</code>.
     Linear-chain attacks (PAIR, single-step) render as a flat list under
     their cell. The colour next to each trace is its verdict
-    (<span class="severity-low">refused</span>,
-    <span class="severity-med">partial</span>,
-    <span class="severity-high">success</span>).
+    (<span class="severity-low">refused</span> <span class="severity-med">partial</span> <span class="severity-high">success</span>).
   </p>
   {% if not tree_forest %}
   <p class="muted">No traces recorded for this run.</p>
@@ -176,7 +174,7 @@
     <h3>
       <code>{{ cell.behavior_id }}</code> &times;
       <code>{{ cell.technique_id }}</code>
-      <span class="muted">— {{ cell.n_success }}/{{ cell.n_traces }} success</span>
+      <span class="muted"> {{ cell.n_success }}/{{ cell.n_traces }} success</span>
     </h3>
 <pre class="tree-pre">{% for line in cell.lines -%}
 {% set t = line.trace -%}

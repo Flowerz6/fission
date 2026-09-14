@@ -1,4 +1,4 @@
-{# Heatmap partial — embedded by /runs/{id} and the PDF report. #}
+{# Heatmap partial, embedded by /runs/{id} and the PDF report. #}
 {% if heatmap.is_empty %}
 <p class="muted">No traces to plot yet.</p>
 {% else %}
@@ -36,7 +36,7 @@
       <td class="heatmap-cell"
           style="background: {{ bg }}; color: {{ fg }};"
           title="{{ cell.successes }}/{{ cell.attempts }} successes (ASR={{ '%.2f'|format(asr) }})">
-        {% if cell.attempts == 0 %}—{% else %}{{ '%.2f'|format(asr) }}{% endif %}
+        {% if cell.attempts == 0 %}, {% else %}{{ '%.2f'|format(asr) }}{% endif %}
       </td>
       {% endfor %}
     </tr>

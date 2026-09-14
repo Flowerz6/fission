@@ -6,13 +6,13 @@ only renders when there's something to show (either an attacker-
 generated cover_story or a payload_text on the trace).
 
 Args:
-  trace — the AttackTrace row (Pydantic or ORM, duck-typed). The
+  trace, the AttackTrace row (Pydantic or ORM, duck-typed). The
           macro pulls ``extra_metadata`` (for cover_story +
           attacker_reasoning under the ``tap`` / ``pair`` namespaces),
           ``payload_text``, and ``technique_id``.
 
 The intro paragraph and panel labels are intentionally identical
-across both call sites — the previous duplicates had wording
+across both call sites, the previous duplicates had wording
 drift ("white-on-white" wording specific to the white_text
 technique only) which this consolidation corrects toward the
 more accurate "via the X hiding technique".
@@ -40,7 +40,7 @@ more accurate "via the X hiding technique".
   is what the recipient sees; the injected instruction was embedded as
   white-on-white text in the same email body.
   {% else %}
-  This is what Gemini saw when it opened the Doc — the visible body shown to
+  This is what Gemini saw when it opened the Doc, the visible body shown to
   the user plus the hidden injection text rendered through the configured
   hiding technique.
   {% endif %}
@@ -51,7 +51,7 @@ more accurate "via the X hiding technique".
     <div class="doc-panel-label">{% if is_email %}Visible email body{% else %}Visible doc body{% endif %}
       <span class="doc-panel-sublabel">(what the user sees)</span>
     </div>
-    <pre class="doc-visible">{% if cover_story %}{{ cover_story }}{% else %}<em class="muted">(static default cover doc — attacker generated no cover_story for this trace)</em>{% endif %}</pre>
+    <pre class="doc-visible">{% if cover_story %}{{ cover_story }}{% else %}<em class="muted">(static default cover doc, attacker generated no cover_story for this trace)</em>{% endif %}</pre>
   </div>
   <div class="doc-panel-row">
     <div class="doc-panel-label">{% if is_email %}Hidden white-text injection{% else %}Hidden injection{% endif %}

@@ -62,8 +62,8 @@
   <span class="counts">{{ n_pending }} pending · {{ n_gold }} gold labels</span>
 </div>
 <p class="muted" style="margin-top:0.35rem">
-  Behavior <code>{{ trace.behavior_id if trace else '—' }}</code> ·
-  attack <code>{{ trace.attack_name if trace else '—' }}</code> ·
+  Behavior <code>{{ trace.behavior_id if trace else ', ' }}</code> ·
+  attack <code>{{ trace.attack_name if trace else ', ' }}</code> ·
   run <a href="/runs/{{ item.run_id }}">{{ item.run_id }}</a>
 </p>
 

@@ -172,7 +172,7 @@
     </svg>
     <div class="foot"><span>oldest · {{ '%.0f'|format(trend_svg.first_asr*100) }}%</span><span>latest · {{ '%.0f'|format(trend_svg.last_asr*100) }}%</span></div>
     {% else %}
-    <div class="empty-state">Not enough history yet — the ASR trend appears once a second run completes.</div>
+    <div class="empty-state">Not enough history yet, the ASR trend appears once a second run completes.</div>
     {% endif %}
   </div>
 
@@ -192,7 +192,7 @@
       {% for f in top_findings %}
       <div class="r">
         <span class="stripe {{ f.severity }}"></span>
-        <div><div class="t">{{ f.title or 'Finding' }}</div><div class="m">{{ f.trace.behavior_id if f.trace else '—' }}</div></div>
+        <div><div class="t">{{ f.title or 'Finding' }}</div><div class="m">{{ f.trace.behavior_id if f.trace else ', ' }}</div></div>
         <span class="s pill {{ 'error' if f.severity in ('critical','high') else 'partial' }}">{{ f.severity }}</span>
       </div>
       {% endfor %}
@@ -224,7 +224,7 @@
       {% for it in queue.top %}
       <div class="r">
         <span class="stripe {{ 'acc' if it.sample_reason == 'disagreement' else 'med' }}"></span>
-        <div><div class="t mono" style="font-size:0.78rem">{{ it.trace_id[:14] if it.trace_id else '—' }}</div><div class="m">uncertainty {{ '%.2f'|format(it.uncertainty) }}</div></div>
+        <div><div class="t mono" style="font-size:0.78rem">{{ it.trace_id[:14] if it.trace_id else ', ' }}</div><div class="m">uncertainty {{ '%.2f'|format(it.uncertainty) }}</div></div>
         <span class="s pill {{ 'partial' if it.sample_reason == 'disagreement' else 'success' }}">{{ it.sample_reason or 'sample' }}</span>
       </div>
       {% endfor %}

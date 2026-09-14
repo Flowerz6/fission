@@ -6,7 +6,7 @@
   <h1>Seeds</h1>
   <p>
     Every attack enters as a Seed and is normalised to one shape (report Fig. 3).
-    <strong>human_chat</strong> seeds are expert-authored chains — Bikash's real
+    <strong>human_chat</strong> seeds are expert-authored chains, Bikash's real
     Gemini side-panel sessions; <strong>dataset_entry</strong> seeds are public-corpus
     entries closest to our surface (Workspace IPI, multi-turn escalation, tool
     poisoning). Both compile to the same Playbook.
@@ -41,7 +41,7 @@
       </td>
       <td><span class="pill">{{ s.kind }}</span></td>
       <td class="mono muted" style="font-size:0.78rem">{{ s.source_format }}</td>
-      <td class="num">{{ s.payload.get('extracted_turns', []) | length or '—' }}</td>
+      <td class="num">{{ s.payload.get('extracted_turns', []) | length or ', ' }}</td>
       <td class="muted" style="font-size:0.82rem">{{ s.submitted_by }}</td>
     </tr>
     {% endfor %}

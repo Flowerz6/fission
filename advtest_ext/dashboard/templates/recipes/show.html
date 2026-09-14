@@ -61,7 +61,7 @@
 
 <h2>Step params (full detail)</h2>
 {% for step in recipe.steps %}
-<h3><code>{{ step.step_id }}</code> — {{ step.intent }}</h3>
+<h3><code>{{ step.step_id }}</code> {{ step.intent }}</h3>
 <p class="muted" style="font-size: 0.85em;">
   Operation: <code>{{ step.operation }}</code> ·
   Surface: <code>{{ step.surface.app }}/{{ step.surface.region }}@{{ step.surface.account_role }}</code>
@@ -83,7 +83,7 @@
 {% if recipe.signals %}
 <h2>Recipe-level signal stack</h2>
 <p class="muted">
-  Evaluated by the Recipe Runner against the final Step's response —
+  Evaluated by the Recipe Runner against the final Step's response, 
   same shape as the per-Run <code>signals:</code> config block.
 </p>
 <pre>{{ recipe.signals | tojson(indent=2) }}</pre>
@@ -93,7 +93,7 @@
 <h2>Mutation surface</h2>
 <p class="muted">
   Fields the Explorer agent (Phase 6+) may vary when generating
-  Variants of this Recipe. Defaults to empty — the operator opts
+  Variants of this Recipe. Defaults to empty, the operator opts
   in per Recipe.
 </p>
 <pre>{{ recipe.mutation_surface | tojson(indent=2) }}</pre>

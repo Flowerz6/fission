@@ -86,7 +86,7 @@
   {% endfor %}
 </div>
 {% if seed.kind == 'human_chat' and not turns[0].get('target') %}
-<p class="muted" style="font-size:0.82rem;margin-top:0.6rem">Attacker turns only — this expert chain is the seed's replay script; target responses live in the resulting run traces.</p>
+<p class="muted" style="font-size:0.82rem;margin-top:0.6rem">Attacker turns only, this expert chain is the seed's replay script; target responses live in the resulting run traces.</p>
 {% endif %}
 {% else %}
 <p class="muted">No normalised turns on this seed.</p>

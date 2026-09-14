@@ -21,11 +21,11 @@
     <tr>
       <td><strong>{{ a.name }}</strong></td>
       <td>{{ a.capabilities.get('block_types', [])|join(', ') }}</td>
-      <td>{{ '✓' if a.capabilities.get('formatting') else '—' }}</td>
-      <td>{{ '✓' if a.capabilities.get('comments') else '—' }}</td>
-      <td>{{ '✓' if a.capabilities.get('multimodal') else '—' }}</td>
-      <td>{{ '✓' if a.capabilities.get('multi_turn') else '—' }}</td>
-      <td>{{ '✓' if a.capabilities.get('tool_use') else '—' }}</td>
+      <td>{{ '✓' if a.capabilities.get('formatting') else ', ' }}</td>
+      <td>{{ '✓' if a.capabilities.get('comments') else ', ' }}</td>
+      <td>{{ '✓' if a.capabilities.get('multimodal') else ', ' }}</td>
+      <td>{{ '✓' if a.capabilities.get('multi_turn') else ', ' }}</td>
+      <td>{{ '✓' if a.capabilities.get('tool_use') else ', ' }}</td>
       <td class="muted">{{ a.supported_techniques|join(', ') }}</td>
     </tr>
     {% endfor %}

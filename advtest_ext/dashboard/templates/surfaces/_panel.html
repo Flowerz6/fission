@@ -4,7 +4,7 @@
 {% if behaviors %}<div class="field"><div class="fl">Behaviours exercised</div><div class="fv">{{ behaviors|join(' · ') }}</div></div>{% endif %}
 
 <div class="field">
-  <div class="fl">Oracle layer map — how this surface is judged</div>
+  <div class="fl">Oracle layer map, how this surface is judged</div>
   <div class="oracle-map">
     <div class="om-head"><span class="t">Layered oracle</span><span class="sub">L0 signals → L2 judge</span></div>
     {% if signals %}
@@ -20,7 +20,7 @@
     {% endif %}
     <div class="layer">
       <span class="lx">L2</span>
-      <div class="lbox"><span class="ln">LLM judge — decomposed (attended / complied / harmful)</span>
+      <div class="lbox"><span class="ln">LLM judge, decomposed (attended / complied / harmful)</span>
         <span class="lv {{ 'pass' if n_success else 'skip' }}">{{ n_judged }} scored · {{ n_success }} success</span></div>
     </div>
   </div>

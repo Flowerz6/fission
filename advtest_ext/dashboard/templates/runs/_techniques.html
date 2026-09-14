@@ -1,5 +1,5 @@
 {# Per-technique mean ASR bar chart. Polls every 5 s while in flight.
-   Heatmap is a separate partial below — the two refresh independently
+   Heatmap is a separate partial below, the two refresh independently
    so a slow heatmap render doesn't gate the cheaper technique chart. #}
 <section id="run-techniques"
          {% if not run.finished_at %}

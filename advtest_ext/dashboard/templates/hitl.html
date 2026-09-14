@@ -59,12 +59,12 @@
   <tbody>
     {% for item in items %}
     <tr>
-      <td>{% if item.trace_id %}<code>{{ item.trace_id[:12] }}</code>{% else %}—{% endif %}</td>
+      <td>{% if item.trace_id %}<code>{{ item.trace_id[:12] }}</code>{% else %}, {% endif %}</td>
       <td><a href="/runs/{{ item.run_id }}">{{ item.run_id }}</a></td>
       <td>
         {% if item.sample_reason %}
         <span class="pill slice {{ item.sample_reason }}">{{ item.sample_reason }}</span>
-        {% else %}<span class="muted">—</span>{% endif %}
+        {% else %}<span class="muted"> </span>{% endif %}
       </td>
       <td>
         <span class="review-meter">

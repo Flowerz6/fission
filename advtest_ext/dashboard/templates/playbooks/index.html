@@ -4,7 +4,7 @@
 <div class="page-head">
   <p class="eyebrow">Catalogue</p>
   <h1>Playbooks</h1>
-  <p>Attack playbooks the LLM attacker runs against the live Workspace side panel — grounded in real seeder sessions. Each maps to a tap_crescendo run.</p>
+  <p>Attack playbooks the LLM attacker runs against the live Workspace side panel, grounded in real seeder sessions. Each maps to a tap_crescendo run.</p>
 </div>
 
 {% if playbooks %}
@@ -22,7 +22,7 @@
       <td class="mono">{{ p.surface }}</td>
       <td>{{ p.author }}</td>
       <td class="num">{{ p.n_signals }}</td>
-      <td class="num">{{ p.n_steps or '—' }}</td>
+      <td class="num">{{ p.n_steps or ', ' }}</td>
     </tr>
     {% endfor %}
   </tbody>

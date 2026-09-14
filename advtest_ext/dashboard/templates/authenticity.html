@@ -47,10 +47,8 @@
   <h1>Authenticity check</h1>
 </div>
 <p class="auth-intro">
-  For self-extraction attacks (skill leak, schema, system prompt) there is no planted canary, so a
-  string match can't tell a real leak from a confident hallucination. Compare several runs of the
-  same guide — ideally different accounts, but fresh sessions on one account also work. Real internals
-  recur across runs; a hallucination drifts.
+  Compare several runs of the same guide. A genuine internal leak reproduces across independent
+  sessions; a hallucination varies each time.
 </p>
 
 <form class="auth-form" method="get" action="/authenticity">
@@ -58,7 +56,7 @@
     <div>
       <label>Guide (self-extraction)</label>
       <select name="guide" onchange="this.form.submit()">
-        <option value="">— select —</option>
+        <option value=""> select, </option>
         {% for g in guides %}
         <option value="{{ g.id }}" {% if g.id == selected_guide %}selected{% endif %}>{{ g.id }}</option>
         {% endfor %}
@@ -78,7 +76,7 @@
       <span class="rmeta">{{ r.target }} · {{ r.started_at.strftime('%Y-%m-%d %H:%M') if r.started_at else '' }}</span>
     </label>
     {% else %}
-    <label><span class="muted">{% if selected_guide %}No runs tagged to this guide yet — launch it a few times, then come back.{% else %}Select a guide above to see its runs.{% endif %}</span></label>
+    <label><span class="muted">{% if selected_guide %}No runs tagged to this guide yet, launch it a few times, then come back.{% else %}Select a guide above to see its runs.{% endif %}</span></label>
     {% endfor %}
   </div>
   <div style="margin-top:1rem"><button class="auth-go" type="submit">Check authenticity</button></div>
@@ -93,7 +91,7 @@
   </div>
   <div class="verdict-plain">
     {% if v == 'real' %}The leak reproduces across independent sessions, so it's a genuine disclosure you can report as a finding.
-    {% elif v == 'suspect' %}Not confirmed. Report this only once a re-run reproduces it — see the reasoning below.
+    {% elif v == 'suspect' %}Not confirmed. Report this only once a re-run reproduces it, see the reasoning below.
     {% else %}Not enough evidence yet. Run the guide in more fresh sessions, then check again.{% endif %}
   </div>
   <div class="metrics">
@@ -102,18 +100,19 @@
     <div class="metric"><div class="n">{{ '%.0f%%' % (report.artifact_recurrence * 100) }}</div><div class="k">Internal tokens recur</div><div class="hint">same tool/schema names across runs</div></div>
   </div>
   {% if report.stable_artifacts %}
-  <div class="art-row"><strong>Stable artifacts</strong> (recur across runs — evidence of real internals):<br>
+  <div class="art-row"><strong>Stable artifacts</strong> (recur across runs, evidence of real internals):<br>
     {% for a in report.stable_artifacts %}<span class="art-tag stable">{{ a }}</span>{% endfor %}
   </div>
   {% endif %}
   {% if report.volatile_artifacts %}
-  <div class="art-row"><strong>Drifting artifacts</strong> (appear in only one run — hallucination smell):<br>
+  <div class="art-row"><strong>Inconsistent artifacts</strong> (appeared in only one run, not reproduced across sessions):<br>
     {% for a in report.volatile_artifacts %}<span class="art-tag drift">{{ a }}</span>{% endfor %}
   </div>
   {% endif %}
   <div class="art-row muted">
-    Real means the leak is defensible as a finding. Suspect means it likely hallucinated — do not report it.
-    Proven variants from these runs live under <a href="/variants">Proven variants</a>.
+    Real means the disclosure reproduced across sessions and is defensible as a finding. Suspect means it did
+    not reproduce and should not be reported until it does. Proven variants from these runs are under
+    <a href="/variants">Proven variants</a>.
   </div>
 </div>
 
@@ -129,6 +128,6 @@
 </div>
 {% endif %}
 {% elif selected_guide and chosen_runs %}
-<p class="muted">Could not compute a report — the selected guide has no pattern/token success signals to key on.</p>
+<p class="muted">Could not compute a report, the selected guide has no pattern/token success signals to key on.</p>
 {% endif %}
 {% endblock %}

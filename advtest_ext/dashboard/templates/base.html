@@ -6,19 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
   {# Attack-tree component (Cytoscape). Loaded globally so the tree can also
-     mount inside the slide-over (openRunPanel injects markup only — script
+     mount inside the slide-over (openRunPanel injects markup only, script
      tags in injected HTML don't execute). Cytoscape libs are lazy-loaded by
      tree.js only when a tree is actually present. #}
   <link rel="stylesheet" href="/static/tree.css?v={{ static_v() if static_v is defined else '0' }}">
   <script src="/static/tree.js?v={{ static_v() if static_v is defined else '0' }}" defer></script>
   <style>
     /* ================================================================
-       Fission — warm editorial redesign. A measurement instrument that
+       Fission, warm editorial redesign. A measurement instrument that
        reads like a report, not a terminal. Editorial serif (Spectral)
        for headings + big numbers; Inter for body; monospace reserved
        strictly for machine content (ids, models, hashes, transcripts).
        Cream ground, white rounded cards with gentle shadows, one guava
-       coral accent. Committed single light theme — nothing dark.
+       coral accent. Committed single light theme, nothing dark.
 
        Fonts are self-hosted woff2 under /static/fonts so the rendered
        page never silently falls back to a system serif.
@@ -63,7 +63,7 @@
       --r:6px; --r-sm:4px; --r-pill:999px;
       --radius:6px; --radius-sm:4px;
     }
-    /* Committed single light theme — a saved data-theme never darkens. */
+    /* Committed single light theme, a saved data-theme never darkens. */
     :root[data-theme="light"], :root[data-theme="dark"]{
       --ink:#211e1a; --ink-soft:#494339; --fg:#211e1a; --fg-soft:#494339;
       --bg:#fdfbf7; --surface:#fff; --surface-2:#f7f4ed;
@@ -129,7 +129,7 @@
     code { font-family: var(--mono); font-size: 0.86em; padding: 0.08em 0.34em; background: var(--surface-2);
       border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--ink-soft); }
     .muted { color: var(--muted); font-size: 0.88rem; }
-    /* quiet field label — normal case, sans, medium grey */
+    /* quiet field label, normal case, sans, medium grey */
     .eyebrow { font-family: var(--sans); font-size: 0.75rem; letter-spacing: normal; text-transform: none;
       color: var(--muted); font-weight: 600; margin: 0 0 0.6rem; }
     .lbl { font-family: var(--sans); font-size: 0.75rem; letter-spacing: normal; text-transform: none; color: var(--muted); font-weight: 600; }
@@ -176,7 +176,7 @@
     .illus { font-size: 0.6rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
       border: 1px dashed var(--border-2); border-radius: var(--r-pill); padding: 0.06rem 0.4rem; margin-left: 0.4rem; vertical-align: middle; }
 
-    /* ---- Code blocks — warm, never dark ---- */
+    /* ---- Code blocks, warm, never dark ---- */
     pre { background: var(--surface-2); color: var(--ink-soft); padding: 0.9rem 1.1rem; border-radius: var(--r-sm);
       overflow-x: auto; font-size: 0.8rem; line-height: 1.6; font-family: var(--mono); border: 1px solid var(--border); }
     pre code { background: transparent; border: none; padding: 0; color: inherit; font-size: inherit; }
@@ -292,7 +292,7 @@
     .chip-filter.on { color: #fff; border-color: var(--accent); background: var(--accent); }
     .filterchips { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
 
-    /* Filter bar (server-rendered forms) — kept as a warm rounded card */
+    /* Filter bar (server-rendered forms), kept as a warm rounded card */
     .filter-bar { display: flex; gap: 0.75rem; align-items: center; margin: 1.1rem 0 1.4rem; flex-wrap: wrap;
       padding: 0.7rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow-sm);
       font-family: var(--sans); font-size: 0.84rem; color: var(--ink-soft); }
@@ -344,7 +344,7 @@
     .bar-value { font-family: var(--mono); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
     .bar-count { font-family: var(--mono); font-size: 0.78rem; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 
-    /* Judge scores — semantic colour by attack strength (high = danger). */
+    /* Judge scores, semantic colour by attack strength (high = danger). */
     .score-cell { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; text-align: center; border-radius: var(--r-sm); min-width: 80px; }
     .score-cell.score-hot  { color: var(--crit);   background: var(--crit-soft); }
     .score-cell.score-warm { color: var(--high); background: var(--high-soft); }
@@ -522,7 +522,7 @@
      drive it via openPanel(title, html); inert until then. #}
   <div class="scrim" id="scrim" onclick="closePanel()"></div>
   <aside class="slideover" id="panel" aria-hidden="true">
-    <div class="panel-head"><h2 id="p-title">&mdash;</h2><button type="button" class="p-close" onclick="closePanel()" aria-label="Close">&#10005;</button></div>
+    <div class="panel-head"><h2 id="p-title"> </h2><button type="button" class="p-close" onclick="closePanel()" aria-label="Close">&#10005;</button></div>
     <div class="panel-body" id="p-body"></div>
   </aside>
 
@@ -549,7 +549,7 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanel(); });
 
     // Open a run's attack tree in the slide-over (falls back to the full page
-    // if the fetch fails or JS is disabled — the row keeps its href).
+    // if the fetch fails or JS is disabled, the row keeps its href).
     function openRunPanel(e, runId, title) {
       if (e) e.preventDefault();
       var body = document.getElementById('p-body');

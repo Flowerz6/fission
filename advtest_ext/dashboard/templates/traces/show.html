@@ -60,7 +60,7 @@
 </div>
 {% endif %}
 
-{# Phase 3 — typed signal stack. Populates from the SignalRecord
+{# Phase 3, typed signal stack. Populates from the SignalRecord
    rows when the run was configured with a ``signals:`` block.
    Pure additive panel: existing judge-scores table below stays. #}
 {% if signals %}
@@ -69,7 +69,7 @@
   Typed predicates evaluated against this trace. Each row is
   one signal: <em>fired</em> means the predicate matched. Unlike
   the judge-scores table below, signals can read the
-  intercepted Gemini stream — useful for compromise that lives
+  intercepted Gemini stream, useful for compromise that lives
   only in the raw body and never reaches the rendered UI.
 </p>
 <table>
@@ -97,8 +97,7 @@
           <summary>view</summary>
           <pre style="font-size: 0.9em; margin: 0.3em 0 0;">{{ s.evidence | tojson(indent=2) }}</pre>
         </details>
-        {% else %}
-        —
+        {% else %}, 
         {% endif %}
       </td>
     </tr>
