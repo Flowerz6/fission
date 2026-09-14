@@ -52,6 +52,7 @@
   .vd.success{color:#176b42;background:#dcf6e9;border-color:#a6e0c2}.vd.partial{color:#805b00;background:#fff2c7;border-color:#ecd68a}.vd.refused,.vd.error,.vd.pending{color:var(--muted);background:var(--surface-2)}
   .prov{font:600 .64rem var(--mono,ui-monospace,monospace);letter-spacing:.03em;padding:.12rem .4rem;border:1px solid var(--border);border-radius:var(--r-sm)}
   .prov.signal{color:#176b42;border-color:#a6e0c2;background:#f0fbf5}.prov.judge{color:var(--muted);background:var(--surface-2)}
+  .move-tag{font:.7rem var(--mono,ui-monospace,monospace);color:#1a3a6b;background:#eef2ff;border:1px solid #cdd8e6;border-radius:var(--r-sm);padding:.1rem .38rem;display:inline-block}
   .sig-chips{display:flex;flex-wrap:wrap;gap:.25rem}
   .sig-chip{font:.64rem var(--mono,ui-monospace,monospace);padding:.1rem .34rem;border-radius:var(--r-sm);border:1px solid var(--border);color:var(--muted)}
   .sig-chip.fired{color:#176b42;border-color:#a6e0c2;background:#f0fbf5}
@@ -122,7 +123,7 @@
   <div class="panel">
     <div class="panel-head">Crescendo turns · live from evidence store</div>
     <table class="turns">
-      <thead><tr><th style="width:48px">Turn</th><th style="width:110px">Verdict</th><th style="width:80px">Score</th><th>Signals</th><th style="width:120px">Provenance</th></tr></thead>
+      <thead><tr><th style="width:48px">Turn</th><th style="width:110px">Verdict</th><th style="width:80px">Score</th><th style="width:190px">Move</th><th>Signals</th><th style="width:120px">Provenance</th></tr></thead>
       <tbody id="turns-body"></tbody>
     </table>
     <div class="turns-empty" id="turns-empty">No turns yet. Launch a run to watch the crescendo climb.</div>
@@ -190,10 +191,12 @@
       const prov = t.signal_verified
         ? '<span class="prov signal">SIGNAL-VERIFIED</span>'
         : ((t.verdict || "").toLowerCase() === "success" ? '<span class="prov judge">JUDGE-ONLY</span>' : '<span class="muted" style="font-size:.7rem">—</span>');
+      const move = t.move ? `<span class="move-tag">${esc(t.move)}</span>` : '<span class="muted" style="font-size:.7rem">seed</span>';
       return `<tr>
         <td class="num">${esc(t.index)}<span class="plan-acct"> · d${esc(t.depth)}</span></td>
         <td><span class="vd ${vd}">${vd}</span></td>
         <td class="score">${Number(t.score || 0).toFixed(3)}</td>
+        <td>${move}</td>
         <td><div class="sig-chips">${chips}</div></td>
         <td>${prov}</td>
       </tr>`;

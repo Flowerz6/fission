@@ -863,6 +863,12 @@ def create_app(
                     scores = [js.score for js in t.judge_scores]
                     score = max(scores) if scores else 0.0
                     is_success = (t.verdict or "").lower() == "success"
+                    mutation = (t.extra_metadata or {}).get("tap_crescendo", {}).get(
+                        "mutation"
+                    ) or {}
+                    move = ""
+                    if mutation.get("feature_value"):
+                        move = f"{mutation.get('dimension') or 'move'}: {mutation['feature_value']}"
                     turns.append(
                         {
                             "index": idx + 1,
@@ -871,6 +877,7 @@ def create_app(
                             "score": round(float(score), 3),
                             "signals": signal_view,
                             "signal_verified": verified,
+                            "move": move,
                             "trace_id": t.id,
                         }
                     )

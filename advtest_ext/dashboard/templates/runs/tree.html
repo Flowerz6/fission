@@ -28,6 +28,7 @@
   .tree-pre .verdict.refused { background: #f0c8c8; color: #6f1414; }
   .tree-pre .verdict.error   { background: #ddd;    color: #444; }
   .tree-pre .score { color: #555; margin-left: 4px; }
+  .tree-pre .mut { color: #1a3a6b; background: #eef2ff; border: 1px solid #cdd8e6; border-radius: 3px; padding: 0 6px; margin-left: 6px; font-size: 0.82em; }
   .tree-pre .draw  { color: #888; }
 </style>
 
@@ -75,7 +76,7 @@
 <pre class="tree-pre">{% for line in cell.lines -%}
 {% set t = line.trace -%}
 {% set score = t.judge_scores[0].score if t.judge_scores else None -%}
-<span class="draw">{{ line.prefix }}{{ line.connector }}</span><a href="/traces/{{ t.id }}"><span class="tid">{{ t.id }}</span></a> <span class="verdict {{ t.verdict or 'refused' }}">{{ t.verdict or '-' }}</span>{% if score is not none %}<span class="score">score={{ '%.2f'|format(score) }}</span>{% endif %} <span class="muted">d={{ t.depth }}</span>
+<span class="draw">{{ line.prefix }}{{ line.connector }}</span><a href="/traces/{{ t.id }}"><span class="tid">{{ t.id }}</span></a> <span class="verdict {{ t.verdict or 'refused' }}">{{ t.verdict or '-' }}</span>{% if score is not none %}<span class="score">score={{ '%.2f'|format(score) }}</span>{% endif %} <span class="muted">d={{ t.depth }}</span>{% set mut = (t.extra_metadata or {}).get('tap_crescendo', {}).get('mutation') %}{% if mut and mut.get('feature_value') %} <span class="mut">{{ mut.get('dimension') or 'move' }}: {{ mut.get('feature_value') }}</span>{% endif %}
 {% endfor %}</pre>
   </section>
   {% endfor %}
