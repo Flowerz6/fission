@@ -1833,7 +1833,6 @@ def create_app(
         session: Session = Depends(get_session),  # noqa: B008
         guide: str | None = None,
         runs: list[str] | None = Query(default=None),  # noqa: B008
-        control_marker: str | None = None,
         min_consistency: float = 0.5,
     ) -> Response:
         """Judge whether a self-extraction leak (skill/schema/system prompt) is REAL
@@ -1874,7 +1873,6 @@ def create_app(
                     factory,
                     chosen_runs,
                     artifact_patterns=patterns,
-                    control_marker=control_marker or None,
                     min_consistency=min_consistency,
                 )
                 report = rep.to_dict()
@@ -1902,7 +1900,6 @@ def create_app(
                 "selected_guide": guide,
                 "runs": run_rows,
                 "chosen_runs": chosen_runs,
-                "control_marker": control_marker or "",
                 "min_consistency": min_consistency,
                 "report": report,
                 "snippets": snippets,

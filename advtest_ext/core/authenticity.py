@@ -240,7 +240,7 @@ def assess_authenticity(
         tail = (
             "; control correctly reported the fake module absent"
             if control == "failed_correctly"
-            else "; no negative-control probe captured (lower confidence)"
+            else ""
         )
         reasoning = (
             f"the {consistency_basis} recurs across {n} runs "
