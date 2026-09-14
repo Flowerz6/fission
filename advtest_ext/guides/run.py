@@ -94,6 +94,11 @@ def build_guide_run(
     stack. ``attack_overrides`` tune the tree/node knobs (``max_depth``,
     ``branching_factor``, ``node_max_turns``, …)."""
     plan = map_guide(guide)
+    # Guide runs keep exploring after a win: the tree should not stop on the first
+    # successful node, it should branch on to find MORE successes (and, in doing so,
+    # exercise the guide's mutation cells). Callers can re-enable early-exit by
+    # passing stop_on_success=True.
+    attack_overrides.setdefault("stop_on_success", False)
     artifact_root = output_dir
     if artifact_root is not None:
         attack_overrides.setdefault("archive_path", str(artifact_root / "tap_archive.json"))

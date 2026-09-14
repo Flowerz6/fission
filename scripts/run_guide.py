@@ -107,6 +107,11 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--max-depth", type=int, help="tap_crescendo tree depth override")
     p.add_argument("--branching-factor", type=int, help="tap_crescendo branching override")
+    p.add_argument(
+        "--stop-on-success",
+        action="store_true",
+        help="stop the tree at the first winning node (default: keep exploring for more successes)",
+    )
     p.add_argument("--node-max-turns", type=int, help="max turns per Crescendo node")
     p.add_argument(
         "--no-confirm",
@@ -210,6 +215,10 @@ def main() -> None:
         }.items()
         if v is not None
     }
+    # Guide runs default to exploring past the first success (keep finding more).
+    # Pass --stop-on-success to restore early-exit on the first winning node.
+    if args.stop_on_success:
+        overrides["stop_on_success"] = True
 
     # Target adapter options (multi-turn UI targets). Only set what the operator
     # asked for so the factory defaults hold.
