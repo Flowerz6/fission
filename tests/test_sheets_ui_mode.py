@@ -27,10 +27,17 @@ class _FakeSession:
     def __init__(self) -> None:
         self.page = object()
         self.ensure_page_calls = 0
+        self.new_page_calls = 0
         self.closed = False
 
     async def ensure_page(self) -> Any:
         self.ensure_page_calls += 1
+        return self.page
+
+    async def new_page(self) -> Any:
+        # Mirror UiModeSession.new_page: close the old page, open a fresh one.
+        self.new_page_calls += 1
+        self.page = object()
         return self.page
 
     async def close(self) -> None:
