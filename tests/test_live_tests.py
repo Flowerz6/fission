@@ -47,6 +47,8 @@ class _StubController:
         *,
         playbook: str | None = None,
         branching_factor: int | None = None,
+        max_depth: int | None = None,
+        max_nodes_per_seed: int | None = None,
     ) -> dict[str, Any]:
         if not self.enabled:
             raise PermissionError("live test launching is disabled")

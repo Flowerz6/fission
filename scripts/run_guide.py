@@ -106,8 +106,15 @@ def _parse_args() -> argparse.Namespace:
         help="enqueue up to N traces for expert review (feeds the gold set → PPI). "
         "0 (default) = off. Requires DB persistence.",
     )
-    p.add_argument("--max-depth", type=int, help="tap_crescendo tree depth override")
-    p.add_argument("--branching-factor", type=int, help="tap_crescendo branching override")
+    p.add_argument("--max-depth", type=int, help="tap_crescendo tree depth override (default 3)")
+    p.add_argument("--branching-factor", type=int, help="tap_crescendo branching override (default 2)")
+    p.add_argument(
+        "--max-nodes-per-seed",
+        type=int,
+        help="hard cap on nodes explored per seed (default 4). Raise this to search "
+        "wide/deep — depth and branching are moot while this stays low.",
+    )
+    p.add_argument("--keep-top", type=int, help="survivors kept per tree level (default 2)")
     p.add_argument(
         "--stop-on-success",
         action="store_true",
@@ -212,6 +219,8 @@ def main() -> None:
         for k, v in {
             "max_depth": args.max_depth,
             "branching_factor": args.branching_factor,
+            "max_nodes_per_seed": args.max_nodes_per_seed,
+            "keep_top": args.keep_top,
             "node_max_turns": args.node_max_turns,
         }.items()
         if v is not None

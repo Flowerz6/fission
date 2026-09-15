@@ -188,6 +188,8 @@ class LiveTestStart(BaseModel):
     confirmed: bool = False
     playbook: str | None = None
     branching_factor: int | None = Field(default=None, ge=1, le=5)
+    max_depth: int | None = Field(default=None, ge=1, le=12)
+    max_nodes_per_seed: int | None = Field(default=None, ge=1, le=400)
 
 
 def _hitl_blind_pct() -> int:
@@ -949,6 +951,8 @@ def create_app(
                 test_id,
                 playbook=submission.playbook,
                 branching_factor=submission.branching_factor,
+                max_depth=submission.max_depth,
+                max_nodes_per_seed=submission.max_nodes_per_seed,
             )
         except PermissionError as exc:
             raise HTTPException(403, str(exc)) from exc

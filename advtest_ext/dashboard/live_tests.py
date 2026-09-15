@@ -236,6 +236,8 @@ class LiveTestController:
         *,
         playbook: str | None = None,
         branching_factor: int | None = None,
+        max_depth: int | None = None,
+        max_nodes_per_seed: int | None = None,
     ) -> dict[str, Any]:
         if not self.enabled:
             raise PermissionError("live test launching is disabled")
@@ -255,8 +257,20 @@ class LiveTestController:
             factor = 1 if branching_factor is None else branching_factor
             if not 1 <= factor <= 5:
                 raise ValueError("branching factor must be between 1 and 5")
+            # Tree-size controls. Depth is how deep the search goes; the node
+            # budget is the HARD cap on nodes explored per seed — depth and
+            # branching do nothing while it stays at the default 4, so raise it
+            # to search widely for more successful mutations. Generous ceilings
+            # keep a single run from ballooning into thousands of live sessions.
+            depth = 3 if max_depth is None else max_depth
+            if not 1 <= depth <= 12:
+                raise ValueError("max depth must be between 1 and 12")
+            node_budget = 4 if max_nodes_per_seed is None else max_nodes_per_seed
+            if not 1 <= node_budget <= 400:
+                raise ValueError("node budget must be between 1 and 400")
             launch_run_id = f"run-{uuid.uuid4().hex[:12]}"
             argv = (*argv, "--guide", playbook, "--browser-mint", "--branching-factor", str(factor))
+            argv = (*argv, "--max-depth", str(depth), "--max-nodes-per-seed", str(node_budget))
             argv = (*argv, "--run-id", launch_run_id)
         elif test_id == "cross-surface-email-docs":
             launch_run_id = f"demo-{uuid.uuid4().hex[:12]}"

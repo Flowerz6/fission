@@ -95,7 +95,14 @@
       <label>Branching factor
         <input class="branching-factor" type="number" min="1" max="5" value="3" inputmode="numeric">
       </label>
+      <label>Tree depth
+        <input class="max-depth" type="number" min="1" max="12" value="6" inputmode="numeric">
+      </label>
+      <label>Node budget / seed
+        <input class="max-nodes" type="number" min="1" max="400" value="80" inputmode="numeric">
+      </label>
     </div>
+    <p class="hint">Node budget is the hard cap on nodes explored per seed — raise it (with depth) to search widely for more successful mutations. Larger values mean longer runs and more live sessions.</p>
     {% endif %}
     <div class="test-actions">
       <button class="launch" data-test-id="{{ test.id }}" {% if not state.enabled %}disabled{% endif %}>Launch run</button>
@@ -263,13 +270,23 @@
       consoleEl.textContent = "Branching factor must be between 1 and 5.";
       return;
     }
+    const maxDepth = card.querySelector(".max-depth")?.valueAsNumber || null;
+    if (maxDepth !== null && (maxDepth < 1 || maxDepth > 12)) {
+      consoleEl.textContent = "Tree depth must be between 1 and 12.";
+      return;
+    }
+    const maxNodes = card.querySelector(".max-nodes")?.valueAsNumber || null;
+    if (maxNodes !== null && (maxNodes < 1 || maxNodes > 400)) {
+      consoleEl.textContent = "Node budget must be between 1 and 400.";
+      return;
+    }
     if (!window.confirm(`Launch ${title}? This will interact with the configured test accounts.`)) return;
     buttons.forEach(item => item.disabled = true);
     consoleEl.textContent = "Starting…";
     const response = await fetch(`/live-tests/${button.dataset.testId}/start`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({confirmed: true, playbook, branching_factor: branchingFactor})
+      body: JSON.stringify({confirmed: true, playbook, branching_factor: branchingFactor, max_depth: maxDepth, max_nodes_per_seed: maxNodes})
     });
     const payload = await response.json();
     if (!response.ok) {
