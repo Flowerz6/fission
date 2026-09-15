@@ -536,6 +536,47 @@ class GuideVariant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
 
+class SeedReliability(Base):
+    """Durable per-seed execution ledger: does this seed still work as an exploit?
+
+    One row per guide (the seed = the guide's exemplar chain). Recomputed from
+    trace history at run completion (idempotent), so it is always reconstructable
+    from the raw traces and never drifts. Each of a guide's runs is reduced to one
+    *session outcome* for the seed, and the counters below tally those outcomes
+    across runs.
+
+    Discard rule: a seed is ``retired`` when ``n_attack_failed >= discard_n`` with
+    ``n_success == 0``. Crucially, ``n_bot_detected`` and ``n_error`` (harness /
+    selector drift) are *inconclusive* — the exploit never actually ran — so they
+    never count toward the attack-failure total and never trigger retirement. This
+    stops a seed that only ever hit Google's bot wall from being wrongly discarded.
+    """
+
+    __tablename__ = "seed_reliability"
+
+    guide_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    n_sessions: Mapped[int] = mapped_column(Integer, default=0)
+    """Total scored sessions = success + attack_failed + bot_detected + error."""
+    n_success: Mapped[int] = mapped_column(Integer, default=0)
+    """Sessions where the seed replay reached verdict 'success'."""
+    n_attack_failed: Mapped[int] = mapped_column(Integer, default=0)
+    """Sessions the seed ran but did not succeed (verdict refused / partial)."""
+    n_bot_detected: Mapped[int] = mapped_column(Integer, default=0)
+    """Sessions blocked by anti-automation (inconclusive; not a fail)."""
+    n_error: Mapped[int] = mapped_column(Integer, default=0)
+    """Sessions lost to harness/selector error (inconclusive; not a fail)."""
+    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    """active | retired. Set by the discard rule; a human can override via HITL."""
+    discard_n: Mapped[int] = mapped_column(Integer, default=10)
+    """The N used for this seed's discard threshold (default 10)."""
+    manual_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    """True when an operator set the status by hand; recompute then leaves it be."""
+    last_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, onupdate=_utc_now
+    )
+
+
 __all__ = [
     "Base",
     "CalibrationExample",
@@ -548,6 +589,7 @@ __all__ = [
     "RecipeRow",
     "RecipeStepRow",
     "Run",
+    "SeedReliability",
     "SeedRow",
     "SignalRecord",
     "Trace",

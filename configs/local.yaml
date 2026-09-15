@@ -36,12 +36,9 @@ TARGET_MODEL_DEV:
   max_tokens: 1024
   temperature: 0.7
 
-GEMINI_TARGET:
-  provider_type: gemini
-  api_key_env: GEMINI_API_KEY
-  model_id: gemini-2.5-flash
-  max_tokens: 1024
-  temperature: 0.7
+# No GEMINI_TARGET / GEMINI_API_KEY here: live runs use ui_mode, where the
+# logged-in browser side panel IS the target model. The API-mode Gemini target
+# (configs/dev.yaml) is a separate path this profile does not use.
 
 # The guide runner's strategist role. Pointed at the LOCAL model here (in
 # configs/dev.yaml this is Anthropic Claude). This is the switch that lets the

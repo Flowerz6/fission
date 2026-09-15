@@ -45,6 +45,7 @@ import asyncio
 from pathlib import Path
 
 from advtest_ext.guides import Guide, load_guide, load_guides
+from advtest_ext.guides.corpus import resolve_guide_path
 from advtest_ext.guides.models import display_title
 from advtest_ext.guides.run import run_guide
 
@@ -53,10 +54,10 @@ _GUIDES_DIR = _REPO_ROOT / "guides"
 
 
 def _find_guide(guide_id: str) -> Guide:
-    """Load a guide by id: prefer ``guides/<id>.json``, else match on the
+    """Load a guide by id: prefer ``guides/<id>.{yaml,json}``, else match on the
     ``id`` field across the corpus."""
-    direct = _GUIDES_DIR / f"{guide_id}.json"
-    if direct.exists():
+    direct = resolve_guide_path(_GUIDES_DIR, guide_id)
+    if direct is not None:
         return load_guide(direct)
     for guide in load_guides(_GUIDES_DIR):
         if guide.id == guide_id:
@@ -265,9 +266,12 @@ def main() -> None:
     setup_session_pool = None
     setup_operations = None
     if not args.skip_setup and guide.setup_steps:
-        from advtest_ext.guides.stage import build_setup_account_pool
+        from advtest_ext.guides.stage import build_setup_account_pool, preflight_setup_accounts
 
         setup_account_pool = build_setup_account_pool(guide)
+        # Fail loudly now if a second account is unprovisioned, rather than
+        # silently planting as the default identity and testing nothing.
+        preflight_setup_accounts(setup_account_pool)
         if setup_account_pool is not None:
             from advtest_ext.adapters._ui_mode_common import UiModeSessionPool
             from advtest_ext.adapters.google_docs.ui_mode import UiModeSession

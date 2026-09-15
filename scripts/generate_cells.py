@@ -4,13 +4,14 @@
 Each mutation operator's ``cell_values`` are the concrete alternatives the TAP
 tree branches over; more (distinct) cells => a wider, non-duplicate search. This
 proposes new cells per operator, keeps only the novel ones (novelty gate), and
-optionally writes them back into the guide JSON.
+optionally writes them back into the guide file (YAML or JSON, whichever is the
+authoritative on-disk source for that id).
 
 Usage:
     # preview proposals (no write), using the CLAUDE_ATTACKER role from the config
     poetry run python scripts/generate_cells.py --guide sheets_skill_leak --n 6
 
-    # write the accepted cells back into guides/sheets_skill_leak.json
+    # write the accepted cells back into guides/sheets_skill_leak.yaml (or .json)
     poetry run python scripts/generate_cells.py --guide sheets_skill_leak --n 6 --write
 """
 
@@ -28,7 +29,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--guide", required=True, help="guide id (file guides/<id>.json)")
+    ap.add_argument("--guide", required=True, help="guide id (file guides/<id>.yaml or .json)")
     ap.add_argument("--n", type=int, default=5, help="new cells to request per operator")
     ap.add_argument(
         "--threshold",
@@ -47,13 +48,13 @@ def main() -> None:
     args = ap.parse_args()
 
     from advtest_ext.guides.cell_generator import apply_to_guide_dict, generate
-    from advtest_ext.guides.corpus import load_guides
+    from advtest_ext.guides.corpus import load_guides, resolve_guide_path
     from advtest_ext.providers.base import ChatMessage
     from advtest_ext.providers.factory import load_provider_from_yaml
 
-    guide_path = _REPO_ROOT / "guides" / f"{args.guide}.json"
-    if not guide_path.is_file():
-        sys.exit(f"guide file not found: {guide_path}")
+    guide_path = resolve_guide_path(_REPO_ROOT / "guides", args.guide)
+    if guide_path is None:
+        sys.exit(f"guide file not found for id {args.guide!r} in guides/")
     guide = next((g for g in load_guides(_REPO_ROOT / "guides") if g.id == args.guide), None)
     if guide is None:
         sys.exit(f"guide {args.guide!r} could not be loaded")
@@ -85,11 +86,20 @@ def main() -> None:
         print(f"\n{total_new} new cells across {len(proposals)} operators.")
 
     if args.write:
-        raw = json.loads(guide_path.read_text(encoding="utf-8"))
-        apply_to_guide_dict(raw, proposals)
-        guide_path.write_text(
-            json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
+        text = guide_path.read_text(encoding="utf-8")
+        if guide_path.suffix.lower() in {".yaml", ".yml"}:
+            import yaml
+
+            raw = yaml.safe_load(text)
+            apply_to_guide_dict(raw, proposals)
+            out = yaml.safe_dump(
+                raw, sort_keys=False, allow_unicode=True, default_flow_style=False, width=100
+            )
+        else:
+            raw = json.loads(text)
+            apply_to_guide_dict(raw, proposals)
+            out = json.dumps(raw, indent=2, ensure_ascii=False) + "\n"
+        guide_path.write_text(out, encoding="utf-8")
         print(f"\nwrote accepted cells into {guide_path}")
     else:
         print("\n(preview only — pass --write to save these into the guide)")

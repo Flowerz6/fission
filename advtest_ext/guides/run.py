@@ -214,7 +214,14 @@ async def run_guide(
         options = bind_setup_target_options(guide, setup_result, options)
         if guide.target.app == "gmail" and "thread_id" not in options:
             options["thread_id"] = "inbox"
-        if setup_settle_s > 0:
+        # Flat settle is a crude fallback. When the guide configures an adaptive
+        # readiness probe (setup_verification.probe_prompt), verify_target_setup
+        # below polls with backoff until the plant is retrievable, so the blind
+        # sleep is redundant and only adds latency — skip it in that case.
+        adaptive_probe = bool(
+            guide.setup_verification and guide.setup_verification.probe_prompt
+        )
+        if setup_settle_s > 0 and not adaptive_probe:
             await asyncio.sleep(setup_settle_s)
 
     cfg_path = Path(provider_config)
@@ -336,6 +343,17 @@ async def run_guide(
                 with session_scope(session_factory) as s:
                     set_run_guide(s, run_id=result.run_id, guide_id=guide.id)
             except Exception:  # pragma: no cover - best-effort tagging
+                pass
+            # Update the durable seed-reliability ledger from this run's traces
+            # (execution-only validity + discard rule). Best-effort: a ledger
+            # failure never sinks a completed run.
+            try:
+                from advtest_ext.core.reliability import recompute_seed_reliability
+                from advtest_ext.storage import session_scope
+
+                with session_scope(session_factory) as s:
+                    recompute_seed_reliability(s, guide.id, run_id=result.run_id)
+            except Exception:  # pragma: no cover - best-effort ledger
                 pass
         return result
     finally:

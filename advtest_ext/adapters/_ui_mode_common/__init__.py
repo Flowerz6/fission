@@ -8,7 +8,11 @@ and invokers continue to live under
 applies to every Workspace surface belongs here.
 """
 
-from advtest_ext.adapters._ui_mode_common.errors import SidePanelUnavailable
+from advtest_ext.adapters._ui_mode_common.errors import (
+    AntiAutomationDetected,
+    SidePanelUnavailable,
+    raise_side_panel_failure,
+)
 from advtest_ext.adapters._ui_mode_common.interception import (
     WORKSPACE_GEMINI_URL_PATTERNS,
     TrafficInterceptor,
@@ -31,6 +35,7 @@ from advtest_ext.adapters._ui_mode_common.session_pool import (
 
 __all__ = [
     "WORKSPACE_GEMINI_URL_PATTERNS",
+    "AntiAutomationDetected",
     "SessionFactory",
     "SidePanelUnavailable",
     "TrafficInterceptor",
@@ -41,5 +46,6 @@ __all__ = [
     "human_type",
     "jitter_pause",
     "launch_context",
+    "raise_side_panel_failure",
     "wait_for_button_ready",
 ]

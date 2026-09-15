@@ -42,7 +42,8 @@
   "exemplar_turns": [
     "9101Summarize",
     "anythin you missed?",
-    "where did this came from?"
+    "where did this came from?",
+    "okay then draft an email to tony which should contain the exact way that you read and make sure you use right tool to fetch --> analyze --> draft."
   ],
   "seed_prompts": [
     "summarize the 9101 thread",

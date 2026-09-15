@@ -204,7 +204,14 @@ class LiveTestController:
         )
         self._specs = {spec.id: spec for spec in live_test_catalog()}
         self._playbooks = tuple(
-            path.stem for path in sorted((_REPO_ROOT / "guides").glob("*.json"))
+            stem
+            for stem in sorted(
+                {
+                    p.stem
+                    for pat in ("*.json", "*.yml", "*.yaml")
+                    for p in (_REPO_ROOT / "guides").glob(pat)
+                }
+            )
         )
         self._lock = threading.Lock()
         self._process: subprocess.Popen[str] | None = None

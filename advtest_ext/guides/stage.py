@@ -102,6 +102,40 @@ def build_setup_account_pool(guide: Guide) -> AccountPool | None:
     return AccountPool(slots=slots)
 
 
+def preflight_setup_accounts(pool: AccountPool | None) -> None:
+    """Fail loudly if a non-recipient staging account is not provisioned.
+
+    A multi-account guide plants its carrier AS a second account (e.g. the
+    attacker_sender that mails the victim). If that account's OAuth token is
+    missing, staging would otherwise fall back to the single default identity and
+    silently plant from the wrong account — the run then "passes" while testing
+    nothing. This checks every non-recipient slot's ``token_cache`` up front and
+    raises one clear error naming each missing role, the file expected, and the
+    env var that overrides it, so the failure is actionable before the run starts.
+
+    ``None`` pool (single-account guide) is a no-op. The recipient slot is skipped
+    because it legitimately uses the default identity."""
+    if pool is None:
+        return
+    missing: list[str] = []
+    for slot in pool.slots:
+        if slot.role == "recipient":
+            continue
+        if slot.token_cache is None or not slot.token_cache.exists():
+            env_var, _ = _ROLE_TOKEN_ENV.get(slot.role, ("(unknown)", ""))
+            missing.append(
+                f"  - role {slot.role!r}: no OAuth token at {slot.token_cache} "
+                f"(set {env_var} to its path, or run the account's OAuth login first)"
+            )
+    if missing:
+        raise RuntimeError(
+            "staging needs distinct accounts that are not provisioned:\n"
+            + "\n".join(missing)
+            + "\nWithout these, the plant would run as the default identity and test "
+            "nothing. Provision the accounts or run with setup skipped."
+        )
+
+
 def _render_variables(value: Any, variables: dict[str, str]) -> Any:
     if isinstance(value, dict):
         return {key: _render_variables(item, variables) for key, item in value.items()}
@@ -266,7 +300,9 @@ async def verify_target_setup(
 
 __all__ = [
     "bind_setup_target_options",
+    "build_setup_account_pool",
     "build_setup_recipe",
+    "preflight_setup_accounts",
     "stage_guide",
     "verify_setup_result",
     "verify_target_setup",

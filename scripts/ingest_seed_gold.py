@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import Any
 
 from advtest_ext.core.models import AttackTrace, JudgeScore, Payload
-from advtest_ext.guides.corpus import load_guide
+from advtest_ext.guides.corpus import load_guide, resolve_guide_path
 from advtest_ext.judges.signals.base import SignalContext
 from advtest_ext.judges.signals.registry import build_signal
 from advtest_ext.storage import (
@@ -250,7 +250,10 @@ def main(argv: list[str] | None = None) -> int:
     data = json.loads(Path(args.file).read_text(encoding="utf-8"))
     run_id = data["run_id"]
     behavior_id = data["behavior_id"]
-    guide = load_guide(_GUIDES_DIR / f"{data['guide_id']}.json")
+    guide_path = resolve_guide_path(_GUIDES_DIR, data["guide_id"])
+    if guide_path is None:
+        raise SystemExit(f"guide {data['guide_id']!r} not found in {_GUIDES_DIR}")
+    guide = load_guide(guide_path)
     signal_specs = guide.success.signals
     reviewer_id = data.get("reviewer_id", "")
     turns = data["turns"]

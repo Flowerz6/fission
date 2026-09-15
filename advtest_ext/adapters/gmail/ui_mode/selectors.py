@@ -71,18 +71,15 @@ class SidePanelSelectors(TypedDict):
 # TODO_BEFORE_PITCH.md applies here too).
 SELECTORS: SidePanelSelectors = {
     "side_panel_button": (
-        # Gmail right-rail Gemini entry. Exclude the search-bar
-        # "Ask Gemini" variant — observed failure mode 2026-05-21
-        # was the search variant opening a transient overlay that
-        # closes on focus loss, which the previous failure traces
-        # captured as "panel opened then closed instantly". The
-        # right-rail entry is usually ``<div role="button">``;
-        # ``<button>`` is the secondary fallback. Both forms
-        # exclude ``aria-label="Ask Gemini"`` exact match (search
-        # bar) but still accept variants like "Ask Gemini side
-        # panel", "Open Gemini side panel", etc.
-        'div[role="button"][aria-label*="Gemini" i]:not([aria-label="Ask Gemini"]), '
-        'button[aria-label*="Gemini" i]:not([aria-label="Ask Gemini"])'
+        # Gmail right-rail Gemini entry. Re-validated 2026-09-06 against
+        # f04438179@gmail.com: the ONLY Gemini entry present is now a
+        # ``<button aria-label="Ask Gemini">`` (the old 2026-05 exclusion
+        # of that exact label matched nothing → SidePanelUnavailable).
+        # Prefer the exact "Ask Gemini" button, then fall back to the
+        # older right-rail ``<div role="button">`` / label-variant forms.
+        'button[aria-label="Ask Gemini" i], '
+        'div[role="button"][aria-label*="Gemini" i], '
+        'button[aria-label*="Gemini" i]'
     ),
     "side_panel_container": (
         # CONFIRMED from live Gmail DOM (2026-05-21):
@@ -121,8 +118,16 @@ SELECTORS: SidePanelSelectors = {
         # that.") use the same agent-message component as normal
         # replies, so they DO carry ``jsname="t1Rade"`` — the
         # ``:has()`` filter still catches them.
+        # Re-validated 2026-09-06: Gemini-in-Gmail dropped the
+        # ``[role="listitem"]`` wrapper around the agent bubble, so the
+        # old listitem-scoped selector matched nothing → SidePanelUnavailable
+        # on read. Keep the listitem form first (older surfaces still use
+        # it) and fall back to the ``jsname="t1Rade"`` message span, which
+        # still carries the agent reply text on the current surface.
         '[aria-label="Gemini"][jscontroller]:not([role="button"]) '
-        '[role="listitem"]:has([jsname="t1Rade"])'
+        '[role="listitem"]:has([jsname="t1Rade"]), '
+        '[aria-label="Gemini"][jscontroller]:not([role="button"]) '
+        '[jsname="t1Rade"]'
     ),
     "side_panel_loading_indicator": (
         # Best-guess: Gmail's "thinking" state class. NEEDS VALIDATION

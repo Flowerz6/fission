@@ -56,7 +56,7 @@ def test_every_shipped_guide_setup_step_is_a_real_registered_operation() -> None
 
 
 def test_guides_without_setup_steps_default_empty_and_skip_validation() -> None:
-    g = load_guide(_GUIDES / "sheets_skill_leak.json")
+    g = load_guide(_GUIDES / "sheets_skill_leak.yaml")
     assert g.setup_steps == []
     validate_setup_operations(g)  # no-op, must not raise or need the registry
 

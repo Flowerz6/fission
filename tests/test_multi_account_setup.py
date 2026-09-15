@@ -265,7 +265,7 @@ async def test_runner_resolves_slot_without_session_pool(tmp_path: Path) -> None
 def _gmail_attacker_guide() -> Any:
     from advtest_ext.guides import load_guide
 
-    return load_guide(Path("guides/gmail_123432_tool_disclosure.json"))
+    return load_guide(Path("guides/gmail_123432_tool_disclosure.yaml"))
 
 
 def test_build_setup_account_pool_attacker_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -301,23 +301,27 @@ def test_build_setup_account_pool_none_for_recipient_only() -> None:
     from advtest_ext.guides import load_guide
     from advtest_ext.guides.stage import build_setup_account_pool
 
-    g = load_guide(Path("guides/sheets_skill_leak.json"))  # no setup steps
+    g = load_guide(Path("guides/sheets_skill_leak.yaml"))  # no setup steps
     assert build_setup_account_pool(g) is None
 
 
 def test_all_promoted_gmail_guides_load_and_map() -> None:
     from advtest_ext.guides import load_guide
+    from advtest_ext.guides.corpus import resolve_guide_path
     from advtest_ext.guides.to_tap_crescendo import map_guide
 
-    ids = [
-        "gmail_00000_configuration_footer",
-        "gmail_0090911_tool_disclosure",
-        "gmail_123432_tool_disclosure",
-        "gmail_9101_manifest_canary",
-        "gmail_summarize_next_script",
-    ]
-    for gid in ids:
-        g = load_guide(Path(f"guides/{gid}.json"))
+    expected_screenshot_turns = {
+        "gmail_00000_configuration_footer": 1,
+        "gmail_0090911_tool_disclosure": 1,
+        "gmail_123432_tool_disclosure": 1,
+        "gmail_9101_manifest_canary": 4,
+        "gmail_summarize_next_script": 3,
+    }
+    for gid, expected_turns in expected_screenshot_turns.items():
+        path = resolve_guide_path(Path("guides"), gid)
+        assert path is not None, f"guide {gid} not found in guides/"
+        g = load_guide(path)
         plan = map_guide(g)
         assert plan.behavior is not None
         assert plan.attack_kwargs.get("seed_chain")
+        assert len(plan.attack_kwargs["seed_chain"]) == expected_turns

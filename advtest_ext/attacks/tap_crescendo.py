@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from structlog import get_logger
 
-from advtest_ext.attacks._attacker_json import parse_attacker_json
+from advtest_ext.attacks._attacker_json import iter_balanced_json_blocks, parse_attacker_json
 from advtest_ext.attacks.base import AttackAttempt, AttackPlugin, AttackPluginClass
 from advtest_ext.attacks.tap_search import (
     CausalControlTracker,
@@ -2114,9 +2114,16 @@ class TapCrescendoAttack(AttackPlugin):
                         ChatMessage(role="user", content=user),
                     ],
                     temperature=0.0,
-                    max_tokens=180,
+                    max_tokens=512,
                 )
-                data = json.loads((response.text or "").strip())
+                raw = (response.text or "").strip()
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    # Verbose or slightly-truncated reflections break a raw
+                    # parse; recover the first balanced JSON object instead.
+                    blocks = iter_balanced_json_blocks(raw)
+                    data = json.loads(blocks[0]) if blocks else None
                 if isinstance(data, dict):
                     reflections.append(data)
             except Exception:

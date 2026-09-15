@@ -223,8 +223,12 @@ def test_build_attack_constructs_a_configured_tap_crescendo() -> None:
 
 
 def test_shipped_guides_all_map() -> None:
+    from advtest_ext.guides.corpus import resolve_guide_path
+
     for name in ("sheets_skill_leak", "docs_language_override"):
-        plan = map_guide(load_guide(GUIDES_DIR / f"{name}.json"))
+        path = resolve_guide_path(GUIDES_DIR, name)
+        assert path is not None, f"guide {name} not found"
+        plan = map_guide(load_guide(path))
         assert isinstance(plan, GuidePlan)
         assert plan.behavior.description
         assert plan.behavior.success_criteria

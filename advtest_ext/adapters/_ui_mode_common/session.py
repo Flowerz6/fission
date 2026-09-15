@@ -176,6 +176,29 @@ class UiModeSession:
         self._page = await self._context.new_page()
         return self._page
 
+    async def new_page(self) -> Any:
+        """Swap in a CLEAN page on the same warm context — a fresh tab for the
+        next tree node — without a cold browser relaunch.
+
+        Reusing one page (``ensure_page``) is right for a single linear
+        crescendo, but in TAP tree mode each node is an independent branch:
+        node N must not inherit node N-1's populated document, left-over
+        confirmation dialogs, or side-panel conversation state (which was
+        surfacing as ``SidePanelUnavailable`` on later nodes). Closing just the
+        page and opening a new one keeps the persistent context — and its
+        login — warm, so Google's anti-automation heuristics don't see a
+        relaunch."""
+        await self.ensure_open()
+        old = self._page
+        self._page = None
+        if old is not None:
+            try:
+                await old.close()
+            except Exception:
+                pass
+        self._page = await self._context.new_page()
+        return self._page
+
     async def close(self) -> None:
         """Tear down the context and the Playwright driver. Safe to
         call when never opened (no-op). Closes the cached page first

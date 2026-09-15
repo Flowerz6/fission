@@ -360,6 +360,12 @@ def _error_trace(
         )
     )
     parent_id, depth = _hoist_parent_and_depth(attempt) if attempt is not None else (None, 0)
+    # ``error_kind`` is carried on ui_mode exceptions (SidePanelUnavailable /
+    # AntiAutomationDetected). Reading it via getattr keeps core free of an
+    # adapters import; anything without it is an unexpected attack-time error.
+    metadata: dict[str, Any] = {"error_kind": getattr(exc, "error_kind", "attack_error")}
+    if attempt is not None:
+        metadata.update(attempt.metadata)
     return AttackTrace(
         id=f"trace-err-{uuid.uuid4().hex[:8]}",
         run_id=run_id,
@@ -372,6 +378,7 @@ def _error_trace(
         verdict="error",
         parent_id=parent_id,
         depth=depth,
+        metadata=metadata,
     )
 
 

@@ -227,7 +227,28 @@ async def _read_response(page: Any, timeout_ms: int) -> str:
             await loading_locator.wait_for(state="hidden", timeout=timeout_ms)
         response_locator = page.locator(SELECTORS["side_panel_response"]).last
         await response_locator.wait_for(state="visible", timeout=timeout_ms)
-        text = await response_locator.inner_text()
+        # A streamed reply is split across many ``jsname="t1Rade"`` spans;
+        # ``.last.inner_text()`` returns only the trailing fragment (often a
+        # lone "."). Join every message span that belongs to the LAST assistant
+        # turn instead — the spans that follow the last user prompt (an <h2> /
+        # user bubble) in DOM order. Falls back to the plain last-span text.
+        text = await page.evaluate(
+            """() => {
+                const c = document.querySelector(
+                    '[aria-label="Gemini"][jscontroller]:not([role="button"])');
+                if (!c) return "";
+                const nodes = [...c.querySelectorAll('h2, [jsname="t1Rade"]')];
+                if (!nodes.length) return "";
+                let lastUser = -1;
+                nodes.forEach((n, i) => { if (n.tagName === "H2") lastUser = i; });
+                const parts = nodes.slice(lastUser + 1)
+                    .filter(n => n.getAttribute("jsname") === "t1Rade")
+                    .map(n => n.innerText);
+                return parts.join("").trim();
+            }"""
+        )
+        if not text:
+            text = await response_locator.inner_text()
     except Exception as exc:
         raise SidePanelUnavailable(SELECTOR_DRIFT_MESSAGE) from exc
     return text or ""

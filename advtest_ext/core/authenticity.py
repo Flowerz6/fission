@@ -259,8 +259,8 @@ def assess_authenticity(
         verdict = "suspect"
         reasoning = (
             f"low cross-run consistency of the {consistency_basis} "
-            f"({consistency:.2f} < {min_consistency}): it diverges between sessions like a "
-            "hallucination, not a fixed leak"
+            f"({consistency:.2f} < {min_consistency}): it diverges between sessions, consistent "
+            "with fabrication rather than a fixed leak"
         )
 
     return AuthenticityReport(

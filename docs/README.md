@@ -26,7 +26,11 @@
 
 | Doc | For |
 |---|---|
+| [FISSION_HLD.md](FISSION_HLD.md) | The high-level design — one self-contained map of components, data, flows, interfaces, and decisions. |
 | [FISSION_ARCHITECTURE_AND_PRODUCTION.md](FISSION_ARCHITECTURE_AND_PRODUCTION.md) | The full end-to-end architecture and the gap to production. |
+| [FISSION_SCALABILITY_REVIEW.md](FISSION_SCALABILITY_REVIEW.md) | Code-grounded review of the deploy blockers (P0/P1/P2) with file:line evidence and a fix order. |
+| [COMPETITIVE_LANDSCAPE.md](COMPETITIVE_LANDSCAPE.md) | Research on Silmaril and Straiker vs Fission: what they do, our edges, strategic read. |
+| [PATH_TO_COMPETITIVE_PARITY.md](PATH_TO_COMPETITIVE_PARITY.md) | What's missing to compete at their standard: capability gaps + a sequenced roadmap. |
 | [FISSION_MEASUREMENT_SPINE.md](FISSION_MEASUREMENT_SPINE.md) | The oracle grading + ASR ± CI measurement design. |
 | [FISSION_FLYWHEEL.md](FISSION_FLYWHEEL.md) | The self-improvement loop (the "(c)" thesis). |
 | [FISSION_DIAGRAMS.md](FISSION_DIAGRAMS.md) · `fission_*.dot` | Diagrams and their sources. |
@@ -52,6 +56,7 @@
 | [FOUNDATIONS.md](FOUNDATIONS.md) | Threat model, the papers/benchmarks this aligns with, technique choices. |
 | [FISSION_ATTACK_LANDSCAPE.md](FISSION_ATTACK_LANDSCAPE.md) | Survey of the attack space. |
 | [RED_TEAM_RESEARCH_UPGRADES.md](RED_TEAM_RESEARCH_UPGRADES.md) · [TAP_ATTACK_SUCCESS_UPGRADES.md](TAP_ATTACK_SUCCESS_UPGRADES.md) | Research-driven upgrades to attacks/scoring. |
+| [RED_TEAM_VARIANT_DIVERSITY.md](RED_TEAM_VARIANT_DIVERSITY.md) | Structured TAP variant generation (typed operators + novelty gate) vs mode collapse; 2024–2026 lit + roadmap. |
 | [SEED_AUTHORING_GUIDE.md](SEED_AUTHORING_GUIDE.md) · [SEED_AUTHOR_REPORTING.md](SEED_AUTHOR_REPORTING.md) | Authoring seeds and reporting on them. |
 | [../references.bib](../references.bib) | Citations referenced from code and docs. |
 

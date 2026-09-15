@@ -206,6 +206,6 @@ def test_corpus_loads_shipped_guides() -> None:
 
 
 def test_load_single_guide() -> None:
-    g = load_guide(GUIDES_DIR / "sheets_skill_leak.json")
+    g = load_guide(GUIDES_DIR / "sheets_skill_leak.yaml")
     assert g.target.app == "google_sheets"
     assert g.success.signals  # deterministic oracle present
