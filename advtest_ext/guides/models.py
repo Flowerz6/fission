@@ -263,6 +263,15 @@ class Guide(BaseModel):
     canary: str | None = None
     focus: str | None = None
 
+    # --- lifecycle tier ---
+    # "discovery": a new/unproven attack — success is judged by the LLM rubric, its
+    # deterministic signal may still be a coarse hypothesis, and results are
+    # candidates until reproduced. "gold": a trusted attack — a human-authored real
+    # capture, or a discovery guide that reproduced across multiple fresh sessions
+    # (confirm_n signal-verified successes) with a precise signal. New guides default
+    # to discovery and are held to relaxed completeness; gold guides are held strictly.
+    maturity: Literal["discovery", "gold"] = "discovery"
+
     # --- housekeeping ---
     provenance: GuideProvenance
     tags: list[str] = Field(default_factory=list)
@@ -299,7 +308,7 @@ def content_hash(guide: Guide) -> str:
     the same (dedup), and any change to the attack itself changes the hash.
     Recorded on a run so a finding is attributable to exactly which guide
     (+ version) produced it."""
-    payload = guide.model_dump(mode="json", exclude={"id", "title", "provenance"})
+    payload = guide.model_dump(mode="json", exclude={"id", "title", "provenance", "maturity"})
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 

@@ -47,18 +47,27 @@ class Issue:
 
 
 def check_guide(guide: Guide) -> list[Issue]:
-    """Return every completeness issue for one guide (empty == fully ready)."""
+    """Return every completeness issue for one guide (empty == fully ready).
+
+    Severity is maturity-aware: a ``discovery`` guide (new/unproven) is allowed to
+    run judge-only while you learn what real success looks like, so a missing
+    deterministic signal or written rubric is a *warning*; a ``gold`` guide (trusted)
+    is held strictly — those are *errors*. Structural requirements (a seed chain,
+    provenance, resolvable setup ops, carrier provisioning) are errors at either
+    tier, because they are validity, not "we don't know success yet."""
     issues: list[Issue] = []
+    signal_level = _ERROR if guide.maturity == "gold" else _WARNING
 
     # --- deterministic oracle: the single most important criterion ---------
     if not guide.success.signals:
         issues.append(
             Issue(
-                _ERROR,
+                signal_level,
                 "no_deterministic_signal",
-                "success.signals is empty — the run has no deterministic oracle, so a "
-                "success can only ever be JUDGE-ONLY (the judge over-calls) and can never "
-                "be signal-verified, harvested, or verified by reproduction.",
+                "success.signals is empty — the run has no deterministic oracle, so a success can "
+                "only be JUDGE-ONLY (the judge over-calls). Acceptable while this guide is "
+                "'discovery' (the rubric/judge decides success until you observe a real win and "
+                "tighten the signal); a 'gold' guide must have a deterministic signal.",
             )
         )
     else:
@@ -146,14 +155,15 @@ def check_guide(guide: Guide) -> list[Issue]:
             )
         )
 
-    # --- judge grounding (warning: rubric synthesised if absent) -----------
+    # --- judge grounding (error for gold, warning for discovery) -----------
     if not (guide.success.rubric and guide.success.rubric.strip()):
         issues.append(
             Issue(
-                _WARNING,
+                signal_level,
                 "no_success_rubric",
                 "success.rubric is empty — the LLM judge falls back to a synthesised criterion "
-                "from the signal names; a written rubric grounds it far better.",
+                "from the signal names. A 'gold' guide must carry a written rubric (it is the "
+                "discovery-time success detector); a 'discovery' guide may omit it for now.",
             )
         )
 

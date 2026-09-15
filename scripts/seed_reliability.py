@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import select
 
@@ -45,11 +46,11 @@ def _all_seed_ids(session) -> list[str]:
     return sorted(from_traces | from_ledger)
 
 
-def _print_table(rows: list[tuple[str, int, int, int, int, int, str]]) -> None:
+def _print_table(rows: list[tuple[Any, ...]]) -> None:
     if not rows:
         print("No seeds with trace history yet.")
         return
-    header = ("seed", "sess", "win", "fail", "bot", "err", "status")
+    header = ("seed", "tier", "sess", "win", "fail", "bot", "err", "status", "recommend")
     widths = [max(len(str(r[i])) for r in [header, *rows]) for i in range(len(header))]
     fmt = "  ".join(f"{{:<{w}}}" for w in widths)
     print(fmt.format(*header))
@@ -97,29 +98,33 @@ def main() -> None:
                 set_seed_status(s, guide_id, status)
                 print(f"override: {guide_id} -> {status} (manual)")
 
-    rows: list[tuple[str, int, int, int, int, int, str]] = []
+    # Map guide id -> maturity tier from the corpus (discovery vs gold).
+    from advtest_ext.guides.corpus import load_guides
+
+    maturity = {g.id: g.maturity for g in load_guides(_REPO_ROOT / "guides")}
+
+    rows: list[tuple[Any, ...]] = []
     with session_scope(factory) as s:
         for guide_id in _all_seed_ids(s):
-            if args.no_recompute:
-                row = s.get(SeedReliability, guide_id)
-                if row is None:
-                    summary = summarize_seed_reliability(s, guide_id, discard_n=args.discard_n)
-                    rows.append((guide_id, summary.n_sessions, summary.n_success,
-                                 summary.n_attack_failed, summary.n_bot_detected,
-                                 summary.n_error, summary.status))
-                else:
-                    rows.append((guide_id, row.n_sessions, row.n_success, row.n_attack_failed,
-                                 row.n_bot_detected, row.n_error, row.status))
-            else:
-                summary = recompute_seed_reliability(s, guide_id, discard_n=args.discard_n)
-                rows.append((guide_id, summary.n_sessions, summary.n_success,
-                             summary.n_attack_failed, summary.n_bot_detected,
-                             summary.n_error, summary.status))
+            summary = (
+                summarize_seed_reliability(s, guide_id, discard_n=args.discard_n)
+                if args.no_recompute
+                else recompute_seed_reliability(s, guide_id, discard_n=args.discard_n)
+            )
+            rows.append((
+                guide_id, maturity.get(guide_id, "?"), summary.n_sessions, summary.n_success,
+                summary.n_attack_failed, summary.n_bot_detected, summary.n_error,
+                summary.status, summary.recommendation,
+            ))
 
     _print_table(rows)
-    retired = [r[0] for r in rows if r[6] == "retired"]
+    retired = [r[0] for r in rows if r[7] == "retired"]
     if retired:
         print(f"\nretired ({len(retired)}): {', '.join(retired)}")
+    mature = [r[0] for r in rows if r[8] == "mature" and r[1] == "discovery"]
+    if mature:
+        print(f"\ndiscovery seeds reproduced enough to mature to gold ({len(mature)}): "
+              f"{', '.join(mature)}")
 
 
 if __name__ == "__main__":

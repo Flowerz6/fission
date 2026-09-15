@@ -186,3 +186,31 @@ def test_manual_override_survives_recompute() -> None:
         assert summary.status == "active"  # override respected
         row = s.get(SeedReliability, _GUIDE)
         assert row is not None and row.manual_override is True
+
+
+def test_recommendation_mature_at_confirm_n():
+    factory = _factory()
+    for i in range(3):  # confirm_n default = 3 distinct successful sessions
+        _session(factory, f"run-win-{i}", verdict="success")
+    with session_scope(factory) as s:
+        summary = recompute_seed_reliability(s, _GUIDE)
+    assert summary.n_success == 3
+    assert summary.recommendation == "mature"
+
+
+def test_recommendation_retire_on_discard():
+    factory = _factory()
+    for i in range(10):
+        _session(factory, f"run-fail-{i}", verdict="refused")
+    with session_scope(factory) as s:
+        summary = recompute_seed_reliability(s, _GUIDE)
+    assert summary.recommendation == "retire"
+
+
+def test_recommendation_keep_testing_when_undecided():
+    factory = _factory()
+    _session(factory, "run-1", verdict="success")
+    _session(factory, "run-2", verdict="refused")
+    with session_scope(factory) as s:
+        summary = recompute_seed_reliability(s, _GUIDE)
+    assert summary.recommendation == "keep_testing"

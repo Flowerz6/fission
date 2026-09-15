@@ -34,6 +34,9 @@ from sqlalchemy.orm import Session
 from advtest_ext.storage.models import SeedReliability, Trace
 
 DEFAULT_DISCARD_N = 10
+# Distinct fresh sessions a discovery seed must SUCCEED in before it's trusted
+# enough to mature into the gold set (reproduced, not a one-off).
+DEFAULT_CONFIRM_N = 3
 
 # One session's reduced outcome.
 SUCCESS = "success"
@@ -57,10 +60,29 @@ class ReliabilitySummary:
     n_error: int
     status: str
     discard_n: int
+    confirm_n: int = DEFAULT_CONFIRM_N
 
     @property
     def should_retire(self) -> bool:
         return self.n_success == 0 and self.n_attack_failed >= self.discard_n
+
+    @property
+    def recommendation(self) -> str:
+        """What the ledger suggests for this seed's lifecycle, from execution alone:
+
+        - ``retire``  — failed the discard rule (>= discard_n attack-fails, no success);
+          drop it. Bot-detections/harness errors don't count toward this.
+        - ``mature``  — reproduced in >= confirm_n distinct sessions; trustworthy enough
+          to move a discovery guide into the gold set.
+        - ``keep_testing`` — not enough evidence either way yet; run it more.
+
+        This is only a recommendation from the numbers; flipping a guide's maturity or
+        retiring it is a deliberate step (operator or a promotion script)."""
+        if self.should_retire:
+            return "retire"
+        if self.n_success >= self.confirm_n:
+            return "mature"
+        return "keep_testing"
 
 
 def classify_session(verdict: str | None, error_kind: str | None) -> str:
@@ -88,7 +110,11 @@ def _reduce_run(outcomes: list[str]) -> str:
 
 
 def summarize_seed_reliability(
-    session: Session, guide_id: str, *, discard_n: int = DEFAULT_DISCARD_N
+    session: Session,
+    guide_id: str,
+    *,
+    discard_n: int = DEFAULT_DISCARD_N,
+    confirm_n: int = DEFAULT_CONFIRM_N,
 ) -> ReliabilitySummary:
     """Compute (without writing) the reliability ledger for a seed from traces.
 
@@ -120,6 +146,7 @@ def summarize_seed_reliability(
         n_error=counts[ERROR],
         status=status,
         discard_n=discard_n,
+        confirm_n=confirm_n,
     )
 
 
@@ -129,13 +156,16 @@ def recompute_seed_reliability(
     *,
     run_id: str | None = None,
     discard_n: int = DEFAULT_DISCARD_N,
+    confirm_n: int = DEFAULT_CONFIRM_N,
 ) -> ReliabilitySummary:
     """Recompute the ledger for a seed and upsert its row. Idempotent.
 
     Preserves a ``manual_override`` status: if an operator pinned the seed
     ``active`` or ``retired`` by hand, the recomputed counters are stored but the
     status is left as the human set it."""
-    summary = summarize_seed_reliability(session, guide_id, discard_n=discard_n)
+    summary = summarize_seed_reliability(
+        session, guide_id, discard_n=discard_n, confirm_n=confirm_n
+    )
     row = session.get(SeedReliability, guide_id)
     if row is None:
         row = SeedReliability(guide_id=guide_id)
@@ -161,6 +191,7 @@ def recompute_seed_reliability(
         n_error=summary.n_error,
         status=row.status,
         discard_n=discard_n,
+        confirm_n=confirm_n,
     )
 
 
@@ -185,6 +216,7 @@ def set_seed_status(session: Session, guide_id: str, status: str) -> SeedReliabi
 __all__ = [
     "ATTACK_FAILED",
     "BOT_DETECTED",
+    "DEFAULT_CONFIRM_N",
     "DEFAULT_DISCARD_N",
     "ERROR",
     "SUCCESS",

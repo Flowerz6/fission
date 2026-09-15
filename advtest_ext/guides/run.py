@@ -99,6 +99,13 @@ def build_guide_run(
     # exercise the guide's mutation cells). Callers can re-enable early-exit by
     # passing stop_on_success=True.
     attack_overrides.setdefault("stop_on_success", False)
+    # G1 hard-invariant gate OFF by default: the tree branches freely and the
+    # oracle (signals + judge) alone decides success. The gate was rejecting every
+    # proposed mutation and killing the run before it could branch; free-form
+    # exploration maximises seed/mutation discovery. Re-enable per run by passing
+    # hard_invariant_validation=True (CLI: --invariant-gate).
+    attack_overrides.setdefault("hard_invariant_validation", False)
+    attack_overrides.setdefault("semantic_validation_required", False)
     artifact_root = output_dir
     if artifact_root is not None:
         attack_overrides.setdefault("archive_path", str(artifact_root / "tap_archive.json"))

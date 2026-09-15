@@ -481,6 +481,25 @@ when Fission runs it and the oracle confirms the effect, and as *verified* only 
 reproduces across fresh sessions. A seed that never executes successfully is retired regardless
 of its capture outcome.
 
+### 9.3 Maturity: discovery vs gold
+
+Every guide carries a `maturity` tier:
+
+- **`discovery`** (default) — a new/unproven attack. You may not yet know what a real success
+  looks like, so it can run *judge-only* (the LLM rubric decides) with a coarse or hypothesised
+  signal; the completeness checker relaxes the deterministic-signal and rubric bars to warnings.
+  Its wins are **candidates**, not proven.
+- **`gold`** — a *trusted* attack. Two ways to earn it: **(a)** a human-authored real capture
+  (Bikash's), or **(b)** a discovery guide that **reproduced across multiple fresh sessions**
+  (`confirm_n` signal-verified successes, default 3) with a precise signal. Gold guides are held
+  to the strict bar (a real deterministic signal **and** a written rubric).
+
+A discovery guide moves on from the reliability ledger's recommendation (`scripts/seed_reliability.py`):
+`retire` (failed the N=10 discard rule with no success — bot-detections don't count), `mature`
+(reproduced `confirm_n` times — promote it to gold and tighten its signal to the observed real
+tell), or `keep_testing`. New ideas start at `discovery` and *earn* their way into the gold set;
+they are never trusted on authoring alone.
+
 ---
 
 ## 10. Quick checklist before you submit

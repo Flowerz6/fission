@@ -116,6 +116,13 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--keep-top", type=int, help="survivors kept per tree level (default 2)")
     p.add_argument(
+        "--invariant-gate",
+        action="store_true",
+        help="re-enable the hard-invariant validation gate (default: OFF). With it off the tree "
+        "branches freely and the oracle alone decides success (max exploration breadth). Turn it "
+        "on to restrict mutations to on-mechanism variants (needs a capable CHECKER_MODEL).",
+    )
+    p.add_argument(
         "--stop-on-success",
         action="store_true",
         help="stop the tree at the first winning node (default: keep exploring for more successes)",
@@ -229,6 +236,10 @@ def main() -> None:
     # Pass --stop-on-success to restore early-exit on the first winning node.
     if args.stop_on_success:
         overrides["stop_on_success"] = True
+    # G1 hard-invariant gate is OFF by default (free-form exploration); re-enable on request.
+    if args.invariant_gate:
+        overrides["hard_invariant_validation"] = True
+        overrides["semantic_validation_required"] = True
 
     # Target adapter options (multi-turn UI targets). Only set what the operator
     # asked for so the factory defaults hold.
