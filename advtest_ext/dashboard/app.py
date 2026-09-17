@@ -35,7 +35,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -355,7 +355,6 @@ def _surface_label(target_name: str) -> tuple[str, str]:
     ``Trace.target_name``. Pure formatting of the real class name —
     no invented app/account metadata. Returns ``(label, region)``
     where ``region`` is the raw class name shown in mono."""
-    import re
 
     words = re.sub(r"(?<!^)(?=[A-Z0-9])", " ", target_name).split()
     if words and words[-1] == "Target":
@@ -1724,6 +1723,19 @@ def create_app(
         raw = (trace.raw_response_data or {}) if trace else {}
         intercepted_path = raw.get("intercepted_traffic_path")
         full_response = extract_full_response(intercepted_path) if intercepted_path else ""
+        # Cross-run authenticity is stamped on findings automatically when a run
+        # completes; back-fill legacy findings (created before that hook) on first
+        # view. Only self-extraction guides carry a verdict — recompute is a no-op
+        # otherwise — and it write-through caches, so this runs at most once.
+        guide_id = finding.run.guide_id if finding.run else None
+        if guide_id and not finding.authenticity:
+            from advtest_ext.core.authenticity_pipeline import recompute_guide_authenticity
+
+            try:
+                if recompute_guide_authenticity(factory, guide_id) is not None:
+                    session.refresh(finding)
+            except Exception:  # pragma: no cover - defensive; never break the page
+                pass
         return templates.TemplateResponse(
             request,
             "findings/show.html",
@@ -1731,6 +1743,7 @@ def create_app(
                 "finding": finding,
                 "trace": trace,
                 "full_response": full_response,
+                "authenticity": finding.authenticity or None,
                 "return_to_run": request.query_params.get("from_run") == finding.run_id,
             },
         )
@@ -2029,85 +2042,6 @@ def create_app(
             request,
             "variants.html",
             {"by_guide": by_guide, "total": len(rows), "status": status},
-        )
-
-    @app.get("/authenticity", response_class=HTMLResponse)
-    async def authenticity_index(
-        request: Request,
-        session: Session = Depends(get_session),  # noqa: B008
-        guide: str | None = None,
-        runs: list[str] | None = Query(default=None),  # noqa: B008
-        min_consistency: float = 0.5,
-    ) -> Response:
-        """Judge whether a self-extraction leak (skill/schema/system prompt) is REAL
-        or a hallucination, by comparing several runs of the same guide: cross-run
-        consistency + the fake-module negative control. See
-        ``advtest_ext/core/authenticity.py``."""
-        from advtest_ext.core.authenticity import authenticity_report_for_runs
-        from advtest_ext.guides.corpus import load_guides
-
-        guides_dir = Path(__file__).resolve().parents[2] / "guides"
-        guides = load_guides(guides_dir) if guides_dir.exists() else []
-        selected = next((g for g in guides if g.id == guide), None)
-
-        # Only the SELECTED guide's runs are offered, so a comparison is always
-        # apples-to-apples — you cannot accidentally mix runs of different guides.
-        recent = list_runs(session, limit=100, guide_id=guide) if guide else []
-        run_rows = [
-            {"run_id": r.id, "started_at": r.started_at, "target": r.target_name} for r in recent
-        ]
-
-        report = None
-        snippets: list[dict[str, Any]] = []
-        chosen_runs = [r for r in (runs or []) if r]
-        if selected is not None and len(chosen_runs) >= 1:
-            # Artifact patterns come from the guide's own L0 success signals.
-            patterns: list[str] = []
-            for sig in selected.success.signals:
-                pat = sig.get("pattern")
-                tok = sig.get("token") or sig.get("canary")
-                if pat:
-                    patterns.append(str(pat))
-                elif tok:
-                    patterns.append(re.escape(str(tok)))
-            if patterns:
-                from advtest_ext.core.authenticity import leak_snippets_for_runs
-
-                rep = authenticity_report_for_runs(
-                    factory,
-                    chosen_runs,
-                    artifact_patterns=patterns,
-                    min_consistency=min_consistency,
-                )
-                report = rep.to_dict()
-
-                # Per-run leaked snippet, side by side, with the internal tokens
-                # highlighted so "same names, different wording" is visible. Escape
-                # first (model output is untrusted), then wrap matches in <mark>.
-                import html as _html
-
-                combined = re.compile("(?:" + "|".join(patterns) + ")", re.IGNORECASE)
-                for row in leak_snippets_for_runs(factory, chosen_runs, artifact_patterns=patterns):
-                    safe = _html.escape(row["snippet"])
-                    highlighted = combined.sub(
-                        lambda m: f'<mark class="tok">{m.group(0)}</mark>', safe
-                    )
-                    snippets.append(
-                        {"run_id": row["run_id"], "html": highlighted, "empty": row["empty"]}
-                    )
-
-        return templates.TemplateResponse(
-            request,
-            "authenticity.html",
-            {
-                "guides": guides,
-                "selected_guide": guide,
-                "runs": run_rows,
-                "chosen_runs": chosen_runs,
-                "min_consistency": min_consistency,
-                "report": report,
-                "snippets": snippets,
-            },
         )
 
     @app.get("/playbooks", response_class=HTMLResponse)

@@ -145,3 +145,114 @@ def test_db_adapter_builds_samples_and_finds_control() -> None:
     assert report.n_runs == 2
     assert report.control == "failed_correctly"
     assert report.verdict == "real"
+
+
+# --- automatic pipeline: guide detection + persist to findings -------------
+from pathlib import Path  # noqa: E402
+
+from advtest_ext.core.authenticity_pipeline import (  # noqa: E402
+    artifact_patterns_for_guide,
+    is_self_extraction,
+    recompute_guide_authenticity,
+)
+from advtest_ext.core.models import AttackTrace, Payload  # noqa: E402
+from advtest_ext.storage import promote_finding, set_run_guide  # noqa: E402
+from advtest_ext.storage.models import Finding  # noqa: E402
+
+_GUIDES_DIR = Path(__file__).resolve().parents[1] / "guides"
+
+
+def _guide(guide_id: str):
+    from advtest_ext.guides.corpus import load_guides
+
+    return next(g for g in load_guides(_GUIDES_DIR) if g.id == guide_id)
+
+
+def _leak_run(factory, run_id: str, leak: str) -> None:
+    """A finished run of the sheets skill-leak guide with one success + finding."""
+    with session_scope(factory) as s:
+        upsert_run(s, run_id=run_id, target_name="GeminiSheets", strategy="grid")
+        set_run_guide(s, run_id=run_id, guide_id="sheets_skill_leak")
+        tid = f"{run_id}-t0"
+        insert_trace(
+            s,
+            run_id=run_id,
+            trace=AttackTrace(
+                id=tid,
+                run_id=run_id,
+                behavior_id="sheets_skill_leak",
+                payload=Payload(id=f"{tid}-p", text="probe", modality="text", generator_name="tap"),
+                target_name="GeminiSheets",
+                raw_request="run get_skills",
+                raw_response=leak,
+                verdict="success",
+            ),
+        )
+        promote_finding(s, run_id=run_id, trace_id=tid, severity="med", title="skill leak")
+
+
+def test_is_self_extraction_detects_leak_guides() -> None:
+    assert is_self_extraction(_guide("sheets_skill_leak")) is True
+    assert artifact_patterns_for_guide(_guide("sheets_skill_leak"))
+    # An indirect-injection guide is not a self-disclosure leak.
+    assert is_self_extraction(_guide("docs_indirect_summary_leak")) is False
+
+
+def test_recompute_stamps_real_verdict_across_consistent_runs() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    _leak_run(factory, "run-a", _REAL_LEAK)
+    _leak_run(factory, "run-b", _REAL_LEAK)
+
+    report = recompute_guide_authenticity(factory, "sheets_skill_leak", guides_dir=_GUIDES_DIR)
+    assert report is not None and report.verdict == "real"
+    # Every finding of the guide is stamped with the shared verdict.
+    with session_scope(factory) as s:
+        rows = s.query(Finding).all()
+        assert len(rows) == 2
+        for r in rows:
+            assert r.authenticity["verdict"] == "real"
+            assert r.authenticity["n_runs"] == 2
+            assert set(r.authenticity["run_ids"]) == {"run-a", "run-b"}
+
+
+def test_recompute_single_run_is_unconfirmed() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    _leak_run(factory, "run-solo", _REAL_LEAK)
+
+    report = recompute_guide_authenticity(factory, "sheets_skill_leak", guides_dir=_GUIDES_DIR)
+    assert report is not None and report.verdict == "inconclusive"
+    with session_scope(factory) as s:
+        row = s.query(Finding).one()
+        assert row.authenticity["verdict"] == "inconclusive"
+        assert row.authenticity["n_runs"] == 1
+
+
+def test_recompute_noop_for_non_self_extraction_guide() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:
+        upsert_run(s, run_id="run-ipi", target_name="GeminiDocs", strategy="grid")
+        set_run_guide(s, run_id="run-ipi", guide_id="docs_indirect_summary_leak")
+        insert_trace(
+            s,
+            run_id="run-ipi",
+            trace=AttackTrace(
+                id="run-ipi-t0",
+                run_id="run-ipi",
+                behavior_id="docs_indirect_summary_leak",
+                payload=Payload(id="p", text="x", modality="text", generator_name="tap"),
+                target_name="GeminiDocs",
+                raw_request="q",
+                raw_response="a",
+                verdict="success",
+            ),
+        )
+        promote_finding(s, run_id="run-ipi", trace_id="run-ipi-t0", title="ipi")
+    assert (
+        recompute_guide_authenticity(factory, "docs_indirect_summary_leak", guides_dir=_GUIDES_DIR)
+        is None
+    )
+    with session_scope(factory) as s:
+        assert not (s.query(Finding).one().authenticity or {})

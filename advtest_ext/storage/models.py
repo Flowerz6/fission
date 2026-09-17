@@ -237,6 +237,11 @@ class Finding(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     promoted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     replay_bundle_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Cross-run authenticity verdict for self-extraction findings (skill/schema/
+    # system-prompt leaks): whether the leak reproduces across independent runs
+    # or looks hallucinated. Computed on run completion; empty for other findings.
+    # See advtest_ext.core.authenticity_pipeline.
+    authenticity: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     run: Mapped[Run] = relationship(back_populates="findings")
     trace: Mapped[Trace] = relationship(back_populates="finding")

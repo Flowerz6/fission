@@ -585,6 +585,7 @@ class Orchestrator:
         )
         self._persister.write_run_result(result)
         self._db_finalize_run(result.summary_stats)
+        self._recompute_authenticity()
         await self._enqueue_review_sample()
         await self._events.emit(
             "run_completed",
@@ -902,6 +903,20 @@ class Orchestrator:
 
         with session_scope(self._session_factory) as s:
             finalize_run(s, run_id=self.run_id, summary=summary)
+
+    def _recompute_authenticity(self) -> None:
+        """Cross-run authenticity for self-extraction guides: now that this run
+        is finalized, re-score whether the leak reproduces across the guide's
+        runs and stamp the verdict onto its findings. Best-effort — a scoring
+        error must never fail an otherwise-complete run."""
+        if self._session_factory is None or not self._guide_id:
+            return
+        try:
+            from advtest_ext.core.authenticity_pipeline import recompute_guide_authenticity
+
+            recompute_guide_authenticity(self._session_factory, self._guide_id)
+        except Exception:  # pragma: no cover - defensive; never break run teardown
+            logger.warning("authenticity.recompute_failed", run_id=self.run_id, exc_info=True)
 
     async def _enqueue_review_sample(self) -> None:
         """Measurement-spine activation: stratified-sample this run's

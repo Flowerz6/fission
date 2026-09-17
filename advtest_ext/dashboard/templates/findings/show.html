@@ -15,6 +15,19 @@
 <dl class="detail-meta"><dt>Target</dt><dd>{{ trace.target_name }}</dd><dt>Category</dt><dd>{{ trace.attack_name }}</dd><dt>Technique</dt><dd>{{ trace.technique_id or '—' }}</dd><dt>Scenario</dt><dd>{{ trace.behavior_id }}</dd><dt>Detected</dt><dd>{{ finding.promoted_at.strftime('%d %b %Y, %H:%M') }}</dd><dt>Verdict</dt><dd><span class="pill {{ trace.verdict or 'refused' }}">{{ trace.verdict or 'Unscored' }}</span></dd><dt>Severity</dt><dd><span class="sevdot {{ finding.severity }}"><span class="d"></span>{{ finding.severity|capitalize }}</span></dd></dl>
 <h3>Description</h3><p>{{ finding.description or 'No description recorded for this finding.' }}</p>
 <h3>Run</h3><a href="/runs/{{ finding.run_id }}">{{ finding.run_id }} →</a>
+{% if authenticity %}
+{% set av = authenticity.verdict %}
+<h3>Authenticity</h3>
+<div class="authn authn-{{ av }}">
+  <div class="authn-head">
+    <span class="authn-verdict">{{ {'real':'Corroborated','suspect':'Suspect','inconclusive':'Unconfirmed'}.get(av, 'Unconfirmed') }}</span>
+    <span class="authn-meta">{% if authenticity.n_runs and authenticity.n_runs >= 2 %}compared across {{ authenticity.n_runs }} runs · consistency {{ '%.2f'|format(authenticity.consistency) }}{% else %}seen in {{ authenticity.n_runs or 1 }} run{% endif %}</span>
+  </div>
+  <p class="authn-why">{{ authenticity.reasoning }}</p>
+  {% if not authenticity.n_runs or authenticity.n_runs < 2 %}<p class="authn-hint">Needs a second independent run of this guide to corroborate — a genuine internal leak recurs, a hallucination varies.</p>{% endif %}
+  {% if authenticity.stable_artifacts %}<div class="authn-tags"><span class="authn-tags-lbl">Stable across runs</span>{% for a in authenticity.stable_artifacts %}<code>{{ a }}</code>{% endfor %}</div>{% endif %}
+</div>
+{% endif %}
 </section><section><h2>Reproduction</h2><div data-tab-group><div class="tabs" role="tablist" aria-label="Reproduction preview"><button class="on" id="preview-input-tab" role="tab" aria-controls="preview-input" aria-selected="true" data-tab="preview-input">Input</button><button id="preview-output-tab" role="tab" aria-controls="preview-output" aria-selected="false" data-tab="preview-output">Output</button></div>
 <div id="preview-input" data-tab-panel role="tabpanel" aria-labelledby="preview-input-tab" class="evidence-box"><strong>User prompt</strong><pre>{{ trace.raw_request }}</pre></div>
 <div id="preview-output" data-tab-panel role="tabpanel" aria-labelledby="preview-output-tab" class="evidence-box" hidden><strong>Model response</strong><pre>{{ full_response or trace.raw_response }}</pre></div></div>
