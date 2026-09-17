@@ -5,7 +5,7 @@
 <script src="/static/run-findings.js?v={{ static_v() }}" defer></script>
 {% include "runs/_hero.html" %}
 <section class="run-tree-section" id="run-attack-tree">
-  <div class="section-head"><h2>Attack tree</h2><div class="run-analysis-actions"><a href="/runs/{{ run.id }}/tree">Full-screen tree →</a><a href="/runs/{{ run.id }}/transcript-report.pdf">Export transcript PDF ↓</a></div></div>
+  <div class="section-head"><h2>Attack tree</h2><div class="run-analysis-actions"><a href="/runs/{{ run.id }}/transcript-report.pdf">Export transcript PDF ↓</a></div></div>
   {% include "runs/_tree_live.html" %}
 </section>
 {% include "runs/_findings.html" %}

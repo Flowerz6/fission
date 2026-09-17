@@ -144,7 +144,7 @@
     {% set status_labels = {"idle":"Ready", "starting":"Starting", "running":"In progress", "stopping":"Stopping", "stopped":"Stopped", "succeeded":"Completed", "failed":"Needs attention"} %}
     <div class="activity-controls">
       <span id="test-state" class="state {{ state.status }}">{{ status_labels.get(state.status, "Ready") }}</span>
-      <a id="live-tree-link" class="live-tree-link" href="{{ ('/runs/' ~ state.run_id ~ '/tree') if state.run_id else '#' }}" {% if not state.run_id %}hidden{% endif %}>Open live tree ↗</a>
+      <a id="live-tree-link" class="live-tree-link" href="{{ ('/runs/' ~ state.run_id ~ '#run-attack-tree') if state.run_id else '#' }}" {% if not state.run_id %}hidden{% endif %}>Open live tree ↗</a>
       <button id="stop-run" class="stop-run" type="button" {% if state.status not in ("starting", "running") %}hidden{% endif %}>Stop run</button>
     </div>
   </div>
@@ -166,7 +166,7 @@
     stateEl.textContent = statusLabels[state.status] || "Ready";
     stateEl.className = "state " + state.status;
     treeEl.hidden = !state.run_id;
-    if (state.run_id) treeEl.href = "/runs/" + state.run_id + "/tree";
+    if (state.run_id) treeEl.href = "/runs/" + state.run_id + "#run-attack-tree";
     if (state.lines && state.lines.length) {
       consoleEl.textContent = state.lines.join("\n");
       consoleEl.scrollTop = consoleEl.scrollHeight;

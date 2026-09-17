@@ -1374,36 +1374,6 @@ def create_app(
             ),
         }
 
-    @app.get("/runs/{run_id}/tree", response_class=HTMLResponse)
-    async def runs_tree(
-        request: Request,
-        run_id: str,
-        session: Session = Depends(get_session),  # noqa: B008
-    ) -> Response:
-        """Per-(behaviour, technique) attack-tree view. TAP runs draw
-        as the multi-level branching trees the algorithm actually
-        explored; PAIR / single-step runs degenerate to a flat list
-        of one root per cell, which the template handles with the
-        same recursive macro."""
-        run = get_run(session, run_id)
-        if run is None:
-            raise HTTPException(404, f"run {run_id!r} not found")
-        traces = list_traces_for_run(session, run_id)
-        phases = _build_phase_forests(_collapse_conversations(list(traces)))
-        tree_hash = _tree_state_hash(phases, finished=not run_is_active(run))
-        return templates.TemplateResponse(
-            request,
-            "runs/tree.html",
-            {
-                "run": run,
-                "phases": phases,
-                "tree_hash": tree_hash,
-                "tree_graph": _tree_graph_payload(
-                    phases, finished=not run_is_active(run), tree_hash=tree_hash
-                ),
-            },
-        )
-
     @app.get("/runs/{run_id}/_tree", response_class=HTMLResponse)
     async def runs_tree_partial(
         request: Request,

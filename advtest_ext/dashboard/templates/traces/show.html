@@ -16,7 +16,7 @@
 </h1>
 <p class="muted">
   Run <a href="/runs/{{ trace.run_id }}">{{ trace.run_id }}</a> ·
-  <a href="/runs/{{ trace.run_id }}/tree">attack tree</a>
+  <a href="/runs/{{ trace.run_id }}#run-attack-tree">attack tree</a>
   {% if trace.parent_id %}· Parent <a href="/traces/{{ trace.parent_id }}"><code>{{ trace.parent_id }}</code></a>{% endif %}
 </p>
 

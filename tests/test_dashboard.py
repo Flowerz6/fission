@@ -307,124 +307,6 @@ def test_search_coverage_panel_absent_without_report(client: TestClient) -> None
     assert "Search coverage" not in body
 
 
-def test_runs_tree_renders_tap_shaped_chains() -> None:
-    """End-to-end: seed a run with a TAP-shaped chain (root + two
-    depth-1 children + one depth-2 grandchild), hit ``/runs/{id}/tree``,
-    assert the response is 200 and that the parent-child links are
-    actually reflected in the rendered HTML.
-
-    The smoke test on its own (``status == 200``) would pass even if
-    the helper grouped traces wrong; the assertions below check that
-    each cell renders, that the grandchild's id appears nested under
-    its parent's, and that the persisted depth + score fields make
-    it through the template. Note: only ``parent_id`` and ``depth``
-    are persisted from TAP metadata today — the rich
-    ``metadata['tap']`` blob (branch index, attacker reasoning) is
-    NOT on the storage ``Trace`` row, so this test deliberately
-    doesn't seed it."""
-    engine = make_engine("sqlite:///:memory:")
-    factory = make_session_factory(engine)
-
-    def _seed_tap(factory: sessionmaker[Session]) -> None:
-        with session_scope(factory) as s:
-            upsert_run(
-                s,
-                run_id="run-tap",
-                target_name="StubDocumentTarget",
-                strategy="grid",
-            )
-            # Trace structure (one cell, behaviour=exfil_x, technique=None):
-            #   root (depth=1, no parent)
-            #     ├── child_a (depth=2, parent=root)         [score=0.9, success]
-            #     │     └── grandchild (depth=3, parent=child_a)
-            #     └── child_b (depth=2, parent=root)         [score=0.2, refused]
-            spec = [
-                ("root", None, 1, 0.4, "refused"),
-                ("child_a", "root", 2, 0.9, "success"),
-                ("child_b", "root", 2, 0.2, "refused"),
-                ("grandchild", "child_a", 3, 0.95, "success"),
-            ]
-            for trace_id, parent, depth, score, verdict in spec:
-                trace = AttackTrace(
-                    id=trace_id,
-                    run_id="run-tap",
-                    behavior_id="exfil_x",
-                    payload=Payload(
-                        id=f"p-{trace_id}",
-                        text=f"refined-prompt-{trace_id}",
-                        modality="text",
-                        generator_name="tap_indirect",
-                    ),
-                    target_name="StubDocumentTarget",
-                    raw_request=f"refined-prompt-{trace_id}",
-                    raw_response="response",
-                    judge_scores=[
-                        JudgeScore(
-                            judge_name="strong_reject",
-                            score=score,
-                            flagged=verdict == "success",
-                            reasoning="rubric",
-                            judge_version="0.1",
-                        )
-                    ],
-                    verdict=verdict,  # type: ignore[arg-type]
-                    parent_id=parent,
-                    depth=depth,
-                )
-                insert_trace(s, run_id="run-tap", trace=trace)
-            finalize_run(
-                s,
-                run_id="run-tap",
-                summary=SummaryStats(total_traces=4, successful_traces=2, overall_asr=0.5),
-            )
-
-    _seed_tap(factory)
-    app = create_app(engine=engine)
-    with TestClient(app) as c:
-        resp = c.get("/runs/run-tap/tree")
-    assert resp.status_code == 200
-    body = resp.text
-    # Cell header surfaced.
-    assert "exfil_x" in body
-    # 2 successes / 4 traces shows the cell summary worked.
-    assert "2/4" in body
-    # All four trace ids made it onto the page.
-    for tid in ("root", "child_a", "child_b", "grandchild"):
-        assert tid in body
-    # ASCII tree rendering: box-drawing characters present.
-    assert "├──" in body or "└──" in body
-    # Each trace line is wrapped in an <a href="/traces/{id}"> so
-    # users can click through to detail. Locks discoverability for
-    # the trace detail route.
-    for tid in ("root", "child_a", "child_b", "grandchild"):
-        assert f'href="/traces/{tid}"' in body
-    # Score from judge_scores[0] formatted onto the node.
-    assert "0.95" in body or "0.90" in body
-    # Structural assertion: grandchild's <li>-equivalent appears
-    # under child_a (its parent), with the continuation column
-    # ("│") between them, BEFORE child_b shows up.
-    grandchild_pos = body.index("grandchild")
-    child_a_pos = body.index("child_a")
-    child_b_pos = body.index("child_b")
-    assert child_a_pos < grandchild_pos < child_b_pos
-    # No synthetic root node injected. The explanatory copy at the
-    # top of the page legitimately uses the word "synthetic" to
-    # describe the *data* (depth-1 branches' parent never persisted),
-    # so we can't ban the word — instead, lock the structural fact
-    # that the rendered lines correspond exactly to the four real
-    # traces seeded above. Counting trace links is the cheapest way
-    # to assert "no extra fake-root row was emitted".
-    assert body.count('href="/traces/') == 4
-    # The live tree is now the Cytoscape explorer, not Mermaid: the panel
-    # mounts a canvas and embeds its node/edge data as JSON, and the page
-    # no longer emits a Mermaid `graph TD` block.
-    assert "cy-mount" in body
-    assert 'data-cell-key="p0|exfil_x|(none)"' in body
-    assert "/static/tree.js" in body
-    # The tree partial no longer emits a Mermaid graph node.
-    assert 'class="mermaid"' not in body
-
-
 def test_runs_tree_json_returns_cytoscape_payload() -> None:
     """``/runs/{id}/_tree.json`` returns the Cytoscape node/edge payload the
     live client diffs: one cell per (behaviour, technique), verdict-derived
@@ -530,7 +412,7 @@ def test_runs_tree_renders_phases_as_labelled_sections() -> None:
             insert_trace(s, run_id="run-ph", trace=trace)
     app = create_app(engine=engine)
     with TestClient(app) as c:
-        resp = c.get("/runs/run-ph/tree")
+        resp = c.get("/runs/run-ph")
     assert resp.status_code == 200
     body = resp.text
     assert "Gmail → Docs" in body
@@ -672,17 +554,14 @@ def test_traces_show_404_for_unknown_id() -> None:
     assert resp.status_code == 404
 
 
-def test_runs_tree_404_for_unknown_id(client: TestClient) -> None:
-    resp = client.get("/runs/no-such-run/tree")
-    assert resp.status_code == 404
-
-
-def test_runs_show_links_to_tree(client: TestClient) -> None:
-    """The per-run page must surface a link to the tree view —
-    otherwise the route is undiscoverable from the UI."""
+def test_runs_show_embeds_attack_tree(client: TestClient) -> None:
+    """The per-run page embeds the attack tree in its own section (there is no
+    longer a separate full-screen tree page)."""
     resp = client.get("/runs/run-seed")
     assert resp.status_code == 200
-    assert "/runs/run-seed/tree" in resp.text
+    assert 'id="run-attack-tree"' in resp.text
+    assert "tree-explorer" in resp.text
+    assert "/runs/run-seed/tree" not in resp.text
 
 
 def test_findings_index_full_page_renders(client: TestClient) -> None:
