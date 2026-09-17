@@ -1387,3 +1387,29 @@ def test_report_view_generates_from_selected_findings(client: TestClient) -> Non
     excluded = client.get("/reports/view?severity=low")
     assert excluded.context["total"] == 0
     assert "No findings match" in excluded.text
+
+
+def test_live_tests_options_only_offers_live_runnable_guides() -> None:
+    """The New-run dialog must only list guides the guided runner can launch
+    live — i.e. whose app maps to a registered UI target adapter. Guides on
+    tool_use_agent / outlook / agentdojo (no live adapter) are excluded."""
+    from advtest_ext.dashboard.live_tests import LiveTestController
+    from advtest_ext.guides.run import default_target_name
+
+    engine = make_engine("sqlite:///:memory:")
+    controller = LiveTestController("sqlite:///:memory:", enabled=True)
+    app = create_app(engine=engine, live_test_controller=controller)
+    with TestClient(app) as c:
+        guides = c.get("/live-tests/options").json()["guides"]
+
+    assert guides, "expected at least one runnable guide"
+    # No non-runnable surfaces leak through.
+    assert not any("tool_use_agent" in g["surface"] for g in guides)
+    # Every offered guide maps to a live target adapter.
+    from pathlib import Path
+
+    from advtest_ext.guides.corpus import load_guides
+
+    by_id = {g.id: g for g in load_guides(Path(__file__).resolve().parents[1] / "guides")}
+    for opt in guides:
+        default_target_name(by_id[opt["id"]])  # raises if not live-runnable
