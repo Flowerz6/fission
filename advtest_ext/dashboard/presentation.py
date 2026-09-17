@@ -82,6 +82,35 @@ def objective_label(name: str) -> str:
     return _OBJECTIVE_LABELS.get(name, _identifier_label(name)) or "Not recorded"
 
 
+def finding_title(finding: Any) -> str:
+    """Readable name for a finding: a human stored title when one was set, else
+    the objective it elicited (the *what*). The auto-generated titles are the
+    machine ``attack → behaviour`` form — those are replaced with the objective
+    label rather than shown raw."""
+    title = (getattr(finding, "title", "") or "").strip()
+    if title and "→" not in title:
+        return title  # a descriptive title (manual / rescore-with-name), keep it
+    trace = getattr(finding, "trace", None)
+    behavior = getattr(trace, "behavior_id", None) if trace else None
+    if behavior:
+        return objective_label(behavior)
+    tail = title.split("→")[-1].split(" via ")[0].strip()
+    return objective_label(tail) if tail else (title or "Finding")
+
+
+def finding_method(finding: Any) -> str:
+    """How it was found — attack family (+ hiding technique) — for a secondary
+    line beneath the finding name."""
+    trace = getattr(finding, "trace", None)
+    if trace is None:
+        return ""
+    parts = [attack_label(getattr(trace, "attack_name", "") or "")]
+    tech = getattr(trace, "technique_id", None)
+    if tech:
+        parts.append(_identifier_label(str(tech)))
+    return " · ".join(p for p in parts if p and p != "Not recorded")
+
+
 def run_method_label(run: Any) -> str:
     """Show the configured attack method; orchestration is a fallback."""
     config = run.config or {}

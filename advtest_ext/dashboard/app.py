@@ -52,6 +52,8 @@ from sqlalchemy.orm import Session
 from advtest_ext.dashboard.live_tests import LiveTestController
 from advtest_ext.dashboard.presentation import (
     attack_label,
+    finding_method,
+    finding_title,
     objective_label,
     run_display_name,
     run_method_label,
@@ -87,6 +89,7 @@ from advtest_ext.storage import (
     asr_heatmap_formatted,
     count_gold_labels,
     count_hitl,
+    finding_run_seq_map,
     get_finding,
     get_hitl,
     get_run,
@@ -758,6 +761,8 @@ def create_app(
     templates = Jinja2Templates(directory=_TEMPLATE_DIR, context_processors=[service_context])
     templates.env.globals["attack_label"] = attack_label
     templates.env.globals["objective_label"] = objective_label
+    templates.env.globals["finding_title"] = finding_title
+    templates.env.globals["finding_method"] = finding_method
     templates.env.globals["target_surface_label"] = lambda name: target_identity(name)[2]
 
     # Cache-busting version for the tree component's static assets. tree.js/
@@ -1689,6 +1694,7 @@ def create_app(
         behavior_options = list_finding_behavior_ids(session, run_id=run_id)
         # If the request looks like an HTMX partial, return the table
         # only — keeps the filter swap snappy.
+        finding_seq = finding_run_seq_map(session, [f.run_id for f in findings])
         partial = request.headers.get("hx-request") == "true"
         template = "findings/_table.html" if partial else "findings/index.html"
         return templates.TemplateResponse(
@@ -1703,6 +1709,7 @@ def create_app(
                 "behavior_options": behavior_options,
                 "surface_label": surface_label,
                 "run_display_name": run_display_name,
+                "finding_seq": finding_seq,
             },
         )
 
@@ -1744,6 +1751,8 @@ def create_app(
                 "trace": trace,
                 "full_response": full_response,
                 "authenticity": finding.authenticity or None,
+                "finding_seq_n": finding_run_seq_map(session, [finding.run_id]).get(finding.id),
+                "run_display_name": run_display_name,
                 "return_to_run": request.query_params.get("from_run") == finding.run_id,
             },
         )

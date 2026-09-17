@@ -3,16 +3,20 @@
   <thead>
     <tr>
       <th class="cell-check"><input type="checkbox" aria-label="Select all" data-select-all></th>
-      <th>Finding</th><th>Severity</th><th>Target</th><th>Detected</th><th></th>
+      <th>Finding</th><th>Severity</th><th>Target</th><th>Run</th><th>Detected</th><th></th>
     </tr>
   </thead>
   <tbody>
     {% for f in findings %}
     <tr>
       <td class="cell-check"><input class="rowcheck" type="checkbox" aria-label="Select finding"></td>
-      <td><a class="fname" href="/findings/{{ f.id }}">{{ f.title or '(untitled)' }}</a>{% if f.authenticity and f.authenticity.verdict == 'real' %}<span class="authn-chip authn-real" title="{{ f.authenticity.reasoning }}">Corroborated · {{ f.authenticity.n_runs }} runs</span>{% endif %}</td>
+      <td>
+        <a class="fname" href="/findings/{{ f.id }}">{{ finding_title(f) }}</a>{% if f.authenticity and f.authenticity.verdict == 'real' %}<span class="authn-chip authn-real" title="{{ f.authenticity.reasoning }}">Corroborated · {{ f.authenticity.n_runs }} runs</span>{% endif %}
+        {% set m = finding_method(f) %}{% if m %}<div class="fmeta muted">{{ m }}</div>{% endif %}
+      </td>
       <td><span class="sevdot {{ f.severity }}"><span class="d"></span>{{ f.severity|capitalize }}</span></td>
       <td>{{ surface_label(f.trace.target_name) if f.trace else "Unknown" }}</td>
+      <td class="muted"><a class="frun" href="/runs/{{ f.run_id }}">{{ run_display_name(f.run) if f.run else f.run_id }}</a>{% if finding_seq.get(f.id) %} <span class="frun-n">· #{{ finding_seq[f.id] }}</span>{% endif %}</td>
       <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') if f.promoted_at else '—' }}</td>
       <td><a class="rowmenu" href="/findings/{{ f.id }}" aria-label="Open finding">&#8943;</a></td>
     </tr>

@@ -365,7 +365,11 @@ def _promote(
         run_id=run_id,
         trace_id=trace.id,
         severity="med",
-        title=f"{trace.payload.id} → {trace.behavior_id}",
+        title=(
+            f"{trace.payload.generator_name} → {trace.behavior_id} via {trace.technique.id}"
+            if trace.technique is not None
+            else f"{trace.payload.generator_name} → {trace.behavior_id}"
+        ),
         description=(
             f"Promoted by rescore via "
             f"{'L2 judge' if score >= threshold else 'L0 signal'}"

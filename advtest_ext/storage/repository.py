@@ -484,6 +484,19 @@ def list_traces_for_run(session: Session, run_id: str, *, limit: int = 1000) -> 
     )
 
 
+def finding_run_seq_map(session: Session, run_ids: list[str] | None = None) -> dict[str, int]:
+    """Map each finding id to its 1-based position within its own run, ordered by
+    promotion time. Gives every finding a stable, human "Finding N of run X"
+    number derived from the existing run relationship — no stored counter."""
+    seq = func.row_number().over(
+        partition_by=Finding.run_id, order_by=(Finding.promoted_at, Finding.id)
+    )
+    stmt = select(Finding.id, seq)
+    if run_ids:
+        stmt = stmt.where(Finding.run_id.in_(list(run_ids)))
+    return {fid: int(n) for fid, n in session.execute(stmt)}
+
+
 def list_findings(
     session: Session,
     *,
@@ -1128,6 +1141,7 @@ __all__ = [
     "count_hitl",
     "enqueue_hitl",
     "finalize_run",
+    "finding_run_seq_map",
     "get_finding",
     "get_gold_label",
     "get_hitl",

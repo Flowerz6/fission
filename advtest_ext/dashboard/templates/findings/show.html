@@ -2,7 +2,7 @@
 {% block title %}{{ finding.title or 'Finding' }} · Fission{% endblock %}
 {% block topbar_leading %}{% if return_to_run %}<a class="back-link" href="/runs/{{ finding.run_id }}?finding={{ finding.id }}#run-findings">← Back to run</a>{% else %}<a class="back-link" href="/findings">← Back to findings</a>{% endif %}{% endblock %}
 {% block content %}
-<div class="head-bar finding-detail-head"><div class="ht"><h1>{{ finding.title or '(untitled)' }} <span class="sevdot {{ finding.severity }}"><span class="d"></span>{{ finding.severity|capitalize }}</span></h1><p>Evidence and model behaviour from this adversarial test.</p></div><div class="ha"><a class="btn-outline" href="/findings/{{ finding.id }}/report.docx">↓ Export DOCX</a>{% if finding.replay_bundle_path %}<a class="btn-outline" href="/findings/{{ finding.id }}/replay">↓ Replay bundle</a>{% endif %}</div></div>
+<div class="head-bar finding-detail-head"><div class="ht"><h1>{{ finding_title(finding) }} <span class="sevdot {{ finding.severity }}"><span class="d"></span>{{ finding.severity|capitalize }}</span></h1><p><a href="/runs/{{ finding.run_id }}">{{ run_display_name(finding.run) if finding.run else finding.run_id }}</a>{% if finding_seq_n %} · Finding {{ finding_seq_n }}{% endif %}{% set m = finding_method(finding) %}{% if m %} · {{ m }}{% endif %}</p></div><div class="ha"><a class="btn-outline" href="/findings/{{ finding.id }}/report.docx">↓ Export DOCX</a>{% if finding.replay_bundle_path %}<a class="btn-outline" href="/findings/{{ finding.id }}/replay">↓ Replay bundle</a>{% endif %}</div></div>
 <div data-tab-group>
 <div class="tabs" role="tablist" aria-label="Finding details">
 <button class="on" role="tab" id="tab-overview" aria-controls="finding-overview" aria-selected="true" data-tab="finding-overview">Overview</button>
@@ -12,7 +12,7 @@
 </div>
 <div id="finding-overview" role="tabpanel" aria-labelledby="tab-overview" data-tab-panel>
 <div class="detail-grid"><section><h2>Details</h2>
-<dl class="detail-meta"><dt>Target</dt><dd>{{ trace.target_name }}</dd><dt>Category</dt><dd>{{ trace.attack_name }}</dd><dt>Technique</dt><dd>{{ trace.technique_id or '—' }}</dd><dt>Scenario</dt><dd>{{ trace.behavior_id }}</dd><dt>Detected</dt><dd>{{ finding.promoted_at.strftime('%d %b %Y, %H:%M') }}</dd><dt>Verdict</dt><dd><span class="pill {{ trace.verdict or 'refused' }}">{{ trace.verdict or 'Unscored' }}</span></dd><dt>Severity</dt><dd><span class="sevdot {{ finding.severity }}"><span class="d"></span>{{ finding.severity|capitalize }}</span></dd></dl>
+<dl class="detail-meta"><dt>Target</dt><dd>{{ trace.target_name }}</dd><dt>Category</dt><dd title="{{ trace.attack_name }}">{{ attack_label(trace.attack_name) }}</dd><dt>Technique</dt><dd>{{ trace.technique_id or '—' }}</dd><dt>Scenario</dt><dd title="{{ trace.behavior_id }}">{{ objective_label(trace.behavior_id) }}</dd><dt>Detected</dt><dd>{{ finding.promoted_at.strftime('%d %b %Y, %H:%M') }}</dd><dt>Verdict</dt><dd><span class="pill {{ trace.verdict or 'refused' }}">{{ trace.verdict or 'Unscored' }}</span></dd><dt>Severity</dt><dd><span class="sevdot {{ finding.severity }}"><span class="d"></span>{{ finding.severity|capitalize }}</span></dd></dl>
 <h3>Description</h3><p>{{ finding.description or 'No description recorded for this finding.' }}</p>
 <h3>Run</h3><a href="/runs/{{ finding.run_id }}">{{ finding.run_id }} →</a>
 {% if authenticity %}
