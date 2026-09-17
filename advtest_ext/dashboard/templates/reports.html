@@ -8,9 +8,51 @@
     <p>Generate and share evaluation reports from your completed runs.</p>
   </div>
   <div class="ha">
-    <a class="btn-primary" href="{{ '/runs/' ~ runs[0].id ~ '/report' if runs else '/runs/new' }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 2h8v12H4z"/><path d="M6 6h4M6 9h4"/></svg>Generate report</a>
+    <button type="button" class="btn-primary" data-open-report-builder><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 2h8v12H4z"/><path d="M6 6h4M6 9h4"/></svg>Generate report</button>
   </div>
 </div>
+
+<dialog id="report-builder-dialog" class="launch-dialog" aria-labelledby="report-builder-title">
+  <form id="report-builder-form" method="get" action="/reports/view" target="_blank">
+    <header class="ld-head">
+      <div><h2 id="report-builder-title">Generate a report</h2><p class="ld-sub">Pick the findings to include, give it a title, and generate.</p></div>
+      <button type="button" class="ld-x" data-rb-cancel aria-label="Close">&times;</button>
+    </header>
+    <div class="ld-config rb-config">
+      <label class="ld-field ld-field-wide"><span class="ld-lbl">Report title</span>
+        <input type="text" name="title" maxlength="120" placeholder="e.g. Gemini Workspace — May assessment" autocomplete="off"></label>
+      <div class="ld-field">
+        <span class="ld-lbl">Severity</span>
+        <div class="rb-checks">
+          {% for s in ('critical', 'high', 'med', 'low') %}
+          <label class="rb-check"><input type="checkbox" name="severity" value="{{ s }}"> {{ s|capitalize }}</label>
+          {% endfor %}
+        </div>
+        <span class="ld-hint">Leave all unchecked to include every severity.</span>
+      </div>
+      <label class="ld-field ld-field-wide"><span class="ld-lbl">Scenarios</span>
+        <select name="behavior_id" multiple size="5">
+          {% for bid, label in scenarios %}<option value="{{ bid }}">{{ label }}</option>{% endfor %}
+        </select>
+        <span class="ld-hint">None selected = all scenarios. Ctrl/Cmd-click to pick several.</span>
+      </label>
+      <div class="ld-grid rb-grid">
+        <label class="ld-field"><span class="ld-lbl">From date</span><input type="date" name="date_from"></label>
+        <label class="ld-field"><span class="ld-lbl">To date</span><input type="date" name="date_to"></label>
+        <label class="ld-field"><span class="ld-lbl">Run</span>
+          <select name="run_id"><option value="">All runs</option>{% for rid, rname in finding_runs %}<option value="{{ rid }}">{{ rname }}</option>{% endfor %}</select>
+        </label>
+      </div>
+    </div>
+    <footer class="ld-foot">
+      <div class="ld-actions">
+        <button type="button" class="btn-outline" data-rb-cancel>Cancel</button>
+        <button type="submit" class="btn-primary">Generate report</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+<script src="/static/report-builder.js?v={{ static_v() }}" defer></script>
 
 <div class="list-controls"><div class="tabs"><a class="on" href="/reports">All <span class="c">{{ runs|length }}</span></a></div><div class="searchbox"><input aria-label="Search reports" placeholder="Search reports…" data-table-search="reports-table"></div></div>
 

@@ -258,6 +258,12 @@ body:has(.finding-detail-head) .mobile-nav{display:none}
 .ld-actions{display:flex;align-items:center;gap:12px}
 .ld-full{margin-right:auto;font:400 12.5px var(--sans);color:var(--muted);text-decoration:none}.ld-full:hover{color:var(--ink);text-decoration:underline}
 @media (max-width:600px){.ld-body{grid-template-columns:1fr}.ld-workspaces{border-right:0;border-bottom:1px solid var(--border);flex-direction:row;flex-wrap:wrap}.ld-ws{flex:1 1 auto}}
+/* Report-builder modal (reuses .launch-dialog). */
+.rb-config .rb-checks{display:flex;gap:14px;flex-wrap:wrap}
+.rb-config .rb-check{display:inline-flex;align-items:center;gap:6px;font:400 13.5px var(--sans);color:var(--ink)}
+.rb-config select[multiple]{padding:6px 8px}
+.rb-config .rb-grid{grid-template-columns:1fr 1fr 1fr}
+@media (max-width:560px){.rb-config .rb-grid{grid-template-columns:1fr}}
 /* Cross-run authenticity: verdict block on the finding, chip in the list. */
 .authn{margin:6px 0 4px;padding:12px 14px;border:1px solid var(--border-strong);border-left-width:3px;border-radius:var(--r-sm);background:var(--surface-2)}
 .authn-real{border-left-color:var(--ok)}

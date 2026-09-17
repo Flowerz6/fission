@@ -35,7 +35,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -2261,8 +2261,92 @@ def create_app(
         session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
         runs = [run for run in list_runs(session, limit=200) if run.finished_at is not None]
+        # Options for the report-builder modal: scenarios and runs that have findings.
+        scenarios = [(b, objective_label(b)) for b in list_finding_behavior_ids(session)]
+        finding_runs = [
+            (rid, run_display_name(run) if run else rid)
+            for rid in list_finding_run_ids(session)
+            for run in [get_run(session, rid)]
+        ]
         return templates.TemplateResponse(
-            request, "reports.html", {"runs": runs, "run_display_name": run_display_name}
+            request,
+            "reports.html",
+            {
+                "runs": runs,
+                "run_display_name": run_display_name,
+                "scenarios": scenarios,
+                "finding_runs": finding_runs,
+            },
+        )
+
+    @app.get("/reports/view", response_class=HTMLResponse)
+    async def reports_view(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+        title: str | None = None,
+        severity: list[str] | None = Query(default=None),  # noqa: B008
+        behavior_id: list[str] | None = Query(default=None),  # noqa: B008
+        date_from: str | None = None,
+        date_to: str | None = None,
+        run_id: str | None = None,
+    ) -> Response:
+        from advtest_ext.dashboard.report import (
+            WEASYPRINT_INSTALLED,
+            build_findings_report_context,
+        )
+
+        ctx = build_findings_report_context(
+            session,
+            title=title,
+            severities=severity,
+            behavior_ids=behavior_id,
+            date_from=date_from,
+            date_to=date_to,
+            run_id=run_id,
+        )
+        ctx["pdf_available"] = WEASYPRINT_INSTALLED
+        return templates.TemplateResponse(request, "reports/document.html", ctx)
+
+    @app.get("/reports/view.pdf")
+    async def reports_view_pdf(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+        title: str | None = None,
+        severity: list[str] | None = Query(default=None),  # noqa: B008
+        behavior_id: list[str] | None = Query(default=None),  # noqa: B008
+        date_from: str | None = None,
+        date_to: str | None = None,
+        run_id: str | None = None,
+    ) -> Response:
+        from advtest_ext.dashboard.report import (
+            WEASYPRINT_INSTALLED,
+            build_findings_report_context,
+            render_pdf,
+        )
+
+        if not WEASYPRINT_INSTALLED:
+            return PlainTextResponse(
+                "PDF rendering requires the optional 'pdf' extra:\n"
+                "    poetry install --extras pdf\n"
+                "The HTML version is available at /reports/view.",
+                status_code=501,
+            )
+        ctx = build_findings_report_context(
+            session,
+            title=title,
+            severities=severity,
+            behavior_ids=behavior_id,
+            date_from=date_from,
+            date_to=date_to,
+            run_id=run_id,
+        )
+        ctx["pdf_available"] = True
+        html = templates.get_template("reports/document.html").render(request=request, **ctx)
+        pdf_bytes = render_pdf(html, base_url=str(_TEMPLATE_DIR))
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'inline; filename="fission-findings-report.pdf"'},
         )
 
     @app.get("/settings", response_class=HTMLResponse)

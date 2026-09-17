@@ -7,11 +7,6 @@
     <h1>Findings</h1>
     <p>Explore, triage and manage all findings.</p>
   </div>
-  <div class="ha">
-    <a id="findings-export" class="btn-outline" href="{{ '/runs/' ~ run_id ~ '/report.pdf' if run_id else '/reports' }}">
-      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M8 10l-3-3M8 10l3-3M3 13h10"/></svg>Export
-    </a>
-  </div>
 </div>
 
 <form method="get" class="ptoolbar filter-bar" hx-get="/findings" hx-target="#findings-table" hx-swap="innerHTML" hx-trigger="change" hx-push-url="true">
@@ -47,8 +42,6 @@
 <script>
   document.addEventListener('htmx:afterSwap', function(){
     filterFindings(document.getElementById('finding-search').value);
-    var run = document.querySelector('[name="run_id"]').value;
-    document.getElementById('findings-export').href = run ? '/runs/' + encodeURIComponent(run) + '/report.pdf' : '/reports';
   });
   function filterFindings(q) {
     q = (q || "").toLowerCase();

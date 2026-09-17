@@ -1357,3 +1357,33 @@ def test_live_tests_options_keys_guides_by_surface_and_scope() -> None:
     # Sorted by surface label then title, so the picker groups cleanly.
     ordered = [(x["surface_label"], x["title"].lower()) for x in data["guides"]]
     assert ordered == sorted(ordered)
+
+
+def test_findings_page_has_no_export_button(client: TestClient) -> None:
+    """Export moved to the Reports builder; the findings page shouldn't offer it."""
+    body = client.get("/findings").text
+    assert "findings-export" not in body
+
+
+def test_reports_page_has_builder_modal(client: TestClient) -> None:
+    body = client.get("/reports").text
+    assert 'id="report-builder-dialog"' in body
+    assert "data-open-report-builder" in body
+    assert "/static/report-builder.js" in body
+
+
+def test_report_view_generates_from_selected_findings(client: TestClient) -> None:
+    """The report builder renders a titled document of the matching findings.
+
+    The seeded finding's behaviour (``exfil_test_0``) is high severity, so a
+    critical/low filter excludes it while a high (or unfiltered) one includes it.
+    """
+    titled = client.get("/reports/view?title=Q2+Review&severity=high")
+    assert titled.status_code == 200
+    assert "Q2 Review" in titled.text
+    assert titled.context["total"] == 1
+    assert titled.context["report_title"] == "Q2 Review"
+
+    excluded = client.get("/reports/view?severity=low")
+    assert excluded.context["total"] == 0
+    assert "No findings match" in excluded.text

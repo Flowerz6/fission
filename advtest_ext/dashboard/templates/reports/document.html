@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ report_title }} · Fission</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  :root { --ink:#1a1a18; --soft:#48453d; --muted:#8a867b; --line:#e5e3de; --paper:#fbfaf6;
+          --crit:#be3a2b; --high:#b8791f; --ok:#3e8e5b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#f5f4ee; color:var(--ink);
+         font:14px/1.6 "DM Sans", system-ui, -apple-system, sans-serif; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 40px 44px 64px; background:var(--paper); }
+  .toolbar { max-width:860px; margin:18px auto 0; padding:0 44px; display:flex; gap:14px;
+             font-size:13px; }
+  .toolbar a { color:var(--soft); text-decoration:none; }
+  .toolbar a:hover { color:var(--ink); text-decoration:underline; }
+  h1 { font:400 30px/1.2 "Instrument Serif", Georgia, serif; margin:0 0 6px; }
+  .meta { color:var(--muted); font-size:13px; margin:0 0 4px; }
+  .filters { color:var(--soft); font-size:13px; margin:10px 0 0; }
+  .rule { border:0; border-top:1px solid var(--line); margin:22px 0; }
+  .counts { display:flex; gap:20px; flex-wrap:wrap; margin:6px 0 0; }
+  .counts .c { font-size:13px; color:var(--soft); }
+  .counts .c b { font-size:22px; font-weight:600; display:block; font-family:"Instrument Serif",Georgia,serif; }
+  .c.critical b { color:var(--crit); } .c.high b { color:var(--high); }
+  .sev { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600;
+         text-transform:uppercase; letter-spacing:.04em; }
+  .sev .d { width:8px; height:8px; border-radius:50%; background:var(--muted); }
+  .sev.critical { color:var(--crit); } .sev.critical .d { background:var(--crit); }
+  .sev.high { color:var(--high); } .sev.high .d { background:var(--high); }
+  .sev.med { color:var(--soft); } .sev.med .d { background:var(--muted); }
+  .sev.low { color:var(--muted); } .sev.low .d { background:#cfccc2; }
+  .finding { border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin:14px 0;
+             background:#fff; page-break-inside: avoid; }
+  .finding h2 { font:400 19px/1.3 "Instrument Serif",Georgia,serif; margin:0 0 4px; }
+  .fmeta { color:var(--muted); font-size:12px; margin:0 0 10px; }
+  .fmeta code { font-family:ui-monospace, monospace; }
+  .kv { font-size:12.5px; color:var(--soft); margin:8px 0 0; }
+  .kv .k { color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-size:10.5px; }
+  pre { white-space:pre-wrap; word-break:break-word; background:#f6f5f1; border:1px solid var(--line);
+        border-radius:6px; padding:10px 12px; font:12px/1.5 ui-monospace, monospace; margin:6px 0 0;
+        max-height:none; overflow:visible; }
+  .authn { margin-top:10px; font-size:12.5px; color:var(--soft); }
+  .authn b { color:var(--ink); }
+  .empty { color:var(--muted); font-style:italic; padding:20px 0; }
+  @media print { body { background:#fff; } .toolbar { display:none; } .sheet { padding:0; max-width:none; } }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <a href="/reports">← Reports</a>
+  {% if pdf_available %}<a href="{{ '/reports/view.pdf?' ~ (request.url.query if request else '') }}">↓ Download PDF</a>{% endif %}
+</div>
+<div class="sheet">
+  <h1>{{ report_title }}</h1>
+  <p class="meta">Generated {{ generated_at.strftime('%d %b %Y, %H:%M') }} · {{ total }} finding{{ 's' if total != 1 }}</p>
+  {% set fl = filters %}
+  {% if fl.severities or fl.scenarios or fl.date_from or fl.date_to or fl.run_id %}
+  <p class="filters">Filtered by:
+    {% if fl.severities %}severity {{ fl.severities | map('capitalize') | join(', ') }}{% endif %}
+    {%- if fl.scenarios %} · scenario {{ fl.scenarios | join(', ') }}{% endif %}
+    {%- if fl.date_from or fl.date_to %} · {{ fl.date_from or '…' }} to {{ fl.date_to or '…' }}{% endif %}
+    {%- if fl.run_id %} · run {{ fl.run_id }}{% endif %}
+  </p>
+  {% endif %}
+
+  <hr class="rule">
+  <div class="counts">
+    <div class="c"><b>{{ total }}</b>Total</div>
+    {% for s in ('critical', 'high', 'med', 'low') %}{% if counts.get(s) %}
+    <div class="c {{ s }}"><b>{{ counts[s] }}</b>{{ s|capitalize }}</div>
+    {% endif %}{% endfor %}
+  </div>
+  <hr class="rule">
+
+  {% if findings %}
+  {% for f in findings %}
+  {% set sev = finding_severity(f) %}
+  <div class="finding">
+    <div class="sev {{ sev }}"><span class="d"></span>{{ sev|capitalize }}</div>
+    <h2>{{ finding_title(f) }}</h2>
+    <p class="fmeta">
+      {{ finding_method(f) }} ·
+      Target {{ f.trace.target_name if f.trace else '—' }} ·
+      Run <code>{{ f.run_id }}</code> ·
+      {{ f.promoted_at.strftime('%d %b %Y, %H:%M') if f.promoted_at else '—' }}
+    </p>
+    {% if f.description %}<p class="kv">{{ f.description }}</p>{% endif %}
+    {% if f.trace and f.trace.raw_request %}<div class="kv"><span class="k">Prompt</span><pre>{{ f.trace.raw_request | truncate(700) }}</pre></div>{% endif %}
+    {% if f.trace and f.trace.raw_response %}<div class="kv"><span class="k">Model response</span><pre>{{ f.trace.raw_response | truncate(900) }}</pre></div>{% endif %}
+    {% if f.authenticity and f.authenticity.verdict %}
+    <p class="authn"><b>Authenticity:</b> {{ {'real':'Corroborated','suspect':'Not corroborated','inconclusive':'Not yet corroborated'}.get(f.authenticity.verdict, 'Not yet corroborated') }}{% if f.authenticity.n_runs and f.authenticity.n_runs >= 2 %} across {{ f.authenticity.n_runs }} runs (consistency {{ '%.2f'|format(f.authenticity.consistency) }}){% endif %}.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="empty">No findings match the selected filters.</p>
+  {% endif %}
+</div>
+</body>
+</html>
