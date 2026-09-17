@@ -797,25 +797,6 @@ def create_app(
     templates.env.globals["run_is_active"] = run_is_active
     templates.env.globals["run_state"] = run_state
 
-    # Cache-busting version for the tree component's static assets. tree.js/
-    # tree.css change without their URL changing, so browsers keep serving the
-    # stale copy. Appending ?v=<mtime> makes a changed file a new URL. Computed
-    # per render (a callable global) so editing a static file busts the cache
-    # immediately — no app restart needed.
-    def _static_version() -> str:
-        try:
-            return str(
-                max(
-                    int((_STATIC_DIR / _name).stat().st_mtime)
-                    for _name in ("tree.js", "tree.css")
-                    if (_STATIC_DIR / _name).exists()
-                )
-            )
-        except ValueError:
-            return "0"
-
-    templates.env.globals["static_v"] = _static_version
-
     if _STATIC_DIR.exists():
         app.mount(
             "/static",
@@ -1871,63 +1852,6 @@ def create_app(
             media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"',
-            },
-        )
-
-    @app.get("/ledger", response_class=HTMLResponse)
-    async def seed_ledger_index(
-        request: Request,
-        session: Session = Depends(get_session),  # noqa: B008
-    ) -> Response:
-        """Seed ledger — per-seed outcomes aggregated across runs, with a
-        triage recommendation for each. The downstream half of the
-        passive-human loop: humans fix seeds between runs, and this is the
-        view that tells them which seeds to fix and why."""
-        from advtest_ext.dashboard.seed_ledger import build_seed_ledger
-
-        return templates.TemplateResponse(
-            request, "seed_ledger.html", {"ledger": build_seed_ledger(session)}
-        )
-
-    @app.get("/drift", response_class=HTMLResponse)
-    async def drift_index(
-        request: Request,
-        session: Session = Depends(get_session),  # noqa: B008
-    ) -> Response:
-        """Drift view — the attacker wandering off-mechanism mid-run, and
-        the product surface moving underneath one.
-
-        Both are read back from ``Trace.extra_metadata['drift']``, which
-        the attack and adapter layers have been writing all along; the
-        aggregation and the template existed with no route to reach them.
-        """
-        from advtest_ext.dashboard.drift import build_drift_summary
-
-        return templates.TemplateResponse(
-            request, "drift.html", {"d": build_drift_summary(session)}
-        )
-
-    @app.get("/calibration", response_class=HTMLResponse)
-    async def calibration_index(
-        request: Request,
-        session: Session = Depends(get_session),  # noqa: B008
-        batch: str | None = None,
-    ) -> Response:
-        from advtest_ext.core.calibration_report import build_calibration_report_from_db
-        from advtest_ext.storage import (
-            count_calibration_examples,
-            list_calibration_batches,
-        )
-
-        report = build_calibration_report_from_db(session, batch=batch)
-        return templates.TemplateResponse(
-            request,
-            "calibration.html",
-            {
-                "report": report,
-                "batches": list_calibration_batches(session),
-                "batch": batch,
-                "n_examples": count_calibration_examples(session),
             },
         )
 

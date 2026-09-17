@@ -225,9 +225,7 @@ async def run_guide(
         # readiness probe (setup_verification.probe_prompt), verify_target_setup
         # below polls with backoff until the plant is retrievable, so the blind
         # sleep is redundant and only adds latency — skip it in that case.
-        adaptive_probe = bool(
-            guide.setup_verification and guide.setup_verification.probe_prompt
-        )
+        adaptive_probe = bool(guide.setup_verification and guide.setup_verification.probe_prompt)
         if setup_settle_s > 0 and not adaptive_probe:
             await asyncio.sleep(setup_settle_s)
 

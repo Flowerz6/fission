@@ -170,7 +170,11 @@ def build_findings_report_context(
     selected.sort(
         key=lambda sf: (
             severity_rank(sf[0]),
-            -(max((s.score for s in sf[1].trace.judge_scores), default=0.0) if sf[1].trace else 0.0),
+            -(
+                max((s.score for s in sf[1].trace.judge_scores), default=0.0)
+                if sf[1].trace
+                else 0.0
+            ),
         )
     )
     counts = {k: 0 for k in ("critical", "high", "med", "low")}

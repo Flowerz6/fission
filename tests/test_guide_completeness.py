@@ -11,7 +11,10 @@ def _base(**over):
         "id": "t",
         "objective": "o",
         "target": {"app": "gmail", "surface": "summarize", "account_role": "recipient"},
-        "success": {"signals": [{"kind": "regex_match", "name": "s", "pattern": "x"}], "rubric": "r"},
+        "success": {
+            "signals": [{"kind": "regex_match", "name": "s", "pattern": "x"}],
+            "rubric": "r",
+        },
         "exemplar_turns": ["summarize this"],
         "provenance": {"source": "human:test"},
         "tags": ["indirect-injection"],
@@ -52,7 +55,10 @@ def test_indirect_no_carrier_no_steps_warns():
 
 
 def test_direct_side_panel_attack_not_flagged():
-    g = _base(tags=["persona-forgery"], target={"app": "google_sheets", "surface": "side_panel", "account_role": "self"})
+    g = _base(
+        tags=["persona-forgery"],
+        target={"app": "google_sheets", "surface": "side_panel", "account_role": "self"},
+    )
     codes = {i.code for i in check_guide(g)}
     assert "carrier_provisioning_unverified" not in codes
     assert "carrier_not_provisioned" not in codes
@@ -60,7 +66,8 @@ def test_direct_side_panel_attack_not_flagged():
 
 def test_discovery_relaxes_missing_signal_to_warning():
     data = {
-        "id": "d", "objective": "o",
+        "id": "d",
+        "objective": "o",
         "target": {"app": "google_docs", "surface": "side_panel", "account_role": "self"},
         "success": {"rubric": "judge decides"},  # no deterministic signals
         "exemplar_turns": ["do the thing"],
@@ -73,14 +80,17 @@ def test_discovery_relaxes_missing_signal_to_warning():
 
 
 def _gold(**success):
-    return Guide.model_validate({
-        "id": "g", "objective": "o",
-        "target": {"app": "google_docs", "surface": "side_panel", "account_role": "self"},
-        "success": success,
-        "exemplar_turns": ["do the thing"],
-        "provenance": {"source": "human:bikash"},
-        "maturity": "gold",
-    })
+    return Guide.model_validate(
+        {
+            "id": "g",
+            "objective": "o",
+            "target": {"app": "google_docs", "surface": "side_panel", "account_role": "self"},
+            "success": success,
+            "exemplar_turns": ["do the thing"],
+            "provenance": {"source": "human:bikash"},
+            "maturity": "gold",
+        }
+    )
 
 
 def test_gold_requires_a_deterministic_signal():

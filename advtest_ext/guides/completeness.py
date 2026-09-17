@@ -93,7 +93,11 @@ def check_guide(guide: Guide) -> list[Issue]:
     # --- provenance --------------------------------------------------------
     if not (guide.provenance and guide.provenance.source.strip()):
         issues.append(
-            Issue(_ERROR, "no_provenance_source", "provenance.source is empty — a seed must be attributable.")
+            Issue(
+                _ERROR,
+                "no_provenance_source",
+                "provenance.source is empty — a seed must be attributable.",
+            )
         )
 
     # --- setup steps resolve to real operations ----------------------------
