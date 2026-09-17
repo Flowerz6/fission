@@ -10,7 +10,7 @@
     {% for f in findings %}
     <tr>
       <td class="cell-check"><input class="rowcheck" type="checkbox" aria-label="Select finding"></td>
-      <td><a class="fname" href="/findings/{{ f.id }}">{{ f.title or '(untitled)' }}</a>{% if f.authenticity and f.authenticity.verdict %}<span class="authn-chip authn-{{ f.authenticity.verdict }}" title="{{ f.authenticity.reasoning }}">{{ {'real':'Corroborated','suspect':'Suspect','inconclusive':'Unconfirmed'}.get(f.authenticity.verdict, 'Unconfirmed') }}</span>{% endif %}</td>
+      <td><a class="fname" href="/findings/{{ f.id }}">{{ f.title or '(untitled)' }}</a>{% if f.authenticity and f.authenticity.verdict == 'real' %}<span class="authn-chip authn-real" title="{{ f.authenticity.reasoning }}">Corroborated · {{ f.authenticity.n_runs }} runs</span>{% endif %}</td>
       <td><span class="sevdot {{ f.severity }}"><span class="d"></span>{{ f.severity|capitalize }}</span></td>
       <td>{{ surface_label(f.trace.target_name) if f.trace else "Unknown" }}</td>
       <td><span class="st open">Open</span></td>

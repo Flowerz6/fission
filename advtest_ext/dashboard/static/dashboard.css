@@ -250,13 +250,11 @@ body:has(.finding-detail-head) .mobile-nav{display:none}
 /* Cross-run authenticity: verdict block on the finding, chip in the list. */
 .authn{margin:6px 0 4px;padding:12px 14px;border:1px solid var(--border-strong);border-left-width:3px;border-radius:var(--r-sm);background:var(--surface-2)}
 .authn-real{border-left-color:var(--ok)}
-.authn-suspect{border-left-color:var(--crit)}
-.authn-inconclusive{border-left-color:var(--muted)}
+.authn-neutral{border-left-color:var(--muted)}
 .authn-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .authn-verdict{font:600 13px var(--sans)}
 .authn-real .authn-verdict{color:var(--ok)}
-.authn-suspect .authn-verdict{color:var(--crit)}
-.authn-inconclusive .authn-verdict{color:var(--ink-soft)}
+.authn-neutral .authn-verdict{color:var(--ink-soft)}
 .authn-meta{font:400 12px var(--sans);color:var(--muted);font-variant-numeric:tabular-nums}
 .authn-why{margin:6px 0 0;font:400 12.5px/1.5 var(--sans);color:var(--ink-soft)}
 .authn-hint{margin:8px 0 0;font:400 12px/1.5 var(--sans);color:var(--muted)}
@@ -265,8 +263,6 @@ body:has(.finding-detail-head) .mobile-nav{display:none}
 .authn-tags code{font:600 11px var(--mono);color:var(--accent);background:var(--code-bg);padding:1px 6px;border-radius:3px}
 .authn-chip{margin-left:8px;font:600 10.5px var(--sans);letter-spacing:.02em;padding:1px 7px;border-radius:var(--r-pill);border:1px solid transparent;vertical-align:middle}
 .authn-chip.authn-real{color:var(--ok);background:var(--ok-soft);border-color:#b9d5c2}
-.authn-chip.authn-suspect{color:var(--crit);background:var(--crit-soft);border-color:#e3bcb4}
-.authn-chip.authn-inconclusive{color:var(--muted);background:var(--surface-2);border-color:var(--border-strong)}
 /* Review all findings in the run, with evidence beside the selected result. */
 .run-section-nav{display:flex;gap:22px;align-items:center;margin:0 0 22px;font-size:13px;color:var(--muted)}
 .run-findings-review{scroll-margin-top:24px;margin-top:28px}.run-findings-review .section-head p{font-size:13px;margin:6px 0 0}
