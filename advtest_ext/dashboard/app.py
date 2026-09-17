@@ -2260,14 +2260,25 @@ def create_app(
         request: Request,
         session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
+        from advtest_ext.dashboard.presentation import surface_key
+        from advtest_ext.storage.models import Finding as _Finding
+        from advtest_ext.storage.models import Trace as _Trace
+
         runs = [run for run in list_runs(session, limit=200) if run.finished_at is not None]
-        # Options for the report-builder modal: scenarios and runs that have findings.
+        # Options for the report-builder modal: scenarios, workspaces, and runs
+        # that actually have findings.
         scenarios = [(b, objective_label(b)) for b in list_finding_behavior_ids(session)]
-        finding_runs = [
-            (rid, run_display_name(run) if run else rid)
-            for rid in list_finding_run_ids(session)
-            for run in [get_run(session, rid)]
+        finding_targets = [
+            t
+            for (t,) in session.query(_Trace.target_name)
+            .join(_Finding, _Finding.trace_id == _Trace.id)
+            .distinct()
         ]
+        workspaces = sorted(
+            {(surface_key(t), surface_label(t)) for t in finding_targets if t},
+            key=lambda x: x[1],
+        )
+        finding_runs = list_finding_run_ids(session)
         return templates.TemplateResponse(
             request,
             "reports.html",
@@ -2275,6 +2286,7 @@ def create_app(
                 "runs": runs,
                 "run_display_name": run_display_name,
                 "scenarios": scenarios,
+                "workspaces": workspaces,
                 "finding_runs": finding_runs,
             },
         )
@@ -2286,6 +2298,7 @@ def create_app(
         title: str | None = None,
         severity: list[str] | None = Query(default=None),  # noqa: B008
         behavior_id: list[str] | None = Query(default=None),  # noqa: B008
+        workspace: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
         run_id: str | None = None,
@@ -2300,6 +2313,7 @@ def create_app(
             title=title,
             severities=severity,
             behavior_ids=behavior_id,
+            workspace=workspace,
             date_from=date_from,
             date_to=date_to,
             run_id=run_id,
@@ -2314,6 +2328,7 @@ def create_app(
         title: str | None = None,
         severity: list[str] | None = Query(default=None),  # noqa: B008
         behavior_id: list[str] | None = Query(default=None),  # noqa: B008
+        workspace: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
         run_id: str | None = None,
@@ -2336,6 +2351,7 @@ def create_app(
             title=title,
             severities=severity,
             behavior_ids=behavior_id,
+            workspace=workspace,
             date_from=date_from,
             date_to=date_to,
             run_id=run_id,

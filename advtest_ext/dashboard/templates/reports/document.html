@@ -55,9 +55,10 @@
   <h1>{{ report_title }}</h1>
   <p class="meta">Generated {{ generated_at.strftime('%d %b %Y, %H:%M') }} · {{ total }} finding{{ 's' if total != 1 }}</p>
   {% set fl = filters %}
-  {% if fl.severities or fl.scenarios or fl.date_from or fl.date_to or fl.run_id %}
+  {% if fl.severities or fl.scenarios or fl.workspace or fl.date_from or fl.date_to or fl.run_id %}
   <p class="filters">Filtered by:
     {% if fl.severities %}severity {{ fl.severities | map('capitalize') | join(', ') }}{% endif %}
+    {%- if fl.workspace %} · {{ fl.workspace }}{% endif %}
     {%- if fl.scenarios %} · scenario {{ fl.scenarios | join(', ') }}{% endif %}
     {%- if fl.date_from or fl.date_to %} · {{ fl.date_from or '…' }} to {{ fl.date_to or '…' }}{% endif %}
     {%- if fl.run_id %} · run {{ fl.run_id }}{% endif %}

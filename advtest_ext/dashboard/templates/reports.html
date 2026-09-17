@@ -23,12 +23,21 @@
         <input type="text" name="title" maxlength="120" placeholder="e.g. Gemini Workspace — May assessment" autocomplete="off"></label>
       <div class="ld-field">
         <span class="ld-lbl">Severity</span>
-        <div class="rb-checks">
+        <div class="rb-checks" id="rb-severity">
+          <label class="rb-check"><input type="checkbox" id="rb-sev-all" checked> All</label>
           {% for s in ('critical', 'high', 'med', 'low') %}
           <label class="rb-check"><input type="checkbox" name="severity" value="{{ s }}"> {{ s|capitalize }}</label>
           {% endfor %}
         </div>
-        <span class="ld-hint">Leave all unchecked to include every severity.</span>
+        <span class="ld-hint">All severities, or pick specific ones.</span>
+      </div>
+      <div class="ld-grid rb-grid">
+        <label class="ld-field"><span class="ld-lbl">Workspace</span>
+          <select name="workspace"><option value="">All workspaces</option>{% for key, label in workspaces %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+        </label>
+        <label class="ld-field" style="grid-column:span 2"><span class="ld-lbl">Run</span>
+          <select name="run_id"><option value="">All runs</option>{% for rid in finding_runs %}<option value="{{ rid }}">{{ rid }}</option>{% endfor %}</select>
+        </label>
       </div>
       <label class="ld-field ld-field-wide"><span class="ld-lbl">Scenarios</span>
         <select name="behavior_id" multiple size="5">
@@ -39,9 +48,6 @@
       <div class="ld-grid rb-grid">
         <label class="ld-field"><span class="ld-lbl">From date</span><input type="date" name="date_from"></label>
         <label class="ld-field"><span class="ld-lbl">To date</span><input type="date" name="date_to"></label>
-        <label class="ld-field"><span class="ld-lbl">Run</span>
-          <select name="run_id"><option value="">All runs</option>{% for rid, rname in finding_runs %}<option value="{{ rid }}">{{ rname }}</option>{% endfor %}</select>
-        </label>
       </div>
     </div>
     <footer class="ld-foot">

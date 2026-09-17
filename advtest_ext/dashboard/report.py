@@ -120,24 +120,28 @@ def build_findings_report_context(
     title: str | None = None,
     severities: list[str] | None = None,
     behavior_ids: list[str] | None = None,
+    workspace: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     run_id: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the context for a findings-selection report: the findings that
-    match the chosen severities / scenarios / date range / run, sorted by
-    severity, with per-severity counts and a human filter summary. Pure over the
-    session; the template does the formatting via the shared display globals."""
+    match the chosen severities / scenarios / workspace / date range / run,
+    sorted by severity, with per-severity counts and a human filter summary.
+    Pure over the session; the template formats via the shared display globals."""
     from datetime import date, datetime
 
     from advtest_ext.dashboard.presentation import (
         finding_severity,
         objective_label,
         severity_rank,
+        surface_key,
+        surface_label,
     )
 
     sev_set = {s for s in (severities or []) if s}
     beh_set = {b for b in (behavior_ids or []) if b}
+    workspace = workspace or None
 
     def _parse(value: str | None) -> date | None:
         try:
@@ -154,6 +158,8 @@ def build_findings_report_context(
             continue
         bid = getattr(f.trace, "behavior_id", None) if f.trace else None
         if beh_set and bid not in beh_set:
+            continue
+        if workspace and (not f.trace or surface_key(f.trace.target_name) != workspace):
             continue
         if f.promoted_at:
             pd = f.promoted_at.date()
@@ -180,6 +186,7 @@ def build_findings_report_context(
         "filters": {
             "severities": [s for s in ("critical", "high", "med", "low") if s in sev_set] or None,
             "scenarios": [objective_label(b) for b in sorted(beh_set)] or None,
+            "workspace": surface_label(workspace) if workspace else None,
             "date_from": d_from,
             "date_to": d_to,
             "run_id": run_id or None,
