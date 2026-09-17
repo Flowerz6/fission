@@ -146,6 +146,74 @@
       <div class="sbar"><span class="lab" title="{{ category.attack }}">{{ category.attack|replace('_', ' ')|capitalize }}</span><span class="track"><span class="fill" style="width:{{ '%.1f'|format(share) }}%"></span></span><span class="val">{{ '%.0f'|format(share) }}%</span></div>
       {% else %}<div class="muted">No attacks recorded yet.</div>{% endfor %}
     </div>
+
+    {% if ppi.method == 'ppi' %}
+    {% set x = (ppi.asr * 520)|round(1) %}
+    {% set lo = (ppi.ci_low * 520)|round(1) %}
+    {% set hi = (ppi.ci_high * 520)|round(1) %}
+    {% set orc = (ppi.oracle_asr * 520)|round(1) %}
+    <div class="scale">
+      <svg viewBox="0 0 520 58" preserveAspectRatio="none" role="img"
+           aria-label="ASR {{ '%.1f'|format(ppi.asr*100) }} percent with 95 percent CI">
+        {% for gx in [0, 52, 104, 156, 208, 260, 312, 364, 416, 468, 519] %}
+        <line class="{{ 'tickmaj' if loop.index0 % 2 == 0 else 'tick' }}" x1="{{ gx }}" y1="{{ 34 if loop.index0 % 2 == 0 else 36 }}" x2="{{ gx }}" y2="42"/>
+        {% endfor %}
+        <text x="0" y="54">0</text><text x="240" y="54">50</text><text x="500" y="54">100</text>
+        <line class="fill" x1="0" y1="24" x2="{{ x }}" y2="24"/>
+        <line class="oracle" x1="{{ orc }}" y1="8" x2="{{ orc }}" y2="30"/>
+        <text x="{{ (orc + 4)|round(1) }}" y="14">oracle {{ '%.0f'|format(ppi.oracle_asr*100) }}</text>
+        <line class="cap" x1="{{ lo }}" y1="14" x2="{{ lo }}" y2="34"/>
+        <line class="cap" x1="{{ hi }}" y1="14" x2="{{ hi }}" y2="34"/>
+        <line class="cap" x1="{{ lo }}" y1="24" x2="{{ hi }}" y2="24" stroke-dasharray="1 2"/>
+        <line class="cap" x1="{{ x }}" y1="4" x2="{{ x }}" y2="30" stroke-width="2"/>
+      </svg>
+    </div>
+    <div class="dl">
+      <div><div class="k">Oracle ASR</div><div class="v">{{ '%.1f'|format(ppi.oracle_asr*100) }}%</div></div>
+      <div><div class="k">Rectifier</div><div class="v">{{ '%+.1f'|format(-ppi.rectifier*100) }}%</div></div>
+      <div><div class="k">Partial</div><div class="v">{{ n_partial }}</div></div>
+      <div><div class="k">Gold labels</div><div class="v">{{ ppi.n_labeled }}</div></div>
+      <div><div class="k">95% CI</div><div class="v">{{ '%.0f'|format(ppi.ci_low*100) }}–{{ '%.0f'|format(ppi.ci_high*100) }}</div></div>
+    </div>
+    {% else %}
+    <div class="kmini" style="margin-top:1rem">Uncalibrated — <a href="/hitl">label the review queue</a> for a rectified CI.</div>
+    <div class="dl">
+      <div><div class="k">Traces</div><div class="v">{{ ppi.n_total }}</div></div>
+      <div><div class="k">Partial</div><div class="v">{{ n_partial }}</div></div>
+      <div><div class="k">Gold labels</div><div class="v">{{ queue.gold }}</div></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="cell">
+    <div class="ch"><h3>Findings</h3>
+      <span class="tagline warm">{{ s.findings_by_severity.get('critical', 0) }} critical</span></div>
+    <div class="num kbig">{{ s.total_findings }}</div>
+    <div class="kmini">{{ s.findings_by_severity.get('high', 0) }} high · {{ s.findings_by_severity.get('med', 0) }} med</div>
+  </div>
+
+  <div class="cell">
+    <div class="ch"><h3>Review queue</h3><span class="kmini">{{ queue.pending }} pending</span></div>
+    {% if queue.pending %}
+    {% set utot = queue.uniform + queue.disagreement %}
+    <div class="split">
+      <div class="u" style="width: {{ (queue.uniform / utot * 100) if utot else 0 }}%"></div>
+      <div class="d" style="width: {{ (queue.disagreement / utot * 100) if utot else 0 }}%"></div>
+    </div>
+    <div class="keys"><span><span class="sw" style="background:var(--accent)"></span>uniform {{ queue.uniform }}</span><span><span class="sw" style="background:var(--partial)"></span>disagreement {{ queue.disagreement }}</span></div>
+    {% else %}<div class="kmini">Queue empty.</div>{% endif %}
+  </div>
+
+  <div class="cell">
+    <div class="ch"><h3>Gold set</h3></div>
+    <div class="num kbig">{{ queue.gold }}</div>
+    <div class="kmini">expert labels · feeds PPI</div>
+  </div>
+
+  <div class="cell">
+    <div class="ch"><h3>Drift</h3><span class="sq {{ 'warn' if s.drift_events else '' }}"></span></div>
+    <div class="num kbig">{{ s.drift_recovered }}<span style="font-size:0.8rem;color:var(--muted)"> recovered</span></div>
+    <div class="kmini">{{ s.drift_pruned }} off-mechanism pruned</div>
   </div>
 </div>
 

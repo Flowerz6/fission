@@ -145,6 +145,44 @@ def _nodes(attempts: list[Any]) -> list[str]:
     return [a.metadata["tap_crescendo"]["node_id"] for a in attempts]
 
 
+def test_serialise_shows_last_reply_in_full_and_marks_prior_truncation() -> None:
+    # The LAST reply must arrive whole (the attacker builds on it); an older
+    # reply that overflows its cap is cut but explicitly flagged as OUR cut.
+    long_prior = "P" * 4000
+    long_last = "L" * 4000
+    turns = [
+        (1, "u1", long_prior, 0.1, "", ""),
+        (2, "u2", long_last, 0.2, "", ""),
+    ]
+    out = _serialise(turns, last_reply_chars=8000, prior_reply_chars=1500)
+    assert long_last in out  # latest reply shown in full
+    assert "truncated by the harness" in out  # prior reply flagged, not silent
+    assert long_prior not in out  # the prior reply WAS cut
+
+
+def test_serialise_surfaces_model_thoughts_to_the_attacker() -> None:
+    # Captured reasoning is shown to the attacker, clearly labelled as the
+    # target's private thoughts (never presented as the user-facing reply).
+    turns = [(1, "u1", "I can't share that.", 0.1, "", "The user wants get_skills; I will refuse.")]
+    out = _serialise(turns)
+    assert "The user wants get_skills; I will refuse." in out
+    assert "model thoughts" in out.lower()
+
+
+def test_strategist_system_is_legacy_when_no_brief() -> None:
+    # No guide brief → the byte-identical legacy (retrieval-IPI mail) prompt.
+    assert _strategist_system(None) == _STRATEGY_SYSTEM
+
+
+def test_strategist_system_is_guide_driven_with_a_brief() -> None:
+    brief = "QA-assessment framing; escalate to spawned-agent"
+    sysp = _strategist_system(brief)
+    assert brief in sysp
+    # The guide-driven prompt drops the hardcoded Gmail/Drive mail steering.
+    assert "Gmail" not in sysp and "Drive/Docs" not in sysp
+    assert sysp != _STRATEGY_SYSTEM
+
+
 @pytest.mark.asyncio
 async def test_attacker_retries_malformed_json_and_records_every_call() -> None:
     class _RetryAttacker:

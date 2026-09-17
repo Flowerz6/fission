@@ -264,6 +264,13 @@ def map_guide(guide: Guide) -> GuidePlan:
     if brief:
         attack_kwargs["strategy_brief"] = brief
 
+    # Seed the branch strategist with the guide's own approach so variant
+    # proposals stay on-goal (a system-prompt-leak guide must not inherit the
+    # default retrieval-IPI mail steering). None when the guide gives neither.
+    brief = _strategy_brief(guide)
+    if brief:
+        attack_kwargs["strategy_brief"] = brief
+
     return GuidePlan(
         behavior=behavior,
         signals=signals,

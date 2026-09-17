@@ -309,6 +309,28 @@ def validate_setup_operations(guide: Guide, registry: Any = None) -> None:
             )
 
 
+def validate_setup_operations(guide: Guide, registry: Any = None) -> None:
+    """Assert every ``setup_step`` names a REAL registered Recipe-Runner
+    operation — this is what makes a guide's staging steps executable rather
+    than decorative. Raises ``ValueError`` on the first unknown operation.
+
+    The default operation registry is built lazily (it imports the product
+    adapters) so guides without ``setup_steps`` never pay that import cost."""
+    if not guide.setup_steps:
+        return
+    if registry is None:
+        from advtest_ext.core.builtin_operations import default_operations
+
+        registry = default_operations()
+    for step in guide.setup_steps:
+        if not registry.has(step.region, step.operation):
+            available = ", ".join(f"{a}:{o}" for a, o in registry.registered_pairs())
+            raise ValueError(
+                f"guide {guide.id!r} setup step {step.id!r}: "
+                f"unknown operation {step.region}:{step.operation!r}; registered: {available}"
+            )
+
+
 def content_hash(guide: Guide) -> str:
     """Stable 16-hex content hash of a guide's *attack content* — excludes
     ``id``, ``title`` and ``provenance`` (identity/cosmetic/credit, not attack
