@@ -1055,45 +1055,58 @@ def create_app(
 
     @app.get("/live-tests/options")
     async def live_tests_options() -> dict[str, Any]:
-        """Everything the New-run dialog needs to let an operator choose and
-        configure a run without leaving the runs list: the fixed workflow
-        allow-list plus the guide catalogue (title, surface, maturity, one-line
-        objective), so the guide picker reads as scenarios, not filenames."""
+        """Everything the New-run dialog needs to choose and configure a run
+        without leaving the runs list: the guide catalogue keyed by Workspace
+        surface, flagged single- vs multi-app, each with a one-line blurb, so
+        the picker reads as scenarios per app, not filenames."""
         from advtest_ext.guides.corpus import load_guides
         from advtest_ext.guides.models import display_title
 
-        def surface_of(app_name: str) -> str:
-            return app_name.replace("google_", "").replace("_", " ").title() or "Other"
+        def canon_surface(app_name: str) -> str:
+            key = str(app_name or "").replace("google_", "").strip().lower()
+            return key or "other"
+
+        def surface_label(key: str) -> str:
+            return {
+                "docs": "Docs",
+                "sheets": "Sheets",
+                "gmail": "Gmail",
+                "slides": "Slides",
+                "drive": "Drive",
+                "calendar": "Calendar",
+                "tool_use_agent": "Tool-use agent",
+            }.get(key, key.replace("_", " ").title() or "Other")
+
+        def blurb_of(guide: Any) -> str:
+            text = " ".join((guide.objective or "").split())
+            sentence = text.split(". ", 1)[0].rstrip(".")
+            if len(sentence) > 120:
+                sentence = sentence[:120].rsplit(" ", 1)[0] + "…"
+            return sentence
 
         guides_dir = Path(__file__).resolve().parents[2] / "guides"
         guides = load_guides(guides_dir) if guides_dir.exists() else []
-        guide_opts = sorted(
-            (
+        guide_opts = []
+        for g in guides:
+            target = canon_surface(g.target.app)
+            apps = {target} | {
+                canon_surface(getattr(st, "region", None) or getattr(st, "app", None))
+                for st in g.setup_steps
+            }
+            apps.discard("other")
+            guide_opts.append(
                 {
                     "id": g.id,
                     "title": display_title(g),
-                    "surface": surface_of(g.target.app),
+                    "surface": target,
+                    "surface_label": surface_label(target),
+                    "multi_app": len(apps) > 1,
                     "maturity": (getattr(g, "maturity", None) or "").lower(),
-                    "objective": " ".join((g.objective or "").split())[:200],
-                    "seed_turns": len(g.exemplar_turns),
+                    "blurb": blurb_of(g),
                 }
-                for g in guides
-            ),
-            key=lambda o: (o["surface"], o["title"].lower()),
-        )
-        workflows = [
-            {
-                "id": spec.id,
-                "title": spec.title,
-                "surface": spec.surface,
-                "method": spec.method,
-                "description": spec.description,
-                "prerequisites": list(spec.prerequisites),
-                "configurable": spec.id == "guided-workspace-playbook",
-            }
-            for spec in live_tests.specs
-        ]
-        return {"enabled": live_tests.enabled, "workflows": workflows, "guides": guide_opts}
+            )
+        guide_opts.sort(key=lambda o: (o["surface_label"], o["title"].lower()))
+        return {"enabled": live_tests.enabled, "guides": guide_opts}
 
     @app.post("/live-tests/stop")
     async def live_tests_stop() -> JSONResponse:

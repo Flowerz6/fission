@@ -78,12 +78,12 @@
 <dialog id="new-run-dialog" class="launch-dialog" aria-labelledby="new-run-title">
   <form id="new-run-form">
     <header class="ld-head">
-      <div><h2 id="new-run-title">Launch a new run</h2><p class="ld-sub">Pick a workflow, choose what to test, and launch.</p></div>
+      <div><h2 id="new-run-title">Launch a new run</h2><p class="ld-sub">Choose a workspace and a guide, then launch.</p></div>
       <button type="button" class="ld-x" data-nr-cancel aria-label="Close">&times;</button>
     </header>
     <div class="ld-locked" id="nr-locked" hidden>Run execution is turned off on this deployment. An administrator must enable it before a run can be launched.</div>
     <div class="ld-body">
-      <div class="ld-workflows" id="nr-workflows" role="radiogroup" aria-label="Workflow"></div>
+      <div class="ld-workspaces" id="nr-workspaces" role="radiogroup" aria-label="Workspace"></div>
       <div class="ld-config" id="nr-config"></div>
     </div>
     <footer class="ld-foot">
