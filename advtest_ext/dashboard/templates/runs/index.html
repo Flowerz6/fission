@@ -8,7 +8,7 @@
     <p>Manage adversarial test runs across your target surfaces.</p>
   </div>
   <div class="ha">
-    <a class="btn-primary" href="/runs/new"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v10M3 8h10"/></svg>New run</a>
+    <a class="btn-primary" href="/runs/new" data-open-new-run><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v10M3 8h10"/></svg>New run</a>
   </div>
 </div>
 
@@ -75,6 +75,28 @@
     <div class="run-dialog-actions"><button type="button" class="btn-outline" data-run-cancel>Cancel</button><button type="submit" class="btn-primary" id="run-action-submit">Save name</button></div>
   </form>
 </dialog>
+<dialog id="new-run-dialog" class="launch-dialog" aria-labelledby="new-run-title">
+  <form id="new-run-form">
+    <header class="ld-head">
+      <div><h2 id="new-run-title">Launch a new run</h2><p class="ld-sub">Pick a workflow, choose what to test, and launch.</p></div>
+      <button type="button" class="ld-x" data-nr-cancel aria-label="Close">&times;</button>
+    </header>
+    <div class="ld-locked" id="nr-locked" hidden>Run execution is turned off on this deployment. An administrator must enable it before a run can be launched.</div>
+    <div class="ld-body">
+      <div class="ld-workflows" id="nr-workflows" role="radiogroup" aria-label="Workflow"></div>
+      <div class="ld-config" id="nr-config"></div>
+    </div>
+    <footer class="ld-foot">
+      <p class="ld-err" id="nr-error" role="alert" hidden></p>
+      <div class="ld-actions">
+        <a class="ld-full" href="/runs/new">Open full launcher &amp; live console &rarr;</a>
+        <button type="button" class="btn-outline" data-nr-cancel>Cancel</button>
+        <button type="submit" class="btn-primary" id="nr-launch">Launch run</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+<script src="/static/new-run.js?v={{ static_v() }}" defer></script>
 <script src="/static/run-actions.js?v={{ static_v() }}" defer></script>
 <script>
 (function(){

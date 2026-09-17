@@ -1053,6 +1053,48 @@ def create_app(
             "seed_turns": len(guide.exemplar_turns),
         }
 
+    @app.get("/live-tests/options")
+    async def live_tests_options() -> dict[str, Any]:
+        """Everything the New-run dialog needs to let an operator choose and
+        configure a run without leaving the runs list: the fixed workflow
+        allow-list plus the guide catalogue (title, surface, maturity, one-line
+        objective), so the guide picker reads as scenarios, not filenames."""
+        from advtest_ext.guides.corpus import load_guides
+        from advtest_ext.guides.models import display_title
+
+        def surface_of(app_name: str) -> str:
+            return app_name.replace("google_", "").replace("_", " ").title() or "Other"
+
+        guides_dir = Path(__file__).resolve().parents[2] / "guides"
+        guides = load_guides(guides_dir) if guides_dir.exists() else []
+        guide_opts = sorted(
+            (
+                {
+                    "id": g.id,
+                    "title": display_title(g),
+                    "surface": surface_of(g.target.app),
+                    "maturity": (getattr(g, "maturity", None) or "").lower(),
+                    "objective": " ".join((g.objective or "").split())[:200],
+                    "seed_turns": len(g.exemplar_turns),
+                }
+                for g in guides
+            ),
+            key=lambda o: (o["surface"], o["title"].lower()),
+        )
+        workflows = [
+            {
+                "id": spec.id,
+                "title": spec.title,
+                "surface": spec.surface,
+                "method": spec.method,
+                "description": spec.description,
+                "prerequisites": list(spec.prerequisites),
+                "configurable": spec.id == "guided-workspace-playbook",
+            }
+            for spec in live_tests.specs
+        ]
+        return {"enabled": live_tests.enabled, "workflows": workflows, "guides": guide_opts}
+
     @app.post("/live-tests/stop")
     async def live_tests_stop() -> JSONResponse:
         try:

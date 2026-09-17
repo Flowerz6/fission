@@ -1559,3 +1559,44 @@ def test_stale_unfinished_run_is_interrupted_not_running() -> None:
         assert c.get("/runs/run-fresh/_tree.json").json()["finished"] is False
     assert "Interrupted" in stale and 'hx-get="/runs/run-stale/_hero"' not in stale
     assert "Running" in fresh and 'hx-get="/runs/run-fresh/_hero"' in fresh
+
+
+def test_runs_index_has_new_run_modal() -> None:
+    """The Runs list opens a centred launcher dialog in place of navigating to
+    the /runs/new page; the link is kept as a no-JS fallback."""
+    engine = make_engine("sqlite:///:memory:")
+    with session_scope(make_session_factory(engine)) as s:
+        upsert_run(s, run_id="run-x", target_name="T", strategy="grid")
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        body = c.get("/runs").text
+    assert 'id="new-run-dialog"' in body
+    assert "data-open-new-run" in body
+    assert 'href="/runs/new"' in body  # fallback link still present
+    assert "/static/new-run.js" in body
+
+
+def test_live_tests_options_lists_workflows_and_guides() -> None:
+    """The New-run dialog's data source: the fixed workflow allow-list plus the
+    guide catalogue with readable titles, surface and maturity."""
+    from advtest_ext.dashboard.live_tests import LiveTestController
+
+    engine = make_engine("sqlite:///:memory:")
+    controller = LiveTestController("sqlite:///:memory:", enabled=True)
+    app = create_app(engine=engine, live_test_controller=controller)
+    with TestClient(app) as c:
+        data = c.get("/live-tests/options").json()
+    assert data["enabled"] is True
+    wf_ids = {w["id"] for w in data["workflows"]}
+    assert "guided-workspace-playbook" in wf_ids
+    guided = next(w for w in data["workflows"] if w["id"] == "guided-workspace-playbook")
+    assert guided["configurable"] is True
+    assert all(
+        not w["configurable"] for w in data["workflows"] if w["id"] != "guided-workspace-playbook"
+    )
+    assert data["guides"], "expected at least one guide"
+    g = data["guides"][0]
+    assert {"id", "title", "surface", "maturity", "objective"} <= set(g)
+    # Sorted by surface then title, so the picker groups cleanly.
+    surfaces = [x["surface"] for x in data["guides"]]
+    assert surfaces == sorted(surfaces)
