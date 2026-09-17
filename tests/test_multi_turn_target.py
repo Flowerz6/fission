@@ -114,7 +114,7 @@ async def test_first_turn_resets_then_continues() -> None:
     # Same warm page reused every turn.
     assert all(c["external_page"] is session.page for c in calls)
     # Distinct, ordered trace ids.
-    assert [c["trace_id"] for c in calls] == ["test-t1", "test-t2", "test-t3"]
+    assert [c["trace_id"] for c in calls] == ["test-c1-t1", "test-c1-t2", "test-c1-t3"]
     # All turns target the one scratch doc.
     assert {c["document_id"] for c in calls} == {"DOC-NEW"}
     # Turn provenance stamped.
@@ -226,14 +226,17 @@ async def test_reset_mints_fresh_doc_per_node_and_close_deletes_all() -> None:
     counter = {"n": 0}
     deleted: list[str] = []
 
+    calls: list[dict[str, Any]] = []
+
     def doc_factory() -> str:
         counter["n"] += 1
         return f"DOC-{counter['n']}"
 
     target = GeminiDocsMultiTurnTarget(
         output_dir=Path("/tmp"),
+        trace_prefix="test",
         session=session,
-        invoke_fn=_recording_invoke_fn([]),
+        invoke_fn=_recording_invoke_fn(calls),
         doc_factory=doc_factory,
         doc_deleter=deleted.append,
     )
@@ -246,6 +249,7 @@ async def test_reset_mints_fresh_doc_per_node_and_close_deletes_all() -> None:
     # First invoke of the new node resets the conversation again.
     r = await target.invoke(ctx2, "node2 turn1")
     assert r.raw["turn"] == 1
+    assert [c["trace_id"] for c in calls] == ["test-c1-t1", "test-c2-t1"]
     await target.close()
     assert sorted(deleted) == ["DOC-1", "DOC-2"]  # both cleaned up
 
@@ -277,7 +281,7 @@ async def test_owned_session_is_closed() -> None:
     fake = _FakeSession()
     target = GeminiDocsMultiTurnTarget(output_dir="/tmp")
     # Simulate setup() having created a session we own.
-    target._session = fake  # type: ignore[attr-defined]
-    target._owns_session = True  # type: ignore[attr-defined]
+    target._session = fake
+    target._owns_session = True
     await target.close()
     assert fake.closed is True

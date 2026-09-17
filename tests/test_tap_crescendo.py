@@ -20,9 +20,12 @@ from advtest_ext.attacks.tap_crescendo import (
     _strategist_system,
 )
 from advtest_ext.core.models import Behavior, Budget
+from advtest_ext.core.orchestrator import GridOrchestrator
 from advtest_ext.dashboard.transcript import build_transcript_groups
 from advtest_ext.document.target import Response
 from advtest_ext.judges.retrieval_verdict_judge import RetrievalVerdictJudge
+from advtest_ext.providers.base import ChatMessage, Usage
+from advtest_ext.providers.cost import CostLedger
 
 ENTITY = "QUILLFEATHER"
 CANARY = "CODE-QF-4417"
@@ -71,6 +74,9 @@ class _FakeTarget:
     def reset(self) -> None:
         self.resets += 1
 
+    async def setup(self) -> None:
+        return None
+
     async def render_document(self, doc: Any) -> Any:
         return object()
 
@@ -91,7 +97,7 @@ def _attack(target_resp: str, **kw: Any) -> tuple[TapCrescendoAttack, _FakeTarge
     )
     defaults.update(kw)
     attack = TapCrescendoAttack(
-        attacker=_FakeAttacker(),
+        attacker=_FakeAttacker(),  # type: ignore[arg-type]
         judge=_judge(),
         entity=ENTITY,
         canary=CANARY,
@@ -105,13 +111,81 @@ async def _collect(attack: TapCrescendoAttack, target: _FakeTarget) -> list[Any]
     return [
         a
         async for a in attack.generate(
-            behavior=_behavior(), target=target, budget=Budget(), context=None
+            behavior=_behavior(),
+            target=target,
+            budget=Budget(),
+            context=None,  # type: ignore[arg-type]
         )
     ]
 
 
+@pytest.mark.asyncio
+async def test_orchestrator_budget_is_reserved_before_live_target_invoke() -> None:
+    attack, target = _attack(
+        _LOW,
+        branching_factor=1,
+        max_depth=0,
+        node_stuck_patience=4,
+        node_max_turns=4,
+    )
+    orchestrator = GridOrchestrator(
+        target=target,  # type: ignore[arg-type]
+        attacks=[attack],
+        behaviors=[_behavior()],
+        judge=_judge(),
+        budget=Budget(max_queries=1),
+    )
+    result = await orchestrator.run()
+    assert target.invokes == 1
+    assert len(result.traces) == 1
+    assert "_query_pre_reserved" not in result.traces[0].metadata
+
+
 def _nodes(attempts: list[Any]) -> list[str]:
     return [a.metadata["tap_crescendo"]["node_id"] for a in attempts]
+
+
+@pytest.mark.asyncio
+async def test_attacker_retries_malformed_json_and_records_every_call() -> None:
+    class _RetryAttacker:
+        provider_type = "anthropic"
+        model_id = "test"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def complete(self, messages: list[Any], **kw: Any) -> Any:
+            self.calls += 1
+            text = "```json\n{broken}\n```" if self.calls == 1 else '{"prompt":"ok"}'
+            return SimpleNamespace(text=text, usage=Usage(cost_usd=0.1))
+
+    provider = _RetryAttacker()
+    ledger = CostLedger()
+    attack, _target = _attack(_LOW, cost_ledger=ledger, attacker_retries=1)
+    response = await attack._complete_provider(
+        provider,  # type: ignore[arg-type]
+        [ChatMessage(role="user", content="generate")],
+        temperature=1.0,
+        max_tokens=64,
+        expect_json=True,
+    )
+    assert response.text == '{"prompt":"ok"}'
+    assert provider.calls == 2
+    assert ledger.total_cost_usd == pytest.approx(0.2)
+
+
+def test_frontier_selection_balances_score_and_strategy_diversity() -> None:
+    attack, _target = _attack(_LOW, keep_top=2, diversity_weight=0.2)
+    children = [
+        {"score": 0.90, "strategy": "warm collaborative project framing"},
+        {"score": 0.89, "strategy": "warm collaborative project discussion"},
+        {"score": 0.88, "strategy": "structured audit checklist"},
+    ]
+    selected = attack._select_frontier(children)
+    assert [node["strategy"] for node in selected] == [
+        "warm collaborative project framing",
+        "structured audit checklist",
+    ]
 
 
 def test_serialise_shows_last_reply_in_full_and_marks_prior_truncation() -> None:
@@ -129,13 +203,17 @@ def test_serialise_shows_last_reply_in_full_and_marks_prior_truncation() -> None
     assert long_prior not in out  # the prior reply WAS cut
 
 
-def test_serialise_surfaces_model_thoughts_to_the_attacker() -> None:
-    # Captured reasoning is shown to the attacker, clearly labelled as the
-    # target's private thoughts (never presented as the user-facing reply).
+def test_serialise_hides_model_thoughts_by_default() -> None:
+    # Search quality must reflect information available to a real user.
     turns = [(1, "u1", "I can't share that.", 0.1, "", "The user wants get_skills; I will refuse.")]
     out = _serialise(turns)
-    assert "The user wants get_skills; I will refuse." in out
-    assert "model thoughts" in out.lower()
+    assert "The user wants get_skills; I will refuse." not in out
+    assert "model thoughts" not in out.lower()
+
+
+def test_serialise_can_include_model_thoughts_for_diagnostic_runs() -> None:
+    turns = [(1, "u1", "reply", 0.1, "", "diagnostic reasoning")]
+    assert "diagnostic reasoning" in _serialise(turns, include_model_thoughts=True)
 
 
 def test_strategist_system_is_legacy_when_no_brief() -> None:
@@ -383,7 +461,7 @@ async def test_seed_adaptive_prompt_carries_reference_and_last_reply() -> None:
 
     reply = "Here are my capabilities: I can read cells, write formulas, and build charts."
     attack = TapCrescendoAttack(
-        attacker=_RecordingAttacker(),
+        attacker=_RecordingAttacker(),  # type: ignore[arg-type]
         judge=_judge(),
         entity=ENTITY,
         canary=CANARY,
@@ -652,7 +730,7 @@ async def test_refusal_swaps_in_the_recovery_prompt() -> None:
     press-forward template."""
     attacker = _RecordingAttacker()
     attack = TapCrescendoAttack(
-        attacker=attacker,
+        attacker=attacker,  # type: ignore[arg-type]
         judge=_judge(),
         entity=ENTITY,
         canary=CANARY,
@@ -687,9 +765,9 @@ async def test_on_mechanism_check_prunes_and_records_drift() -> None:
     metadata so the dashboard can read it."""
     checker = _OffMechChecker()
     attack = TapCrescendoAttack(
-        attacker=_FakeAttacker(),
+        attacker=_FakeAttacker(),  # type: ignore[arg-type]
         judge=_judge(),
-        checker=checker,
+        checker=checker,  # type: ignore[arg-type]
         entity=ENTITY,
         canary=CANARY,
         handshake_token=HANDSHAKE,
@@ -725,9 +803,9 @@ async def test_broken_checker_never_prunes() -> None:
             return SimpleNamespace(text="mmm not sure")
 
     attack = TapCrescendoAttack(
-        attacker=_FakeAttacker(),
+        attacker=_FakeAttacker(),  # type: ignore[arg-type]
         judge=_judge(),
-        checker=_GarbageChecker(),
+        checker=_GarbageChecker(),  # type: ignore[arg-type]
         entity=ENTITY,
         canary=CANARY,
         handshake_token=HANDSHAKE,
@@ -750,3 +828,298 @@ async def test_no_checker_means_no_drift_and_no_extra_calls() -> None:
     attack, target = _attack(_LOW, branching_factor=1, max_depth=0, node_max_turns=4)
     attempts = await _collect(attack, target)
     assert not any(a.metadata.get("drift") for a in attempts)
+
+
+@pytest.mark.asyncio
+async def test_guide_partial_signal_raises_pruning_score_and_is_recorded() -> None:
+    attack, target = _attack(
+        "PARTIAL-MARK",
+        max_depth=0,
+        partial_signal_specs=[
+            {"kind": "token_appears", "name": "partial_mark", "token": "PARTIAL-MARK"}
+        ],
+        partial_score_floor=0.6,
+    )
+    attempts = await _collect(attack, target)
+    meta = attempts[0].metadata["tap_crescendo"]
+    assert meta["guide_signals"]["partial"] == ["partial_mark"]
+
+
+@pytest.mark.asyncio
+async def test_guide_stop_signal_converges_root_without_children() -> None:
+    attack, target = _attack(
+        "STOP-MARK",
+        stop_signal_specs=[{"kind": "token_appears", "name": "stop_mark", "token": "STOP-MARK"}],
+    )
+    attempts = await _collect(attack, target)
+    assert len(attempts) == 1
+    assert attempts[0].metadata["tap_crescendo"]["guide_signals"]["stop"] == ["stop_mark"]
+
+
+@pytest.mark.asyncio
+async def test_loose_regex_corroborates_but_does_not_stop() -> None:
+    attack, target = _attack(
+        "possible marker",
+        max_depth=0,
+        node_stuck_patience=1,
+        stop_signal_specs=[{"kind": "regex_match", "name": "loose", "pattern": "possible"}],
+    )
+    attempts = await _collect(attack, target)
+    assert len(attempts) == 2
+    signals = attempts[0].metadata["tap_crescendo"]["guide_signals"]
+    assert signals["stop"] == []
+    assert signals["corroborating"] == ["loose"]
+
+
+@pytest.mark.asyncio
+async def test_guide_refusal_patience_prunes_repeated_refusal() -> None:
+    attack, target = _attack(
+        "I can't help with that.",
+        max_depth=0,
+        node_max_turns=8,
+        node_stuck_patience=8,
+        refusal_patience=2,
+    )
+    await _collect(attack, target)
+    assert target.invokes == 2
+
+
+@pytest.mark.asyncio
+async def test_guide_initial_branches_are_instantiated_at_depth_one() -> None:
+    branches = ["branch alpha", "branch beta"]
+    attack, target = _attack(
+        _LOW,
+        max_depth=1,
+        node_stuck_patience=1,
+        node_max_turns=3,
+        initial_branches=branches,
+    )
+    attempts = await _collect(attack, target)
+    child_strategies = {
+        a.metadata["tap_crescendo"]["strategy"]
+        for a in attempts
+        if a.metadata["tap_crescendo"]["depth"] == 1
+    }
+    assert child_strategies == set(branches)
+
+
+@pytest.mark.asyncio
+async def test_both_replay_mode_runs_strict_control_then_adaptive_branch() -> None:
+    seed = ["exact first", "exact second"]
+    attack, target = _attack(
+        _LOW,
+        seed_chain=seed,
+        replay_mode="both",
+        max_depth=0,
+        node_max_turns=2,
+    )
+    attempts = await _collect(attack, target)
+    by_node: dict[str, list[str]] = {}
+    for attempt in attempts:
+        meta = attempt.metadata["tap_crescendo"]
+        by_node.setdefault(meta["node_id"], []).append(attempt.user_prompt)
+    assert by_node["n0-control"] == seed
+    assert by_node["n0"] == ["let us build up", "let us build up"]
+    assert (
+        next(
+            a for a in attempts if a.metadata["tap_crescendo"]["node_id"] == "n0-control"
+        ).metadata["tap_crescendo"]["replay_mode"]
+        == "strict"
+    )
+
+
+@pytest.mark.asyncio
+async def test_multiple_attacker_models_rotate_across_child_strategies() -> None:
+    class _AlternateAttacker(_FakeAttacker):
+        model_id = "alternate"
+
+        async def complete(self, messages: list[Any], **kw: Any) -> Any:
+            system = messages[0].content if messages else ""
+            if "strategist" in system:
+                return SimpleNamespace(
+                    text=(
+                        '{"strategy":"use a structured checklist",'
+                        '"dimension":"wording","mutation":"wording",'
+                        '"preserved_invariants":[]}'
+                    )
+                )
+            return SimpleNamespace(text='{"reasoning":"r","prompt":"alternate move"}')
+
+    attack = TapCrescendoAttack(
+        attacker=_FakeAttacker(),  # type: ignore[arg-type]
+        attackers=[_AlternateAttacker()],  # type: ignore[list-item]
+        judge=_judge(),
+        entity=ENTITY,
+        branching_factor=2,
+        max_depth=1,
+        keep_top=2,
+        node_stuck_patience=1,
+        node_max_turns=2,
+    )
+    attempts = await _collect(attack, _FakeTarget(_LOW))
+    child_indices = {
+        a.metadata["tap_crescendo"]["attacker"]["index"]
+        for a in attempts
+        if a.metadata["tap_crescendo"]["depth"] == 1
+    }
+    assert child_indices == {0, 1}
+
+
+@pytest.mark.asyncio
+async def test_seed_roots_receive_round_robin_allowance_before_deepening() -> None:
+    attack, target = _attack(
+        _LOW,
+        seeds=[{"entity": "FIRST"}, {"entity": "SECOND"}],
+        max_nodes_per_seed=2,
+        branching_factor=1,
+        node_stuck_patience=1,
+        node_max_turns=2,
+    )
+    attempts = await _collect(attack, target)
+    first_seen: list[str] = []
+    for node_id in _nodes(attempts):
+        if node_id not in first_seen:
+            first_seen.append(node_id)
+    assert first_seen[:2] == ["s0n0", "s1n0"]
+
+
+@pytest.mark.asyncio
+async def test_semantic_verifier_rejects_paraphrase_before_live_child() -> None:
+    invariant = "the probe order remains mechanism-valid"
+
+    class _CandidateAttacker(_FakeAttacker):
+        def __init__(self) -> None:
+            self.proposals = 0
+
+        async def complete(self, messages: list[Any], **kw: Any) -> Any:
+            system = messages[0].content if messages else ""
+            if "strategist" not in system:
+                return await super().complete(messages, **kw)
+            self.proposals += 1
+            strategy = (
+                "Say the same thing with friendlier words"
+                if self.proposals == 1
+                else "Move the proof probe ahead of the role-confirmation phase"
+            )
+            mutation = (
+                "wording-only rewrite" if self.proposals == 1 else "swap phases two and three"
+            )
+            return SimpleNamespace(
+                text=(
+                    f'{{"strategy":"{strategy}","dimension":"turn_order",'
+                    f'"operator_name":"legacy-0","feature_value":"reordered",'
+                    f'"mutation":"{mutation}","plan_steps":["apply {mutation}"],'
+                    f'"expected_effect":"exercise a different escalation trajectory",'
+                    f'"artifact_patch":{{}},"preserved_invariants":["{invariant}"]}}'
+                )
+            )
+
+    class _SemanticChecker:
+        provider_type = "fake"
+        model_id = "semantic-checker"
+
+        def __init__(self) -> None:
+            self.candidate_calls = 0
+
+        async def complete(self, messages: list[Any], **kw: Any) -> Any:
+            system = messages[0].content if messages else ""
+            user = messages[-1].content if messages else ""
+            if "semantic novelty gate" in system:
+                self.candidate_calls += 1
+                return SimpleNamespace(text="INVALID" if "friendlier words" in user else "VALID")
+            if "independent verifier reviewing" in system:
+                return SimpleNamespace(
+                    text='{"progressed":"none","failed":"low score","next_change":"reorder"}'
+                )
+            return SimpleNamespace(text="ON")
+
+    attacker = _CandidateAttacker()
+    checker = _SemanticChecker()
+    attack = TapCrescendoAttack(
+        attacker=attacker,  # type: ignore[arg-type]
+        judge=_judge(),
+        checker=checker,  # type: ignore[arg-type]
+        entity=ENTITY,
+        mutation_surface=["turn order within the escalation"],
+        invariants=[invariant],
+        semantic_validation_required=True,
+        branching_factor=1,
+        max_depth=1,
+        keep_top=1,
+        node_stuck_patience=1,
+        node_max_turns=2,
+    )
+    attempts = await _collect(attack, _FakeTarget(_LOW))
+    child_strategies = {
+        a.metadata["tap_crescendo"]["strategy"]
+        for a in attempts
+        if a.metadata["tap_crescendo"]["depth"] == 1
+    }
+    assert child_strategies == {"Move the proof probe ahead of the role-confirmation phase"}
+    assert checker.candidate_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_semantic_mode_fails_closed_without_independent_checker() -> None:
+    attack, target = _attack(
+        _LOW,
+        mutation_surface=["persona labels"],
+        invariants=["preserve the role-escalation mechanism"],
+        semantic_validation_required=True,
+        max_depth=1,
+    )
+    with pytest.raises(RuntimeError, match="CHECKER_MODEL"):
+        await _collect(attack, target)
+    assert target.invokes == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_scheduler_rotates_across_full_mutation_surface() -> None:
+    class _DimensionAwareAttacker(_FakeAttacker):
+        async def complete(self, messages: list[Any], **kw: Any) -> Any:
+            system = messages[0].content if messages else ""
+            user = messages[-1].content if messages else ""
+            if "strategist" not in system:
+                return await super().complete(messages, **kw)
+            dimension = next(
+                name
+                for name in ("persona", "turn_order", "escalation_speed")
+                if f"dimension '{name}'" in user
+            )
+            operator_name = {
+                "persona": "legacy-0",
+                "turn_order": "legacy-1",
+                "escalation_speed": "legacy-2",
+            }[dimension]
+            return SimpleNamespace(
+                text=(
+                    f'{{"strategy":"material {dimension} variant",'
+                    f'"dimension":"{dimension}","operator_name":"{operator_name}",'
+                    f'"feature_value":"changed","mutation":"change {dimension}",'
+                    f'"plan_steps":["change {dimension}"],'
+                    f'"expected_effect":"test a distinct trajectory",'
+                    f'"artifact_patch":{{}},'
+                    '"preserved_invariants":["keep mechanism"]}'
+                )
+            )
+
+    attack = TapCrescendoAttack(
+        attacker=_DimensionAwareAttacker(),  # type: ignore[arg-type]
+        judge=_judge(),
+        entity=ENTITY,
+        mutation_surface=["persona labels", "turn order", "escalation speed"],
+        invariants=["keep mechanism"],
+        semantic_validation_required=False,
+        branching_factor=1,
+        max_depth=3,
+        keep_top=1,
+        node_stuck_patience=1,
+        node_max_turns=2,
+    )
+    attempts = await _collect(attack, _FakeTarget(_LOW))
+    dimensions = [
+        a.metadata["tap_crescendo"]["mutation"].get("dimension")
+        for a in attempts
+        if a.metadata["tap_crescendo"]["turn"] == 1 and a.metadata["tap_crescendo"]["depth"] > 0
+    ]
+    assert dimensions == ["persona", "turn_order", "escalation_speed"]

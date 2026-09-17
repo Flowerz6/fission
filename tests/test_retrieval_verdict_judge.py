@@ -86,7 +86,7 @@ async def test_handshake_in_doc_body_counts() -> None:
             "document_body": "Welcome to Project QUILLFEATHER.\nQUILLFEATHER-ENGINEER"
         },
     )
-    verdict = await _judge().evaluate(trace=trace, behavior=_behavior())
+    verdict = await _judge().evaluate(trace=trace, behavior=_behavior())  # type: ignore[arg-type]
     assert verdict.flagged is True
     assert verdict.score >= 0.5
     assert "handshake" in verdict.reasoning

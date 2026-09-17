@@ -6,19 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
   {# Attack-tree component (Cytoscape). Loaded globally so the tree can also
-     mount inside the slide-over (openRunPanel injects markup only — script
+     mount inside the slide-over (openRunPanel injects markup only, script
      tags in injected HTML don't execute). Cytoscape libs are lazy-loaded by
      tree.js only when a tree is actually present. #}
   <link rel="stylesheet" href="/static/tree.css?v={{ static_v() if static_v is defined else '0' }}">
   <script src="/static/tree.js?v={{ static_v() if static_v is defined else '0' }}" defer></script>
   <style>
     /* ================================================================
-       Fission — warm editorial redesign. A measurement instrument that
+       Fission, warm editorial redesign. A measurement instrument that
        reads like a report, not a terminal. Editorial serif (Spectral)
        for headings + big numbers; Inter for body; monospace reserved
        strictly for machine content (ids, models, hashes, transcripts).
        Cream ground, white rounded cards with gentle shadows, one guava
-       coral accent. Committed single light theme — nothing dark.
+       coral accent. Committed single light theme, nothing dark.
 
        Fonts are self-hosted woff2 under /static/fonts so the rendered
        page never silently falls back to a system serif.
@@ -26,48 +26,52 @@
     @font-face{font-family:"Inter";font-weight:400;font-style:normal;font-display:swap;src:url('/static/fonts/inter-400.woff2') format('woff2');}
     @font-face{font-family:"Inter";font-weight:600;font-style:normal;font-display:swap;src:url('/static/fonts/inter-600.woff2') format('woff2');}
     @font-face{font-family:"Spectral";font-weight:600;font-style:normal;font-display:swap;src:url('/static/fonts/spectral-600.woff2') format('woff2');}
+    @font-face{font-family:"Source Serif 4";font-weight:600;font-style:normal;font-display:swap;src:url('/static/fonts/source-serif-4-600.ttf') format('truetype');}
 
     :root {
-      /* Type families */
-      --serif:"Spectral", Georgia, "Times New Roman", serif;
-      --sans:"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      /* Type families — Fission editorial: Newsreader display serif +
+         Archivo grotesque; self-hosted Source Serif / Inter as offline
+         fallbacks so an air-gapped host never drops to a system face. */
+      --serif:"Instrument Serif", "Source Serif 4", Georgia, "Times New Roman", serif;
+      --sans:"DM Sans", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       --mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      /* Legacy aliases used across the page templates */
       --font-prose:var(--sans);
       --font-mono:var(--mono);
 
-      /* Warm palette (new names) */
-      --ink:#211e1a; --ink-soft:#494339;
-      --bg:#fdfbf7; --surface:#ffffff; --surface-2:#f7f4ed; --raised:#ffffff;
-      --border-2:#e7e2d7;
-      --accent-ink:#c0472f;
-      --crit:#d5595b; --crit-soft:#faebec;
-      --high:#cf9a4c; --high-soft:#f8f0dd;
-      --ok:#57a880; --ok-soft:#e8f3ee;
+      /* Paper / ink monochrome (Fission editorial, cracked-glass identity).
+         Ink on warm paper; the accent IS ink — no brand hue. Colour is
+         spent only on severity/status. */
+      --ink:#1a1a18; --ink-soft:#48453d;
+      --bg:#f5f4ee; --surface:#fbfaf6; --surface-2:#f1efe7; --raised:#ffffff;
+      --border-2:#dedbd0;
+      --accent-ink:#1a1a18;
+      --crit:#be3a2b; --crit-soft:#f6e6e2;
+      --high:#b8791f; --high-soft:#f4ebd8;
+      --ok:#3e8e5b; --ok-soft:#e7f0e9;
 
-      /* Legacy token names, remapped to the warm palette so every page's
-         own <style> block adopts the redesign with no per-page edit. */
-      --fg:#211e1a; --fg-soft:#494339; --muted:#726b5e; --muted-2:#b3ac9c;
-      --border:#f0ede4; --border-strong:#e7e2d7;
-      --accent:#ee7a6b; --accent-hover:#e35f4e; --accent-soft:#fceeeb;
-      --success:#57a880; --success-bg:#e8f3ee;
-      --partial:#cf9a4c; --partial-bg:#f8f0dd;
-      --refused:#726b5e; --refused-bg:#f7f4ed;
-      --error:#d5595b;   --error-bg:#faebec;
-      --code-bg:#f7f4ed; --code-fg:#494339;
+      /* Legacy token names, remapped so every page's own <style> adopts
+         the reskin with no per-page edit. --accent resolves to ink. */
+      --fg:#1a1a18; --fg-soft:#48453d; --muted:#8a867b; --muted-2:#b3aea1;
+      --border:#eae7dd; --border-strong:#dedbd0;
+      --accent:#1a1a18; --accent-hover:#000000; --accent-soft:#edebe3;
+      --success:#3e8e5b; --success-bg:#e7f0e9;
+      --partial:#b8791f; --partial-bg:#f4ebd8;
+      --refused:#8a867b; --refused-bg:#f1efe7;
+      --error:#be3a2b;   --error-bg:#f6e6e2;
+      --code-bg:#f1efe7; --code-fg:#48453d;
 
-      --shadow-sm:0 1px 2px rgba(90,70,45,0.05), 0 1px 3px rgba(90,70,45,0.04);
-      --shadow:0 2px 6px rgba(90,70,45,0.06), 0 10px 28px rgba(90,70,45,0.05);
-      --shadow-lg:0 12px 46px rgba(80,55,30,0.14);
-      --r:12px; --r-sm:8px; --r-pill:999px;
-      --radius:12px; --radius-sm:8px;
+      --shadow-sm:none;
+      --shadow:0 1px 2px rgba(26,26,24,0.05);
+      --shadow-lg:0 20px 50px -30px rgba(26,26,24,0.45);
+      --r:10px; --r-sm:6px; --r-pill:999px;
+      --radius:10px; --radius-sm:6px;
     }
-    /* Committed single light theme — a saved data-theme never darkens. */
+    /* Committed single light theme, a saved data-theme never darkens. */
     :root[data-theme="light"], :root[data-theme="dark"]{
-      --ink:#211e1a; --ink-soft:#494339; --fg:#211e1a; --fg-soft:#494339;
-      --bg:#fdfbf7; --surface:#fff; --surface-2:#f7f4ed;
-      --border:#f0ede4; --border-strong:#e7e2d7; --border-2:#e7e2d7;
-      --accent:#ee7a6b; --accent-hover:#e35f4e; --accent-soft:#fceeeb; --accent-ink:#c0472f;
+      --ink:#1a1a18; --ink-soft:#48453d; --fg:#1a1a18; --fg-soft:#48453d;
+      --bg:#f5f4ee; --surface:#fbfaf6; --surface-2:#f1efe7;
+      --border:#eae7dd; --border-strong:#dedbd0; --border-2:#dedbd0;
+      --accent:#1a1a18; --accent-hover:#000000; --accent-soft:#edebe3; --accent-ink:#1a1a18;
     }
 
     * { box-sizing: border-box; }
@@ -82,19 +86,26 @@
     }
 
     /* ---- App shell: grouped left sidebar + content ---- */
-    .app { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+    .app { display: grid; grid-template-columns: 224px 1fr; grid-template-rows: 56px 1fr; min-height: 100vh; }
+    .topbar { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: stretch; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+    .topbar .brand { width: 224px; padding: 0 1.3rem; display: flex; align-items: center; border-right: 1px solid var(--border); }
+    .topbar .ws { flex: 1; display: flex; align-items: center; padding: 0 1.6rem; }
+    .ws-btn { display: inline-flex; align-items: center; gap: 0.55rem; background: none; border: none; font-family: var(--sans); font-size: 0.88rem; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+    .ws-btn .dia { width: 13px; height: 13px; color: var(--muted); }
+    .ws-btn .caret { font-size: 0.58rem; color: var(--muted); }
     aside.sidebar {
+      grid-row: 2; grid-column: 1;
       background: var(--surface); border-right: 1px solid var(--border);
-      display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+      display: flex; flex-direction: column; position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto;
     }
-    .brand { display: flex; align-items: center; gap: 0.6rem; padding: 1.15rem 1.3rem 1.05rem; text-decoration: none; }
-    .brand .logo { font-family: var(--serif); font-size: 1.32rem; font-weight: 600; letter-spacing: 0.01em; color: var(--ink); }
+    .brand { display: flex; align-items: center; gap: 0.6rem; padding: 1.3rem 1.3rem 1.15rem; text-decoration: none; }
+    .brand .logo { font-family: var(--sans); font-size: 1.04rem; font-weight: 500; letter-spacing: 0.36em; text-transform: uppercase; color: var(--ink); padding-left: 0.06em; }
     .brand:hover { text-decoration: none; }
     .nav-scroll { padding: 0.3rem 0.75rem 1.2rem; }
     .nav-item { display: flex; align-items: center; gap: 0.7rem; font-size: 0.9rem; color: var(--ink-soft);
       text-decoration: none; padding: 0.55rem 0.75rem; border-radius: var(--r-sm); margin-bottom: 1px; transition: background 0.12s, color 0.12s; }
     .nav-item:hover { background: var(--surface-2); color: var(--ink); text-decoration: none; }
-    .nav-item.active { color: var(--accent-ink); background: var(--accent-soft); font-weight: 600; }
+    .nav-item.active { color: var(--ink); background: var(--accent-soft); font-weight: 600; box-shadow: inset 2px 0 0 var(--ink); }
     .nav-item .ic { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.85; }
     .nav-group { margin-top: 1.15rem; }
     .nav-group > button { width: 100%; display: flex; align-items: center; justify-content: space-between;
@@ -103,12 +114,20 @@
     .nav-group > button .caret { transition: transform 0.18s; font-size: 0.6rem; color: var(--muted-2); }
     .nav-group.collapsed > button .caret { transform: rotate(-90deg); }
     .nav-group.collapsed .nav-list { display: none; }
-    .side-foot { margin-top: auto; padding: 1rem 1.3rem; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 0.6rem; }
-    .who { font-size: 0.8rem; color: var(--muted); display: flex; align-items: center; gap: 0.45rem; }
+    .side-foot { margin-top: auto; padding: 0.6rem 0.75rem 0.9rem; border-top: 1px solid var(--border); display: flex; flex-direction: column; align-items: stretch; gap: 0.15rem; }
+    .who { font-size: 0.82rem; color: var(--ink-soft); display: flex; align-items: center; gap: 0.55rem; padding: 0.5rem 0.75rem; border-radius: var(--r-sm); }
+    .who:hover { background: var(--surface-2); text-decoration: none; }
     .who .av { width: 22px; height: 22px; border-radius: var(--r-pill); background: var(--accent-soft); color: var(--accent-ink);
       display: grid; place-items: center; font-size: 0.66rem; font-weight: 700; }
 
-    main { min-width: 0; padding: 2.8rem 3rem 4.5rem; max-width: 1120px; }
+    main { grid-row: 2; grid-column: 2; min-width: 0; padding: 2.4rem 3rem 4.5rem; max-width: 1180px; }
+    .presentation-toggle { border:1px solid var(--border); background:var(--surface); color:var(--muted); padding:.35rem .55rem; border-radius:var(--r-sm); font:600 .68rem var(--sans); cursor:pointer; }
+    body.presentation .app { grid-template-columns:1fr; }
+    body.presentation aside.sidebar { display:none; }
+    body.presentation main { max-width:1380px; width:100%; margin:0 auto; padding:2.4rem 3.5rem 4rem; }
+    body.presentation .technical-id, body.presentation .developer-only { display:none !important; }
+    .presentation-exit { display:none; position:fixed; z-index:90; right:1.25rem; top:1rem; border:1px solid var(--border); background:var(--surface); color:var(--ink-soft); padding:.45rem .7rem; border-radius:var(--r-sm); font:600 .72rem var(--sans); cursor:pointer; box-shadow:var(--shadow); }
+    body.presentation .presentation-exit { display:block; }
 
     /* ---- Typography ---- */
     h1, h2, h3 { color: var(--ink); font-family: var(--serif); font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; text-wrap: balance; }
@@ -121,7 +140,7 @@
     code { font-family: var(--mono); font-size: 0.86em; padding: 0.08em 0.34em; background: var(--surface-2);
       border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--ink-soft); }
     .muted { color: var(--muted); font-size: 0.88rem; }
-    /* quiet field label — normal case, sans, medium grey */
+    /* quiet field label, normal case, sans, medium grey */
     .eyebrow { font-family: var(--sans); font-size: 0.75rem; letter-spacing: normal; text-transform: none;
       color: var(--muted); font-weight: 600; margin: 0 0 0.6rem; }
     .lbl { font-family: var(--sans); font-size: 0.75rem; letter-spacing: normal; text-transform: none; color: var(--muted); font-weight: 600; }
@@ -168,7 +187,7 @@
     .illus { font-size: 0.6rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
       border: 1px dashed var(--border-2); border-radius: var(--r-pill); padding: 0.06rem 0.4rem; margin-left: 0.4rem; vertical-align: middle; }
 
-    /* ---- Code blocks — warm, never dark ---- */
+    /* ---- Code blocks, warm, never dark ---- */
     pre { background: var(--surface-2); color: var(--ink-soft); padding: 0.9rem 1.1rem; border-radius: var(--r-sm);
       overflow-x: auto; font-size: 0.8rem; line-height: 1.6; font-family: var(--mono); border: 1px solid var(--border); }
     pre code { background: transparent; border: none; padding: 0; color: inherit; font-size: inherit; }
@@ -251,7 +270,7 @@
       color: var(--ink-soft); background: var(--surface); border: 1px solid var(--border-2); border-radius: var(--r-pill);
       text-decoration: none; transition: all 0.12s; cursor: pointer; }
     .btn:hover { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-soft); text-decoration: none; }
-    .hero-stats { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-top: 1.35rem; }
+    .hero-stats { display: grid; grid-template-columns: 1.8fr repeat(4, 1fr); gap: 1rem; margin-top: 1.35rem; }
     .hero-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1.25rem 1.4rem; }
     .hero-stat .label { font-size: 0.75rem; color: var(--muted); text-transform: none; letter-spacing: normal; font-weight: 600; }
     .hero-stat .value-xl { font-family: var(--serif); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 0.35rem; line-height: 1.05; }
@@ -284,7 +303,7 @@
     .chip-filter.on { color: #fff; border-color: var(--accent); background: var(--accent); }
     .filterchips { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
 
-    /* Filter bar (server-rendered forms) — kept as a warm rounded card */
+    /* Filter bar (server-rendered forms), kept as a warm rounded card */
     .filter-bar { display: flex; gap: 0.75rem; align-items: center; margin: 1.1rem 0 1.4rem; flex-wrap: wrap;
       padding: 0.7rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow-sm);
       font-family: var(--sans); font-size: 0.84rem; color: var(--ink-soft); }
@@ -336,7 +355,7 @@
     .bar-value { font-family: var(--mono); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
     .bar-count { font-family: var(--mono); font-size: 0.78rem; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 
-    /* Judge scores — semantic colour by attack strength (high = danger). */
+    /* Judge scores, semantic colour by attack strength (high = danger). */
     .score-cell { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; text-align: center; border-radius: var(--r-sm); min-width: 80px; }
     .score-cell.score-hot  { color: var(--crit);   background: var(--crit-soft); }
     .score-cell.score-warm { color: var(--high); background: var(--high-soft); }
@@ -476,45 +495,142 @@
       aside.sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
       main { padding: 1.8rem 1.4rem 3rem; }
     }
+    /* ================================================================
+       Shared page pattern (header + action, tabs, toolbar, status pills,
+       row menu, pager). Every list/detail page composes from these so the
+       whole app reads as one system. ================================ */
+    .head-bar { display:flex; justify-content:space-between; align-items:flex-start; gap:1.2rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+    .head-bar .ht { min-width:0; }
+    .head-bar .ht h1 { margin:0 0 0.35rem; }
+    .head-bar .ht p { margin:0; color:var(--muted); font-size:0.92rem; max-width:64ch; }
+    .head-bar .ha { display:flex; gap:0.5rem; padding-top:0.35rem; flex-wrap:wrap; flex-shrink:0; }
+    .btn-primary { background:var(--ink); color:#fff; border:1px solid var(--ink); border-radius:var(--r-sm); padding:0.55rem 0.95rem; font-size:0.8rem; font-weight:600; display:inline-flex; align-items:center; gap:0.45rem; cursor:pointer; text-decoration:none; white-space:nowrap; }
+    .btn-primary:hover { background:#000; color:#fff; text-decoration:none; }
+    .btn-outline { background:var(--surface); color:var(--ink-soft); border:1px solid var(--border-strong); border-radius:var(--r-sm); padding:0.55rem 0.95rem; font-size:0.8rem; font-weight:600; display:inline-flex; align-items:center; gap:0.45rem; cursor:pointer; text-decoration:none; white-space:nowrap; }
+    .btn-outline:hover { border-color:var(--ink); color:var(--ink); text-decoration:none; }
+
+    /* segmented underline tabs, e.g. All (6) / LLMs (2) */
+    .tabs { display:flex; gap:0.2rem; border-bottom:1px solid var(--border); margin-bottom:1.2rem; overflow-x:auto; }
+    .tabs a, .tabs button { padding:0.6rem 0.9rem; font-size:0.82rem; font-weight:600; color:var(--muted); border:none; background:none; border-bottom:2px solid transparent; cursor:pointer; text-decoration:none; white-space:nowrap; margin-bottom:-1px; font-family:var(--sans); }
+    .tabs a:hover, .tabs button:hover { color:var(--ink); text-decoration:none; }
+    .tabs a.on, .tabs button.on { color:var(--ink); border-bottom-color:var(--ink); }
+    .tabs .c { color:var(--muted-2); font-weight:500; margin-left:0.25rem; }
+
+    /* search + filter toolbar */
+    .ptoolbar { display:flex; align-items:center; gap:0.55rem; margin-bottom:1.1rem; flex-wrap:wrap; }
+    .searchbox { display:flex; align-items:center; gap:0.5rem; border:1px solid var(--border-strong); border-radius:var(--r-sm); padding:0.45rem 0.7rem; background:var(--surface); flex:1; min-width:180px; max-width:340px; }
+    .searchbox svg { width:15px; height:15px; color:var(--muted); flex:none; }
+    .searchbox input { border:none; background:none; outline:none; font:inherit; font-size:0.84rem; color:var(--ink); width:100%; }
+    .selectbox { border:1px solid var(--border-strong); border-radius:var(--r-sm); padding:0.48rem 0.7rem; background:var(--surface); font-family:var(--sans); font-size:0.82rem; color:var(--ink-soft); cursor:pointer; }
+    .ptoolbar .spacer { margin-left:auto; }
+
+    /* status: colored-text (findings) + filled pills (campaigns/runs/targets) */
+    .st { font-weight:600; font-size:0.82rem; }
+    .st.open, .st.failed, .st.error { color:var(--crit); }
+    .st.resolved, .st.active, .st.completed, .st.done { color:var(--ok); }
+    .st.progress, .st.in-progress, .st.scheduled, .st.inactive, .st.pending { color:var(--muted); }
+    .st.running { color:#3f6f8e; }
+    .pill.open, .pill.failed { color:var(--crit); background:var(--crit-soft); }
+    .pill.resolved, .pill.active, .pill.completed { color:var(--ok); background:var(--ok-soft); }
+    .pill.progress, .pill.in-progress, .pill.scheduled, .pill.inactive { color:var(--muted); background:var(--surface-2); }
+    .pill.running { color:#3f6f8e; background:#e5edf2; }
+
+    /* row menu + progress bar cell + pager */
+    .rowmenu { color:var(--muted-2); font-weight:700; letter-spacing:1.5px; cursor:pointer; padding:0 0.35rem; background:none; border:none; line-height:1; }
+    .rowmenu:hover { color:var(--ink); }
+    .cell-check { width:34px; }
+    .cell-check input, .rowcheck { width:15px; height:15px; accent-color:var(--ink); cursor:pointer; }
+    .cellprog { display:flex; align-items:center; gap:0.6rem; min-width:120px; }
+    .cellprog .tk { flex:1; height:6px; background:var(--surface-2); border-radius:var(--r-pill); overflow:hidden; }
+    .cellprog .fl { height:100%; background:var(--ink); border-radius:var(--r-pill); }
+    .cellprog .pc { font-variant-numeric:tabular-nums; font-size:0.78rem; color:var(--ink-soft); min-width:36px; text-align:right; }
+    .pager { display:flex; align-items:center; gap:0.3rem; margin:1.1rem 0 0.2rem; }
+    .pager a, .pager span.pg { min-width:30px; height:30px; padding:0 0.4rem; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border-strong); border-radius:var(--r-sm); font-size:0.8rem; color:var(--ink-soft); text-decoration:none; font-variant-numeric:tabular-nums; }
+    .pager a:hover { border-color:var(--ink); color:var(--ink); text-decoration:none; }
+    .pager .on { background:var(--ink); color:#fff; border-color:var(--ink); }
+    .pager .info { border:none; color:var(--muted); margin-left:auto; font-size:0.82rem; }
+    .sevdot { display:inline-flex; align-items:center; gap:0.45rem; font-weight:500; }
+    .sevdot .d { width:8px; height:8px; border-radius:50%; flex:none; }
+    .sevdot.critical { color:var(--crit); } .sevdot.critical .d { background:var(--crit); }
+    .sevdot.high { color:var(--high); } .sevdot.high .d { background:var(--high); }
+    .sevdot.med, .sevdot.medium { color:var(--ink-soft); } .sevdot.med .d, .sevdot.medium .d { background:var(--muted); }
+    .sevdot.low { color:var(--muted); } .sevdot.low .d { background:var(--border-strong); }
+
+    /* ---- Fission editorial type ----
+       Instrument Serif is a single-weight (400) display face: render every
+       heading at 400 and let its own contrast carry the hierarchy. Large
+       numerals move onto the serif (the reference's signature), and the
+       small technical labels go uppercase + letter-spaced. Machine content
+       (ids, scores, transcripts) stays mono and is untouched. */
+    h1, h2, h3 { font-weight: 400; }
+    h1 { font-size: 2.55rem; line-height: 1.06; }
+    h2 { font-size: 1.6rem; }
+    h3 { font-size: 1.18rem; }
+    .mcard .v, .metric .value, .stat .value, .kpi .v, .hero-stat .value,
+    .finding-score-num, .ov-grid .num, .diffs .n {
+      font-family: var(--serif); font-weight: 400; letter-spacing: 0;
+    }
+    .eyebrow, .lbl, .mcard .k, .metric .label, .stat .label, .kpi .k, .hero-stat .label {
+      text-transform: uppercase; letter-spacing: 0.15em; font-size: 0.68rem; font-weight: 600;
+    }
+    th, .tbl th { text-transform: uppercase; letter-spacing: 0.07em; font-size: 0.66rem; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   </style>
 </head>
 <body>
   <div class="app">
-    <aside class="sidebar">
+    <header class="topbar">
+      {% block topbar_leading %}{% endblock %}
       <a href="/" class="brand"><span class="logo">Fission</span></a>
-      <nav class="nav-scroll">
-        <a class="nav-item" href="/" data-path="/" data-exact="1">
-          <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 12l3.5-4 2.5 2.5L14 4"/></svg>Overview</a>
-
-        <div class="nav-group"><button type="button" onclick="this.parentElement.classList.toggle('collapsed')">Catalogue <span class="caret">&#9662;</span></button><div class="nav-list">
-          <a class="nav-item" href="/seeds" data-path="/seeds"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="4.5"/></svg>Seeds</a>
-          <a class="nav-item" href="/playbooks" data-path="/playbooks"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3h7a1 1 0 0 1 1 1v9l-4.5-2L3 13V4a1 1 0 0 1 1-1z"/></svg>Playbooks</a>
-        </div></div>
-
-        <div class="nav-group"><button type="button" onclick="this.parentElement.classList.toggle('collapsed')">Campaign <span class="caret">&#9662;</span></button><div class="nav-list">
-          <a class="nav-item" href="/runs" data-path="/runs"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2v6l4 2"/><circle cx="8" cy="8" r="6"/></svg>Runs</a>
-          <a class="nav-item" href="/findings" data-path="/findings"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4h12M2 8h8M2 12h5"/></svg>Findings</a>
+      <button class="mobile-nav" type="button" aria-label="Toggle navigation" aria-expanded="false">☰</button>
+      <div class="ws"><details class="workspace-switcher"><summary class="ws-btn" aria-label="Select service"><svg class="dia" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 2l9 9-8-2z"/></svg><span data-service-name>{{ selected_service.label }}</span><span class="caret">⌄</span></summary><div class="workspace-menu"><div class="service-menu-label">Service</div>{% for option in service_options %}<a class="workspace-link service-option {{ 'selected' if option.key == selected_service.key else '' }}" href="{{ service_switch_path }}?service={{ option.key }}" {% if option.key == selected_service.key %}aria-current="true"{% endif %}><span>{{ option.label }}</span>{% if option.key == selected_service.key %}<span aria-hidden="true">✓</span>{% endif %}</a>{% endfor %}<div class="service-menu-divider"></div><a class="workspace-link" href="/account">Your account</a><a class="workspace-link" href="/settings">Workspace settings</a><button type="button" class="workspace-link" onclick="togglePresentation()">Presentation mode</button>
+        <div class="nav-group collapsed"><button type="button" onclick="this.parentElement.classList.toggle('collapsed')">More <span class="caret">&#9662;</span></button><div class="nav-list">
           <a class="nav-item" href="/hitl" data-path="/hitl"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 8l3.5 3.5L13 5"/></svg>Review</a>
+          <a class="nav-item" href="/runs/new" data-path="/runs/new"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l7 5-7 5z"/></svg>New run</a>
+          <a class="nav-item" href="/seeds" data-path="/seeds"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="4.5"/></svg>Seeds</a>
+          <a class="nav-item" href="/variants" data-path="/variants"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2v5M8 7c-2 0-3.5 1.5-3.5 3.5S6 14 8 14s3.5-1.5 3.5-3.5S10 7 8 7z"/></svg>Proven variants</a>
+          <a class="nav-item" href="/ledger" data-path="/ledger"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10"/><path d="M2 7h12M7 3v10"/></svg>Seed ledger</a>
+          <a class="nav-item" href="/drift" data-path="/drift"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 9c2 0 2-3 4-3s2 3 4 3 2-3 4-3"/></svg>Drift</a>
+          <a class="nav-item" href="/references" data-path="/references"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h8v12l-4-2-4 2z"/></svg>Citations</a>
         </div></div>
+      </div></details></div>
+      <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
+    </header>
+    <aside class="sidebar">
+      <nav class="nav-scroll">
+        <a class="nav-item" href="/?service={{ selected_service.key }}" data-path="/" data-exact="1"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 12l3.5-4 2.5 2.5L14 4"/></svg>Overview</a>
+        <a class="nav-item" href="/surfaces?service={{ selected_service.key }}" data-path="/surfaces"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></svg>Targets</a>
+        <a class="nav-item" href="/runs?service={{ selected_service.key }}" data-path="/runs"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2v6l4 2"/><circle cx="8" cy="8" r="6"/></svg>Runs</a>
+        <a class="nav-item" href="/findings?service={{ selected_service.key }}" data-path="/findings"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4h12M2 8h8M2 12h5"/></svg>Findings</a>
+        <a class="nav-item" href="/playbooks" data-path="/playbooks"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3h7a1 1 0 0 1 1 1v9l-4.5-2L3 13V4a1 1 0 0 1 1-1z"/></svg>Attack Library</a>
+        <a class="nav-item" href="/reports?service={{ selected_service.key }}" data-path="/reports"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h8v12H4z"/><path d="M6 6h4M6 9h4M6 12h2"/></svg>Reports</a>
+
+
       </nav>
-      <div class="side-foot"><span class="who"><span class="av">OP</span>operator</span></div>
+      <div class="side-foot">
+        <a class="nav-item" href="/settings" data-path="/settings"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.5v1.6M8 12.9v1.6M14.5 8h-1.6M3.1 8H1.5M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5L3.4 3.4"/></svg>Settings</a>
+      </div>
     </aside>
 
-    <main>
+    <main id="main-content" data-page="{{ request.url.path }}">
       {% block content %}{% endblock %}
     </main>
   </div>
+  <button type="button" class="presentation-exit" onclick="togglePresentation()">Exit presentation</button>
 
   {# Shared slide-over shell (design-system infrastructure). Pages may
      drive it via openPanel(title, html); inert until then. #}
   <div class="scrim" id="scrim" onclick="closePanel()"></div>
   <aside class="slideover" id="panel" aria-hidden="true">
-    <div class="panel-head"><h2 id="p-title">&mdash;</h2><button type="button" class="p-close" onclick="closePanel()" aria-label="Close">&#10005;</button></div>
+    <div class="panel-head"><h2 id="p-title"> </h2><button type="button" class="p-close" onclick="closePanel()" aria-label="Close">&#10005;</button></div>
     <div class="panel-body" id="p-body"></div>
   </aside>
 
   <script>
+    function applyPresentation() { document.body.classList.toggle("presentation", localStorage.getItem("fission-presentation") === "1"); }
+    function togglePresentation() { localStorage.setItem("fission-presentation", document.body.classList.contains("presentation") ? "0" : "1"); applyPresentation(); }
+    applyPresentation();
+
     // Slide-over open/close (shared shell).
     function openPanel(title, html) {
       var t = document.getElementById('p-title'); if (t) t.textContent = title || '';
@@ -533,7 +649,7 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanel(); });
 
     // Open a run's attack tree in the slide-over (falls back to the full page
-    // if the fetch fails or JS is disabled — the row keeps its href).
+    // if the fetch fails or JS is disabled, the row keeps its href).
     function openRunPanel(e, runId, title) {
       if (e) e.preventDefault();
       var body = document.getElementById('p-body');
@@ -584,5 +700,7 @@
       });
     })();
   </script>
+  <link rel="stylesheet" href="/static/dashboard.css?v={{ static_v() }}">
+  <script src="/static/dashboard.js?v={{ static_v() }}" defer></script>
 </body>
 </html>

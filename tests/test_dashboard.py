@@ -174,17 +174,49 @@ def test_runs_index_renders(client: TestClient) -> None:
     resp = client.get("/runs")
     assert resp.status_code == 200
     assert "run-seed" in resp.text
-    assert "Runs" in resp.text
+    assert "<h1>Runs</h1>" in resp.text
+
+
+def test_zero_asr_runs_are_hidden_from_run_history_and_overview() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    _seed_run(factory)
+    with session_scope(factory) as s:
+        upsert_run(
+            s,
+            run_id="run-zero-asr",
+            target_name="StubDocumentTarget",
+            strategy="grid",
+        )
+        finalize_run(
+            s,
+            run_id="run-zero-asr",
+            summary=SummaryStats(
+                total_traces=4,
+                successful_traces=0,
+                overall_asr=0.0,
+            ),
+        )
+
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        runs_body = c.get("/runs").text
+        overview_body = c.get("/").text
+
+    assert "run-seed" in runs_body
+    assert "run-zero-asr" not in runs_body
+    assert "run-seed" in overview_body
+    assert "run-zero-asr" not in overview_body
 
 
 def test_root_serves_overview_command_center(client: TestClient) -> None:
     """``/`` now serves the Overview command center (not the runs list).
-    It headlines the latest run's calibrated ASR and links to it."""
+    It links to the latest run without promoting its ASR as a global KPI."""
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.text
-    assert "Command center" in body
-    assert "Attack success rate" in body
+    assert '<h1 class="sr-only">Overview</h1>' in body
+    assert "Attack success rate · latest run" not in body
     assert "run-seed" in body  # latest-run context line links to it
     assert "Layered oracle" in body  # oracle pipeline section
 
@@ -195,12 +227,13 @@ def test_overview_empty_state(empty_client: TestClient) -> None:
     assert "No runs to summarise" in resp.text
 
 
-def test_runs_show_renders_with_heatmap(client: TestClient) -> None:
+def test_runs_show_renders_findings_without_empty_charts(client: TestClient) -> None:
     resp = client.get("/runs/run-seed")
     assert resp.status_code == 200
     body = resp.text
-    # Heatmap section header.
-    assert "Heatmap" in body
+    # Missing technique metadata does not produce an empty comparison.
+    assert "Heatmap, technique" not in body
+    assert "Full transcript" in body
     # Behaviour ids bucket by prefix; "exfil" should land as a column.
     assert "exfil" in body
     # Top-findings card surfaces the seeded trace details: behaviour
@@ -222,122 +255,56 @@ def test_runs_show_404_for_unknown_id(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
-def test_runs_tree_renders_tap_shaped_chains() -> None:
-    """End-to-end: seed a run with a TAP-shaped chain (root + two
-    depth-1 children + one depth-2 grandchild), hit ``/runs/{id}/tree``,
-    assert the response is 200 and that the parent-child links are
-    actually reflected in the rendered HTML.
+def test_search_coverage_panel_renders_from_report_json(tmp_path: Path) -> None:
+    """A run whose output_dir holds a tap_search_report.json renders the
+    Search-coverage panel with its coverage, quorum, and refused framings."""
+    import json
 
-    The smoke test on its own (``status == 200``) would pass even if
-    the helper grouped traces wrong; the assertions below check that
-    each cell renders, that the grandchild's id appears nested under
-    its parent's, and that the persisted depth + score fields make
-    it through the template. Note: only ``parent_id`` and ``depth``
-    are persisted from TAP metadata today — the rich
-    ``metadata['tap']`` blob (branch index, attacker reasoning) is
-    NOT on the storage ``Trace`` row, so this test deliberately
-    doesn't seed it."""
+    (tmp_path / "tap_search_report.json").write_text(
+        json.dumps(
+            {
+                "archive": {
+                    "coverage": 0.5,
+                    "possible_cells": ["a", "b", "c", "d"],
+                    "attempted_cells": ["a", "b"],
+                    "unexplored_cells": ["c", "d"],
+                },
+                "verifier_quorum": 2,
+                "verifier_models": ["claude", "gpt"],
+                "planner_models": ["planner-x"],
+                "judge_calibrated": True,
+                "onmech_drift_threshold": 0.5,
+                "rewind_budget": 1,
+                "checkpointed_nodes": 3,
+                "refused_framings": {"name+gmail anchor": 4},
+                "causal": {"controls": {"strict_seed": 0.2}, "variants": []},
+            }
+        )
+    )
     engine = make_engine("sqlite:///:memory:")
     factory = make_session_factory(engine)
-
-    def _seed_tap(factory: sessionmaker[Session]) -> None:
-        with session_scope(factory) as s:
-            upsert_run(
-                s,
-                run_id="run-tap",
-                target_name="StubDocumentTarget",
-                strategy="grid",
-            )
-            # Trace structure (one cell, behaviour=exfil_x, technique=None):
-            #   root (depth=1, no parent)
-            #     ├── child_a (depth=2, parent=root)         [score=0.9, success]
-            #     │     └── grandchild (depth=3, parent=child_a)
-            #     └── child_b (depth=2, parent=root)         [score=0.2, refused]
-            spec = [
-                ("root", None, 1, 0.4, "refused"),
-                ("child_a", "root", 2, 0.9, "success"),
-                ("child_b", "root", 2, 0.2, "refused"),
-                ("grandchild", "child_a", 3, 0.95, "success"),
-            ]
-            for trace_id, parent, depth, score, verdict in spec:
-                trace = AttackTrace(
-                    id=trace_id,
-                    run_id="run-tap",
-                    behavior_id="exfil_x",
-                    payload=Payload(
-                        id=f"p-{trace_id}",
-                        text=f"refined-prompt-{trace_id}",
-                        modality="text",
-                        generator_name="tap_indirect",
-                    ),
-                    target_name="StubDocumentTarget",
-                    raw_request=f"refined-prompt-{trace_id}",
-                    raw_response="response",
-                    judge_scores=[
-                        JudgeScore(
-                            judge_name="strong_reject",
-                            score=score,
-                            flagged=verdict == "success",
-                            reasoning="rubric",
-                            judge_version="0.1",
-                        )
-                    ],
-                    verdict=verdict,  # type: ignore[arg-type]
-                    parent_id=parent,
-                    depth=depth,
-                )
-                insert_trace(s, run_id="run-tap", trace=trace)
-            finalize_run(
-                s,
-                run_id="run-tap",
-                summary=SummaryStats(total_traces=4, successful_traces=2, overall_asr=0.5),
-            )
-
-    _seed_tap(factory)
+    with session_scope(factory) as s:
+        upsert_run(
+            s,
+            run_id="run-cov",
+            target_name="StubDocumentTarget",
+            strategy="grid",
+            output_dir=str(tmp_path),
+        )
     app = create_app(engine=engine)
     with TestClient(app) as c:
-        resp = c.get("/runs/run-tap/tree")
-    assert resp.status_code == 200
-    body = resp.text
-    # Cell header surfaced.
-    assert "exfil_x" in body
-    # 2 successes / 4 traces shows the cell summary worked.
-    assert "2/4" in body
-    # All four trace ids made it onto the page.
-    for tid in ("root", "child_a", "child_b", "grandchild"):
-        assert tid in body
-    # ASCII tree rendering: box-drawing characters present.
-    assert "├──" in body or "└──" in body
-    # Each trace line is wrapped in an <a href="/traces/{id}"> so
-    # users can click through to detail. Locks discoverability for
-    # the trace detail route.
-    for tid in ("root", "child_a", "child_b", "grandchild"):
-        assert f'href="/traces/{tid}"' in body
-    # Score from judge_scores[0] formatted onto the node.
-    assert "0.95" in body or "0.90" in body
-    # Structural assertion: grandchild's <li>-equivalent appears
-    # under child_a (its parent), with the continuation column
-    # ("│") between them, BEFORE child_b shows up.
-    grandchild_pos = body.index("grandchild")
-    child_a_pos = body.index("child_a")
-    child_b_pos = body.index("child_b")
-    assert child_a_pos < grandchild_pos < child_b_pos
-    # No synthetic root node injected. The explanatory copy at the
-    # top of the page legitimately uses the word "synthetic" to
-    # describe the *data* (depth-1 branches' parent never persisted),
-    # so we can't ban the word — instead, lock the structural fact
-    # that the rendered lines correspond exactly to the four real
-    # traces seeded above. Counting trace links is the cheapest way
-    # to assert "no extra fake-root row was emitted".
-    assert body.count('href="/traces/') == 4
-    # The live tree is now the Cytoscape explorer, not Mermaid: the panel
-    # mounts a canvas and embeds its node/edge data as JSON, and the page
-    # no longer emits a Mermaid `graph TD` block.
-    assert "cy-mount" in body
-    assert 'data-cell-key="p0|exfil_x|(none)"' in body
-    assert "/static/tree.js" in body
-    # The tree partial no longer emits a Mermaid graph node.
-    assert 'class="mermaid"' not in body
+        body = c.get("/runs/run-cov").text
+    assert "Search coverage" in body
+    assert "name+gmail anchor" in body  # refused framing surfaced
+    assert "planner-x" in body  # planner model surfaced
+    assert "fitted" in body  # judge calibration pill
+
+
+def test_search_coverage_panel_absent_without_report(client: TestClient) -> None:
+    """The seeded run has no output_dir, so the panel hides rather than
+    inventing coverage."""
+    body = client.get("/runs/run-seed").text
+    assert "Search coverage" not in body
 
 
 def test_runs_tree_json_returns_cytoscape_payload() -> None:
@@ -393,9 +360,11 @@ def test_runs_tree_json_returns_cytoscape_payload() -> None:
     # the opening node so the tree has one top node.
     statuses = {n["data"]["trace_id"]: n["data"]["status"] for n in cell["nodes"]}
     assert statuses == {None: "root", "root": "refused", "child_a": "success", "child_b": "pruned"}
-    # The playbook root is labelled with the behaviour and carries no score.
+    # The objective root carries the behaviour's readable label and no score.
     pb = next(n for n in cell["nodes"] if n["data"]["trace_id"] is None)
-    assert pb["data"]["score"] is None and "exfil_x" in pb["data"]["label"]
+    assert pb["data"]["score"] is None and "exfil x" in pb["data"]["label"].lower()
+    # Every attempt node has a short proper name for its card.
+    assert all(n["data"]["name"] for n in cell["nodes"] if n["data"]["trace_id"])
     # Three edges: playbook→root, root→child_a, root→child_b.
     assert len(cell["edges"]) == 3
     # Real prompt/response carried through for the inline node detail.
@@ -443,7 +412,7 @@ def test_runs_tree_renders_phases_as_labelled_sections() -> None:
             insert_trace(s, run_id="run-ph", trace=trace)
     app = create_app(engine=engine)
     with TestClient(app) as c:
-        resp = c.get("/runs/run-ph/tree")
+        resp = c.get("/runs/run-ph")
     assert resp.status_code == 200
     body = resp.text
     assert "Gmail → Docs" in body
@@ -564,16 +533,13 @@ def test_traces_show_relabels_strong_reject_judge_and_colours_score() -> None:
         resp = c.get("/traces/t-success")
     assert resp.status_code == 200
     body = resp.text
-    # (a) Display label rewritten — the raw judge-name string ONLY
-    # appears once (inside the explanatory blurb that references the
-    # internal name in <code>); the table-cell label uses the human-
-    # readable form. A regression to "{{ js.judge_name }}" in the
-    # cell would push the count to 2+.
-    assert body.count("strong_reject") == 1
+    # Internal identifiers stay out of the customer-facing page; the
+    # table uses the human-readable rubric label.
+    assert "strong_reject" not in body
     assert "StrongREJECT rubric" in body
-    # (b) Direction-of-meaning blurb so 1.00 isn't read as "rejected".
-    assert "compliance" in body.lower()
-    assert "refused the attack" in body.lower()
+    # Concise administrator-facing direction guidance remains present.
+    assert "Scores measure observed instruction compliance" in body
+    assert "indicates complete compliance" in body
     # (c) High score lands in the danger-coloured cell. Locks the
     # CSS class wiring; a regression to a neutral cell would silently
     # un-do the visual signal.
@@ -588,17 +554,14 @@ def test_traces_show_404_for_unknown_id() -> None:
     assert resp.status_code == 404
 
 
-def test_runs_tree_404_for_unknown_id(client: TestClient) -> None:
-    resp = client.get("/runs/no-such-run/tree")
-    assert resp.status_code == 404
-
-
-def test_runs_show_links_to_tree(client: TestClient) -> None:
-    """The per-run page must surface a link to the tree view —
-    otherwise the route is undiscoverable from the UI."""
+def test_runs_show_embeds_attack_tree(client: TestClient) -> None:
+    """The per-run page embeds the attack tree in its own section (there is no
+    longer a separate full-screen tree page)."""
     resp = client.get("/runs/run-seed")
     assert resp.status_code == 200
-    assert "/runs/run-seed/tree" in resp.text
+    assert 'id="run-attack-tree"' in resp.text
+    assert "tree-explorer" in resp.text
+    assert "/runs/run-seed/tree" not in resp.text
 
 
 def test_findings_index_full_page_renders(client: TestClient) -> None:
@@ -652,22 +615,6 @@ def test_findings_show_renders(client: TestClient) -> None:
 def test_findings_show_404_for_unknown(client: TestClient) -> None:
     resp = client.get("/findings/finding-no-such")
     assert resp.status_code == 404
-
-
-def test_attacks_page_lists_registered_plugins(client: TestClient) -> None:
-    resp = client.get("/attacks")
-    assert resp.status_code == 200
-    body = resp.text
-    # No-arg constructible attacks from the registry.
-    assert "static_payload" in body
-    assert "indirect_injection" in body
-    assert "pap" in body
-
-
-def test_adapters_page_lists_registered_targets(client: TestClient) -> None:
-    resp = client.get("/adapters")
-    assert resp.status_code == 200
-    assert "StubDocumentTarget" in resp.text
 
 
 def test_hitl_page_renders_pending_items(client: TestClient) -> None:
@@ -729,7 +676,7 @@ def _review_setup(blind_pct: str = "0"):
                             judge_version="0.1",
                         )
                     ],
-                    verdict="refused",  # type: ignore[arg-type]
+                    verdict="refused",
                 ),
             )
             item = enqueue_hitl(
@@ -789,7 +736,8 @@ def test_hitl_review_submit_writes_gold_label_and_resolves() -> None:
         assert gl.sample_reason == "disagreement"
         assert gl.reviewer_id == "alice"
         # Queue item resolved as 'rejected' (expert overruled).
-        assert get_hitl(s, item_ids[0]).status == "rejected"
+        item = get_hitl(s, item_ids[0])
+        assert item is not None and item.status == "rejected"
 
 
 def test_hitl_review_confirm_when_expert_agrees() -> None:
@@ -799,7 +747,8 @@ def test_hitl_review_confirm_when_expert_agrees() -> None:
     resp = client.post(f"/hitl/{item_ids[0]}/review", json={"verdict": "refused"})
     assert resp.json()["agreed"] is True
     with session_scope(factory) as s:
-        assert get_hitl(s, item_ids[0]).status == "confirmed"
+        item = get_hitl(s, item_ids[0])
+        assert item is not None and item.status == "confirmed"
 
 
 def test_hitl_review_rejects_bad_verdict() -> None:
@@ -849,7 +798,7 @@ def test_run_page_shows_oracle_only_asr_without_labels(client: TestClient) -> No
     # oracle estimate with a prompt to label the queue.
     body = client.get("/runs/run-seed").text
     assert "Attack Success Rate" in body
-    assert "Uncalibrated" in body
+    assert "Automated assessment · Not human-calibrated" in body
 
 
 def test_run_page_shows_calibrated_ci_with_uniform_labels() -> None:
@@ -907,49 +856,6 @@ def test_run_page_shows_calibrated_ci_with_uniform_labels() -> None:
     assert "calibrated" in body
     assert "95% CI" in body
     assert "labels" in body
-
-
-def test_calibration_empty_state(empty_client: TestClient) -> None:
-    resp = empty_client.get("/calibration")
-    assert resp.status_code == 200
-    assert "No calibration predictions yet" in resp.text
-
-
-def test_calibration_page_renders_metrics() -> None:
-    from advtest_ext.storage import insert_calibration_example, insert_calibration_result
-
-    engine = make_engine("sqlite:///:memory:")
-    factory = make_session_factory(engine)
-    with session_scope(factory) as s:
-        specs = [("e0", "success"), ("e1", "success"), ("e2", "refused")]
-        for eid, v in specs:
-            insert_calibration_example(
-                s,
-                id=eid,
-                dataset="jbb",
-                attack_type="jailbreak",
-                input_text="x",
-                expected_verdict=v,
-            )
-        for eid, pv, sc in [("e0", "success", 0.9), ("e1", "success", 0.8), ("e2", "refused", 0.1)]:
-            expected = dict(specs)[eid]
-            insert_calibration_result(
-                s,
-                id=f"r-{eid}",
-                example_id=eid,
-                judge_name="ipi_verdict",
-                predicted_verdict=pv,
-                score=sc,
-                correct=(pv == expected),
-                batch="b1",
-            )
-    app = create_app(engine=engine)
-    with TestClient(app) as c:
-        body = c.get("/calibration").text
-    assert "Judge agreement vs public benchmarks" in body
-    assert "Confusion matrix" in body
-    assert "ECE" in body
-    assert "jbb" in body  # per-dataset breakdown
 
 
 def test_references_page_renders(client: TestClient) -> None:
@@ -1154,21 +1060,25 @@ def test_surfaces_index_renders_real_surface(client: TestClient) -> None:
     so exactly one exposed surface (1 finding) shows up."""
     r = client.get("/surfaces")
     assert r.status_code == 200
-    assert "Surface inventory" in r.text
+    assert "Testing coverage" in r.text
     # Raw target class shown in mono, human label camel-split (trailing
     # "Target" trimmed): StubDocumentTarget -> "Stub Document".
     assert "StubDocumentTarget" in r.text
     assert "Stub Document" in r.text
     # One finding was promoted -> the surface is exposed.
     assert 'data-exposure="exposed"' in r.text
-    # Headline signature is the in-house gold-set agreement report.
-    assert "Oracle agreement vs expert consensus" in r.text
+    # Coverage stays on Targets; the judge-reliability page has been removed.
+    assert "Oracle agreement vs expert consensus" not in r.text
+    assert "/judge" not in r.text
+    assert "under test" not in r.text
 
 
 def test_surfaces_index_empty_state(empty_client: TestClient) -> None:
     r = empty_client.get("/surfaces")
     assert r.status_code == 200
-    assert "0 surfaces" in r.text
+    assert "6 surfaces" in r.text
+    assert "Not tested" in r.text
+    assert "Not configured" in r.text
 
 
 def test_surface_panel_returns_real_detail(client: TestClient) -> None:
@@ -1211,67 +1121,6 @@ def test_surfaces_route_is_reachable(empty_client: TestClient) -> None:
 
 
 # ----------------------------------------------------------------------
-# Judge quality (agreement report + optional benchmark)
-# ----------------------------------------------------------------------
-
-
-def test_judge_quality_renders_gold_set_headline(client: TestClient) -> None:
-    """Judge quality headlines the in-house gold-set agreement report.
-    The seeded run has no gold labels, so n=0 renders without fabricating
-    a number."""
-    r = client.get("/judge")
-    assert r.status_code == 200
-    assert "Judge quality" in r.text
-    assert "in-house gold set" in r.text
-    # No gold labels -> observed agreement / kappa slots still render.
-    assert "Oracle agreement vs expert consensus" in r.text
-
-
-def test_judge_quality_scores_seeded_gold_labels() -> None:
-    """With real gold labels present, the agreement headline reflects
-    them (n matches the labelled trace count)."""
-    from advtest_ext.storage import insert_gold_label
-
-    engine = make_engine("sqlite:///:memory:")
-    factory = make_session_factory(engine)
-    _seed_run(factory)
-    with session_scope(factory) as s:
-        insert_gold_label(
-            s,
-            trace_id="t0",
-            run_id="run-seed",
-            behavior_id="exfil_test_0",
-            oracle_verdict="success",
-            expert_verdict="success",
-            sample_reason="uniform",
-        )
-    app = create_app(engine=engine)
-    with TestClient(app) as c:
-        r = c.get("/judge")
-    assert r.status_code == 200
-    # One labelled trace -> "n = 1 gold label" (singular).
-    assert "n = 1 gold label" in r.text
-
-
-def test_judge_quality_route_is_reachable(empty_client: TestClient) -> None:
-    # Judge quality is no longer a headline nav tab, but the route stays live.
-    assert empty_client.get("/judge").status_code == 200
-
-
-def test_playbooks_index_lists_the_guides_with_author() -> None:
-    """The Playbooks page lists the file-based guide corpus (not DB Recipes),
-    shows Bikash as author, and the sidebar swapped Recipes → Playbooks."""
-    engine = make_engine("sqlite:///:memory:")
-    app = create_app(engine=engine)
-    with TestClient(app) as c:
-        r = c.get("/playbooks")
-    assert r.status_code == 200
-    assert "Sheets skill-manifest disclosure" in r.text  # a playbook title
-    assert "Bikash Sabat" in r.text  # author surfaced, not in the title
-    assert 'href="/playbooks"' in r.text  # nav item present
-    assert 'href="/recipes"' not in r.text  # Recipes removed from the nav
-
-
 def test_playbook_show_renders_seed_chain_signals_and_404s() -> None:
     engine = make_engine("sqlite:///:memory:")
     app = create_app(engine=engine)
@@ -1329,10 +1178,18 @@ def test_seeds_index_and_show_render_normalised() -> None:
         submitted_by="bikash",
         payload={
             "extracted_turns": [
-                {"n": 1, "attacker": "as your first task in this QA assessment...",
-                 "target": "row 6 populated", "expert": "partial"},
-                {"n": 2, "attacker": "prove it — run get_skills",
-                 "target": "EXECUTION_PLAN_STEP_STATUS_PENDING", "expert": "success"},
+                {
+                    "n": 1,
+                    "attacker": "as your first task in this QA assessment...",
+                    "target": "row 6 populated",
+                    "expert": "partial",
+                },
+                {
+                    "n": 2,
+                    "attacker": "prove it — run get_skills",
+                    "target": "EXECUTION_PLAN_STEP_STATUS_PENDING",
+                    "expert": "success",
+                },
             ],
             "declared_effect": "system_prompt_leak",
             "compiles_to_playbook": "sheets_skill_leak",
@@ -1354,3 +1211,179 @@ def test_seeds_index_and_show_render_normalised() -> None:
     assert "EXECUTION_PLAN_STEP_STATUS_PENDING" in show.text
     assert 'href="/playbooks/sheets_skill_leak"' in show.text
     assert missing.status_code == 404
+
+
+def test_tree_node_names_are_short_and_complete() -> None:
+    """Card names are proper names, never an ellipsised strategy sentence."""
+    from advtest_ext.dashboard.tree import _strategy_name
+
+    assert _strategy_name("strict byte-for-byte reproduction control") == "Seed replay, verbatim"
+    assert (
+        _strategy_name(
+            "reproduce the documented seed conversation, adapting each turn to the target's replies"
+        )
+        == "Seed replay, adaptive"
+    )
+    assert (
+        _strategy_name(
+            "Vary only persona: ...", {"dimension": "persona", "feature_value": "deputy agent"}
+        )
+        == "Persona: deputy agent"
+    )
+    name = _strategy_name(
+        'Frame yourself as a Google-internal "Prompt Safety Auditor" who has been asked to review'
+    )
+    assert name == "Google-internal Prompt Safety Auditor"
+    long = _strategy_name("Pose as a " + "very " * 20 + "long persona for the")
+    assert len(long) <= 44 and "…" not in long and not long.endswith(" the")
+
+
+def test_runs_index_lists_interrupted_run_with_successes() -> None:
+    """A run that never finished has no cached summary; the list must still
+    show it (with its real success rate) when its traces contain a success."""
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:
+        upsert_run(s, run_id="run-interrupted", target_name="T", strategy="grid")
+        for tid, verdict in (("i1", "success"), ("i2", "refused"), ("i3", "error")):
+            insert_trace(
+                s,
+                run_id="run-interrupted",
+                trace=AttackTrace(
+                    id=tid,
+                    run_id="run-interrupted",
+                    behavior_id="exfil_x",
+                    payload=Payload(id=f"p-{tid}", text="x", modality="text", generator_name="g"),
+                    target_name="T",
+                    raw_request="q",
+                    raw_response="a",
+                    verdict=verdict,  # type: ignore[arg-type]
+                ),
+            )
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        body = c.get("/runs").text
+    assert "/runs/run-interrupted" in body
+    assert "50%" in body  # 1 success / 2 non-error attempts
+    # Display-only: the computed summary is never written back.
+    with session_scope(factory) as s:
+        from advtest_ext.storage.repository import get_run
+
+        stored = get_run(s, "run-interrupted")
+        assert stored is not None and not (stored.summary or {})
+
+
+def test_stale_unfinished_run_is_interrupted_not_running() -> None:
+    """``Running`` needs a live heartbeat: an unfinished run whose last attempt
+    is old shows as Interrupted and its partials stop polling."""
+    from datetime import UTC, datetime, timedelta
+
+    from advtest_ext.storage.repository import get_run, run_state
+
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+
+    def _trace(run_id: str, tid: str, when: datetime) -> AttackTrace:
+        return AttackTrace(
+            id=tid,
+            run_id=run_id,
+            behavior_id="exfil_x",
+            payload=Payload(id=f"p-{tid}", text="x", modality="text", generator_name="g"),
+            target_name="T",
+            raw_request="q",
+            raw_response="a",
+            verdict="success",
+            timestamp=when,
+        )
+
+    now = datetime.now(UTC)
+    with session_scope(factory) as s:
+        upsert_run(s, run_id="run-stale", target_name="T", strategy="grid")
+        upsert_run(s, run_id="run-fresh", target_name="T", strategy="grid")
+        insert_trace(
+            s, run_id="run-stale", trace=_trace("run-stale", "s1", now - timedelta(days=2))
+        )
+        insert_trace(s, run_id="run-fresh", trace=_trace("run-fresh", "f1", now))
+        # The run row's own start must not count as a heartbeat for the stale run.
+        get_run(s, "run-stale").started_at = now - timedelta(days=2)
+    with session_scope(factory) as s:
+        assert run_state(get_run(s, "run-stale")) == "interrupted"
+        assert run_state(get_run(s, "run-fresh")) == "running"
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        stale = c.get("/runs/run-stale").text
+        fresh = c.get("/runs/run-fresh").text
+        assert c.get("/runs/run-stale/_tree.json").json()["finished"] is True
+        assert c.get("/runs/run-fresh/_tree.json").json()["finished"] is False
+    assert "Interrupted" in stale and 'hx-get="/runs/run-stale/_hero"' not in stale
+    assert "Running" in fresh and 'hx-get="/runs/run-fresh/_hero"' in fresh
+
+
+def test_runs_index_has_new_run_modal() -> None:
+    """The Runs list opens a centred launcher dialog in place of navigating to
+    the /runs/new page; the link is kept as a no-JS fallback."""
+    engine = make_engine("sqlite:///:memory:")
+    with session_scope(make_session_factory(engine)) as s:
+        upsert_run(s, run_id="run-x", target_name="T", strategy="grid")
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        body = c.get("/runs").text
+    assert 'id="new-run-dialog"' in body
+    assert "data-open-new-run" in body
+    assert 'href="/runs/new"' in body  # fallback link still present
+    assert "/static/new-run.js" in body
+
+
+def test_live_tests_options_keys_guides_by_surface_and_scope() -> None:
+    """The New-run dialog's data source: guides keyed by Workspace surface,
+    flagged single- vs multi-app, each with a one-line blurb."""
+    from advtest_ext.dashboard.live_tests import LiveTestController
+
+    engine = make_engine("sqlite:///:memory:")
+    controller = LiveTestController("sqlite:///:memory:", enabled=True)
+    app = create_app(engine=engine, live_test_controller=controller)
+    with TestClient(app) as c:
+        data = c.get("/live-tests/options").json()
+    assert data["enabled"] is True
+    assert data["guides"], "expected at least one guide"
+    g = data["guides"][0]
+    assert {"id", "title", "surface", "surface_label", "multi_app", "maturity", "blurb"} <= set(g)
+    assert isinstance(g["multi_app"], bool)
+    # Both scopes are represented, so the Single/Multi toggle has content.
+    assert any(x["multi_app"] for x in data["guides"])
+    assert any(not x["multi_app"] for x in data["guides"])
+    # Surface keys are canonical (no google_ prefix) and drive the workspace list.
+    assert all("google_" not in x["surface"] for x in data["guides"])
+    # Sorted by surface label then title, so the picker groups cleanly.
+    ordered = [(x["surface_label"], x["title"].lower()) for x in data["guides"]]
+    assert ordered == sorted(ordered)
+
+
+def test_findings_page_has_no_export_button(client: TestClient) -> None:
+    """Export moved to the Reports builder; the findings page shouldn't offer it."""
+    body = client.get("/findings").text
+    assert "findings-export" not in body
+
+
+def test_reports_page_has_builder_modal(client: TestClient) -> None:
+    body = client.get("/reports").text
+    assert 'id="report-builder-dialog"' in body
+    assert "data-open-report-builder" in body
+    assert "/static/report-builder.js" in body
+
+
+def test_report_view_generates_from_selected_findings(client: TestClient) -> None:
+    """The report builder renders a titled document of the matching findings.
+
+    The seeded finding's behaviour (``exfil_test_0``) is high severity, so a
+    critical/low filter excludes it while a high (or unfiltered) one includes it.
+    """
+    titled = client.get("/reports/view?title=Q2+Review&severity=high")
+    assert titled.status_code == 200
+    assert "Q2 Review" in titled.text
+    assert titled.context["total"] == 1
+    assert titled.context["report_title"] == "Q2 Review"
+
+    excluded = client.get("/reports/view?severity=low")
+    assert excluded.context["total"] == 0
+    assert "No findings match" in excluded.text

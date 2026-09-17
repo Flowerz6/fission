@@ -122,6 +122,8 @@ class GmailTarget(DocumentTarget):
         # first ``invoke`` so api_mode-only callers never pay the
         # Chrome-startup cost. Mirrors the Docs adapter.
         self._ui_session: Any = None
+        self._fresh_conversation = True
+        self._api_history: list[Any] = []
 
     # ------------------------------------------------------------------
     # DocumentTarget surface
@@ -244,7 +246,9 @@ class GmailTarget(DocumentTarget):
                         trace_id=context.context_id,
                         output_dir=self._ui_output_dir,
                         external_page=session_page,
+                        continue_conversation=not self._fresh_conversation,
                     )
+                    self._fresh_conversation = False
                     break
                 except SidePanelUnavailable:
                     raise
@@ -266,8 +270,13 @@ class GmailTarget(DocumentTarget):
         from advtest_ext.providers.base import ChatMessage
 
         prompt = (user_prompt or self._user_prompt).strip()
-        full_prompt = f"{prompt}\n\n--- Email thread ---\n{thread_text}"
-        chat_resp = await self._provider.complete([ChatMessage(role="user", content=full_prompt)])
+        full_prompt = (
+            f"{prompt}\n\n--- Email thread ---\n{thread_text}" if not self._api_history else prompt
+        )
+        self._api_history.append(ChatMessage(role="user", content=full_prompt))
+        chat_resp = await self._provider.complete(list(self._api_history))
+        self._api_history.append(ChatMessage(role="assistant", content=chat_resp.text))
+        self._fresh_conversation = False
         return Response(
             text=chat_resp.text,
             complied=None,
@@ -279,6 +288,11 @@ class GmailTarget(DocumentTarget):
                 "model_id": chat_resp.model_id,
             },
         )
+
+    def reset(self) -> None:
+        """Start a fresh Gmail conversation on the next invocation."""
+        self._fresh_conversation = True
+        self._api_history.clear()
 
     async def close(self) -> None:
         """Run-level teardown for the long-lived Playwright session,
@@ -301,6 +315,13 @@ class GmailTarget(DocumentTarget):
         # the trash semantics are friendlier for incidental adversarial
         # artifacts in a personal inbox).
         gmail.users().threads().trash(userId="me", id=thread_id).execute()
+
+    def bind_carrier(self, **bindings: Any) -> None:
+        thread_id = bindings.get("thread_id")
+        if not isinstance(thread_id, str) or not thread_id:
+            raise ValueError("Gmail carrier binding requires thread_id")
+        self._thread_id = thread_id
+        self.reset()
 
     def capabilities(self) -> DocumentCapabilities:
         return DocumentCapabilities(

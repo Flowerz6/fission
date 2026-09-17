@@ -25,17 +25,17 @@ def test_surface_construct_with_required_fields() -> None:
 
 def test_surface_rejects_unknown_app() -> None:
     with pytest.raises(ValidationError):
-        Surface(app="not_a_real_app", region="sidebar", account_role="recipient")
+        Surface(app="not_a_real_app", region="sidebar", account_role="recipient")  # type: ignore[arg-type]
 
 
 def test_surface_rejects_unknown_region() -> None:
     with pytest.raises(ValidationError):
-        Surface(app="docs", region="some_made_up_region", account_role="recipient")
+        Surface(app="docs", region="some_made_up_region", account_role="recipient")  # type: ignore[arg-type]
 
 
 def test_surface_rejects_unknown_account_role() -> None:
     with pytest.raises(ValidationError):
-        Surface(app="docs", region="sidebar", account_role="evil_overlord")
+        Surface(app="docs", region="sidebar", account_role="evil_overlord")  # type: ignore[arg-type]
 
 
 def test_surface_str_repr_without_document_id() -> None:
@@ -58,12 +58,12 @@ def test_surface_is_frozen() -> None:
     without worrying about mutation breaking the hash."""
     s = Surface(app="docs", region="sidebar", account_role="recipient")
     with pytest.raises(ValidationError):
-        s.app = "gmail"  # type: ignore[misc]
+        s.app = "gmail"
 
 
 def test_surface_rejects_extra_fields() -> None:
     with pytest.raises(ValidationError):
-        Surface(
+        Surface(  # type: ignore[call-arg]
             app="docs",
             region="sidebar",
             account_role="recipient",

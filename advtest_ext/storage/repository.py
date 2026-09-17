@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import case, desc, func, select
@@ -73,7 +73,12 @@ def upsert_run(
     run.target_name = target_name
     run.strategy = strategy
     if config is not None:
-        run.config = config.model_dump(mode="json")
+        saved_names = {
+            key: run.config[key]
+            for key in ("display_name", "run_name")
+            if (run.config or {}).get(key)
+        }
+        run.config = {**config.model_dump(mode="json"), **saved_names}
     if output_dir is not None:
         run.output_dir = output_dir
     return run
@@ -315,8 +320,148 @@ def enqueue_hitl(
 # ----------------------------------------------------------------------
 
 
-def list_runs(session: Session, *, limit: int = 100) -> list[Run]:
-    return list(session.scalars(select(Run).order_by(desc(Run.started_at)).limit(limit)))
+def list_runs(session: Session, *, limit: int = 100, guide_id: str | None = None) -> list[Run]:
+    stmt = select(Run).order_by(desc(Run.started_at))
+    if guide_id is not None:
+        stmt = stmt.where(Run.guide_id == guide_id)
+    return list(session.scalars(stmt.limit(limit)))
+
+
+# A run with no finish time and no new attempt for this long is not running:
+# its process died or was stopped. UI-mode turns take a few minutes at most.
+RUN_STALE_AFTER = timedelta(minutes=15)
+
+
+def run_is_active(run: Run, *, now: datetime | None = None) -> bool:
+    """Whether a run is running RIGHT NOW, not merely unfinished.
+
+    ``finished_at`` is only written on a clean finish, so an interrupted run
+    stays "unfinished" forever. Treat a run as active only while it still has
+    a heartbeat: its latest attempt (or its start, before the first attempt)
+    is within ``RUN_STALE_AFTER``."""
+    from sqlalchemy.orm import object_session
+
+    if run.finished_at is not None:
+        return False
+    last = run.started_at
+    session = object_session(run)
+    if session is not None:
+        latest = session.scalar(select(func.max(Trace.timestamp)).where(Trace.run_id == run.id))
+        last = latest or last
+    if last is None:
+        return False
+    if last.tzinfo is None:  # SQLite hands back naive UTC
+        last = last.replace(tzinfo=UTC)
+    return (now or datetime.now(UTC)) - last <= RUN_STALE_AFTER
+
+
+def run_state(run: Run) -> str:
+    """``completed`` | ``running`` | ``interrupted`` for status pills."""
+    if run.finished_at is not None:
+        return "completed"
+    return "running" if run_is_active(run) else "interrupted"
+
+
+def hydrate_missing_summaries(session: Session, runs: list[Run]) -> list[Run]:
+    """Give runs with no cached summary one computed from their traces.
+
+    The orchestrator only writes ``Run.summary`` when a run finishes, so an
+    interrupted run reads as 0 attempts / 0% ASR and the presentation views
+    (which hide zero-ASR runs) drop it even when it found successes. Same
+    formula as ``orch_summary``: successes over non-error attempts. The value
+    is set as already-committed state: display only, never written back."""
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    missing = [run for run in runs if "overall_asr" not in (run.summary or {})]
+    if not missing:
+        return runs
+    counts = session.execute(
+        select(
+            Trace.run_id,
+            func.count(Trace.id),
+            func.sum(case((Trace.verdict == "success", 1), else_=0)),
+            func.sum(case((Trace.verdict == "error", 1), else_=0)),
+        )
+        .where(Trace.run_id.in_([run.id for run in missing]))
+        .group_by(Trace.run_id)
+    ).all()
+    by_run = {run_id: (total, int(ok or 0), int(err or 0)) for run_id, total, ok, err in counts}
+    for run in missing:
+        total, ok, err = by_run.get(run.id, (0, 0, 0))
+        counted = total - err
+        set_committed_value(
+            run,
+            "summary",
+            {
+                **(run.summary or {}),
+                "total_traces": total,
+                "successful_traces": ok,
+                "overall_asr": (ok / counted) if counted else 0.0,
+            },
+        )
+    return runs
+
+
+def upsert_guide_variant(
+    session: Session,
+    *,
+    variant_id: str,
+    guide_id: str,
+    behavior_id: str,
+    seed_chain: list[dict[str, Any]],
+    provenance: dict[str, Any],
+    status: str = "candidate",
+) -> Any:
+    """Insert a proven variant of a guide, or upgrade an existing one's status.
+    Idempotent on ``variant_id`` (a trajectory hash): a re-harvested win is not
+    duplicated, but its status can advance (candidate → verified_by_reproduction).
+    """
+    from advtest_ext.storage.models import GuideVariant
+
+    row = session.get(GuideVariant, variant_id)
+    if row is None:
+        row = GuideVariant(
+            id=variant_id,
+            guide_id=guide_id,
+            behavior_id=behavior_id,
+            status=status,
+            seed_chain=seed_chain,
+            provenance=provenance,
+        )
+        session.add(row)
+        return row
+    # Existing: only ever advance the status / refresh provenance, keep the chain.
+    if status != "candidate":
+        row.status = status
+        row.provenance = {**row.provenance, **provenance}
+    return row
+
+
+def list_guide_variants(
+    session: Session, *, guide_id: str | None = None, status: str | None = None, limit: int = 500
+) -> list[Any]:
+    from advtest_ext.storage.models import GuideVariant
+
+    stmt = select(GuideVariant).order_by(desc(GuideVariant.created_at))
+    if guide_id is not None:
+        stmt = stmt.where(GuideVariant.guide_id == guide_id)
+    if status is not None:
+        stmt = stmt.where(GuideVariant.status == status)
+    return list(session.scalars(stmt.limit(limit)))
+
+
+def get_guide_variant(session: Session, variant_id: str) -> Any:
+    from advtest_ext.storage.models import GuideVariant
+
+    return session.get(GuideVariant, variant_id)
+
+
+def set_run_guide(session: Session, *, run_id: str, guide_id: str) -> None:
+    """Tag a Run with the guide it was launched from. No-op if the row is
+    missing. Idempotent — overwrites with the same value on a re-run."""
+    run = session.get(Run, run_id)
+    if run is not None:
+        run.guide_id = guide_id
 
 
 def get_run(session: Session, run_id: str) -> Run | None:
@@ -339,13 +484,26 @@ def list_traces_for_run(session: Session, run_id: str, *, limit: int = 1000) -> 
     )
 
 
+def finding_run_seq_map(session: Session, run_ids: list[str] | None = None) -> dict[str, int]:
+    """Map each finding id to its 1-based position within its own run, ordered by
+    promotion time. Gives every finding a stable, human "Finding N of run X"
+    number derived from the existing run relationship — no stored counter."""
+    seq = func.row_number().over(
+        partition_by=Finding.run_id, order_by=(Finding.promoted_at, Finding.id)
+    )
+    stmt = select(Finding.id, seq)
+    if run_ids:
+        stmt = stmt.where(Finding.run_id.in_(list(run_ids)))
+    return {fid: int(n) for fid, n in session.execute(stmt)}
+
+
 def list_findings(
     session: Session,
     *,
     run_id: str | None = None,
     severity: str | None = None,
     behavior_id: str | None = None,
-    limit: int = 200,
+    limit: int | None = 200,
 ) -> list[Finding]:
     stmt = select(Finding).order_by(desc(Finding.promoted_at))
     if run_id is not None:
@@ -983,6 +1141,7 @@ __all__ = [
     "count_hitl",
     "enqueue_hitl",
     "finalize_run",
+    "finding_run_seq_map",
     "get_finding",
     "get_gold_label",
     "get_hitl",

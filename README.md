@@ -9,6 +9,17 @@ Extracted from a PyRIT fork into a standalone package; it re-implements its own
 attack/target/judge/provider abstractions and depends on PyRIT only as an
 optional interop extra (a single `TYPE_CHECKING` import).
 
+## Where do I start?
+
+New here, or returning after a break? Read these four, in order:
+
+1. [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) — install, configure, run your first attack + dashboard.
+2. [docs/ACCOUNTS_AND_AUTH.md](docs/ACCOUNTS_AND_AUTH.md) — sign in the Google/Outlook test accounts.
+3. [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md) — find your way around the code.
+4. [docs/MILESTONES.md](docs/MILESTONES.md) — the ordered plan of what to build next.
+
+[docs/README.md](docs/README.md) indexes every doc.
+
 ## Layout
 
 ```

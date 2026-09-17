@@ -32,16 +32,41 @@ class GuideSuccess(BaseModel):
 
     signals: list[dict[str, Any]] = Field(default_factory=list)
     rubric: str | None = None
+    weights: dict[str, float] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _needs_an_oracle(self) -> GuideSuccess:
         if not self.signals and not self.rubric:
             raise ValueError("success needs at least one signal or a rubric")
+        signal_names = {str(spec.get("name") or spec.get("kind")) for spec in self.signals}
+        unknown = set(self.weights) - signal_names
+        if unknown:
+            raise ValueError(f"weights reference unknown signals: {sorted(unknown)}")
+        if any(not 0.0 <= weight <= 1.0 for weight in self.weights.values()):
+            raise ValueError("signal weights must be in [0, 1]")
         return self
 
 
-_App = Literal["google_docs", "gmail", "google_sheets", "outlook", "tool_use_agent", "agentdojo"]
+_App = Literal[
+    "google_docs",
+    "gmail",
+    "google_sheets",
+    "google_slides",
+    "google_calendar",
+    "google_drive",
+    "outlook",
+    "tool_use_agent",
+    "agentdojo",
+]
 _AccountRole = Literal["recipient", "attacker_sender", "attacker", "victim", "self"]
+_MutationDimension = Literal[
+    "framing",
+    "turn_order",
+    "persona",
+    "carrier_placement",
+    "escalation_speed",
+    "wording",
+]
 
 # Guide app name -> Recipe-Runner operation-registry region key. The runner
 # registers ops under short region keys ("docs"), not the guide's app enum.
@@ -49,6 +74,9 @@ _APP_REGION: dict[str, str] = {
     "google_docs": "docs",
     "gmail": "gmail",
     "google_sheets": "sheets",
+    "google_slides": "slides",
+    "google_calendar": "calendar",
+    "google_drive": "drive",
     "outlook": "outlook",
     "tool_use_agent": "tool_use_agent",
     "agentdojo": "agentdojo",
@@ -81,7 +109,9 @@ class GuideStep(BaseModel):
     intent: str  # one-line operator-vocabulary description
     app: _App
     account_role: _AccountRole = "recipient"
-    operation: str  # must resolve to a registered (region, operation) — see validate_setup_operations
+    operation: (
+        str  # must resolve to a registered (region, operation) — see validate_setup_operations
+    )
     params: dict[str, Any] = Field(default_factory=dict)
 
     @property
@@ -98,6 +128,65 @@ class GuideProvenance(BaseModel):
     created: str | None = None  # ISO date
     worked_on: str | None = None  # model/version it succeeded against
     license: str = "internal"
+
+
+class GuideEvidence(BaseModel):
+    """A source artefact retained for verification, never attacker steering."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["screenshot", "transcript", "payload_source", "finding", "control"]
+    path: str
+    description: str
+    evidence_only: Literal[True] = True
+
+
+class GuideSetupVerification(BaseModel):
+    """Fail-closed carrier checks run after staging and before TAP."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    required_outputs: list[str] = Field(default_factory=list)
+    probe_prompt: str | None = None
+    expected_pattern: str | None = None
+    attempts: int = Field(default=3, ge=1, le=10)
+
+    @model_validator(mode="after")
+    def _probe_is_complete(self) -> GuideSetupVerification:
+        if bool(self.probe_prompt) != bool(self.expected_pattern):
+            raise ValueError("probe_prompt and expected_pattern must be supplied together")
+        return self
+
+
+class GuideMutationOperator(BaseModel):
+    """One explicit, mechanism-preserving mutation operator."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    dimension: _MutationDimension
+    description: str
+    mutable_fields: list[str] = Field(default_factory=list)
+    # Which part of the planted carrier this operator's proposal supplies. With
+    # "cover" the attacker generates ONLY a new benign document and the guide's
+    # carrier_payload is re-appended deterministically; with "payload" it
+    # generates ONLY a new injected instruction and the seed's benign cover is
+    # kept. Either way the planted document is assembled in code, so a weak
+    # attacker model can never drop the payload. "full" (the default) keeps the
+    # legacy behaviour: the proposal is the whole carrier field verbatim.
+    carrier_role: Literal["full", "cover", "payload"] = "full"
+    allowed_transformations: list[str] = Field(default_factory=list)
+    forbidden_changes: list[str] = Field(default_factory=list)
+    dependent_invariants: list[str] = Field(default_factory=list)
+    cell_values: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _is_actionable(self) -> GuideMutationOperator:
+        if not self.name.strip() or not self.description.strip():
+            raise ValueError("mutation operator name and description must be non-empty")
+        if self.dimension == "carrier_placement" and not self.mutable_fields:
+            raise ValueError("carrier_placement operators require mutable_fields")
+        return self
 
 
 class Guide(BaseModel):
@@ -124,6 +213,18 @@ class Guide(BaseModel):
     # carrier doc, drive side panel), each bound to a real Runner operation so
     # the playbook can be replayed. Empty for pure single-surface guides.
     setup_steps: list[GuideStep] = Field(default_factory=list)
+    setup_verification: GuideSetupVerification | None = None
+
+    # Exact carrier/payload material; source preserves byte-for-byte originals.
+    carrier_payload: str | None = None
+    carrier_payload_source: str | None = None
+
+    # Tree-search controls beyond the binary success oracle. Partial signals
+    # steer pruning but are never promoted into final-success signals.
+    partial_success: GuideSuccess | None = None
+    branch_suggestions: list[str] = Field(default_factory=list)
+    stop_conditions: list[str] = Field(default_factory=list)
+    refusal_conditions: list[str] = Field(default_factory=list)
 
     # --- generalisation bounds (report Table 2: what makes automated variant
     # generation safe — gate G1 checks a variant against these) ---
@@ -131,19 +232,59 @@ class Guide(BaseModel):
     # playbook (phrasing, turn order, persona labels, carrier text). Empty
     # means the playbook has not opted any facet in — nothing is mutable.
     mutation_surface: list[str] = Field(default_factory=list)
+    mutation_operators: list[GuideMutationOperator] = Field(default_factory=list)
     # What must remain true for a Variant to still BE this attack (the frame,
     # the probe, the effect). A variant that breaks an invariant is a
     # different attack, not a variant of this one.
     invariants: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _mutation_operator_names_are_unique(self) -> Guide:
+        names = [operator.name for operator in self.mutation_operators]
+        if len(names) != len(set(names)):
+            raise ValueError("mutation operator names must be unique")
+        known = set(self.invariants)
+        unknown = {
+            invariant
+            for operator in self.mutation_operators
+            for invariant in operator.dependent_invariants
+            if invariant not in known
+        }
+        if unknown:
+            raise ValueError(
+                f"mutation operators reference undeclared invariants: {sorted(unknown)}"
+            )
+        step_ids = {step.id for step in self.setup_steps}
+        for operator in self.mutation_operators:
+            if operator.dimension == "carrier_placement" and not self.setup_steps:
+                raise ValueError("carrier_placement operators require executable setup_steps")
+            for path in operator.mutable_fields:
+                tokens = path.split(".")
+                if tokens[0] not in type(self).model_fields:
+                    raise ValueError(f"mutation operator references unknown Guide field: {path}")
+                if tokens[0] == "setup_steps" and (len(tokens) < 2 or tokens[1] not in step_ids):
+                    raise ValueError(f"mutation operator references unknown setup step: {path}")
+        return self
 
     # --- grounding knobs the attacker/judge already accept ---
     entity: str | None = None
     canary: str | None = None
     focus: str | None = None
 
+    # --- lifecycle tier ---
+    # "discovery": a new/unproven attack — success is judged by the LLM rubric, its
+    # deterministic signal may still be a coarse hypothesis, and results are
+    # candidates until reproduced. "gold": a trusted attack — a human-authored real
+    # capture, or a discovery guide that reproduced across multiple fresh sessions
+    # (confirm_n signal-verified successes) with a precise signal. New guides default
+    # to discovery and are held to relaxed completeness; gold guides are held strictly.
+    maturity: Literal["discovery", "gold"] = "discovery"
+
     # --- housekeeping ---
     provenance: GuideProvenance
     tags: list[str] = Field(default_factory=list)
+
+    evidence: list[GuideEvidence] = Field(default_factory=list)
 
 
 def validate_setup_operations(guide: Guide, registry: Any = None) -> None:
@@ -175,7 +316,7 @@ def content_hash(guide: Guide) -> str:
     the same (dedup), and any change to the attack itself changes the hash.
     Recorded on a run so a finding is attributable to exactly which guide
     (+ version) produced it."""
-    payload = guide.model_dump(mode="json", exclude={"id", "title", "provenance"})
+    payload = guide.model_dump(mode="json", exclude={"id", "title", "provenance", "maturity"})
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
@@ -190,7 +331,10 @@ def display_title(guide: Guide) -> str:
 
 __all__ = [
     "Guide",
+    "GuideEvidence",
+    "GuideMutationOperator",
     "GuideProvenance",
+    "GuideSetupVerification",
     "GuideStep",
     "GuideSuccess",
     "GuideTarget",

@@ -1,0 +1,67 @@
+# Hybrid provider profile: LOCAL attacker/strategist + CLAUDE judge.
+#
+# Why: Claude as the attacker is safety-tuned — it hedges, softens, and over-
+# explains hard attack turns. A local (less-aligned) model pushes harder and
+# sounds more like a real user. Claude stays as the JUDGE, where alignment +
+# reasoning quality actually help (accurate, non-over-calling verdicts).
+#
+# This matches the intended setup: point CLAUDE_ATTACKER's endpoint at the
+# vast.ai 70b when it's up (bigger = harder AND smarter); until then it uses the
+# local 7b. Only the attacker endpoint/model changes — the judge stays Claude.
+#
+# Switch: set ADVTEST_PROVIDER_CONFIG=configs/hybrid.yaml (see .env).
+# Needs Anthropic credit for the judge, and a running local/vast.ai server for
+# the attacker (scripts/start_vllm.sh dev for local).
+
+# --- The attacker / strategist: LOCAL (the "harder", less-soft driver) --------
+# Point endpoint at the vast.ai 70b when available, e.g.
+#   endpoint: http://<vast-host>:<port>/v1
+#   model_id: qwen2.5:72b-instruct   (or llama3.3:70b)
+CLAUDE_ATTACKER:
+  provider_type: local_vllm
+  endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
+  model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
+  max_tokens: 512
+  temperature: 1.0
+
+# --- The judge: CLAUDE (accurate scoring, doesn't over-call success) ----------
+CLAUDE_JUDGE:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-5
+  max_tokens: 512
+  temperature: 0.0
+
+JUDGE_MODEL:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-5
+  max_tokens: 256
+  temperature: 0.0
+
+# --- Candidate/on-mechanism checker: CLAUDE HAIKU ------------------------------
+# Validates each proposed mutation against the guide's hard invariants (VALID/
+# INVALID vote). The local 7b was too weak here — it voted non-VALID on every
+# candidate, so the hard-invariant gate rejected all mutations and the tree never
+# branched. Haiku is cheap, fast, reliable at this call, and independent from the
+# qwen attacker (no self-grading).
+CHECKER_MODEL:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-haiku-4-5-20251001
+  max_tokens: 16
+  temperature: 0.0
+
+ATTACKER_MODEL:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 512
+  temperature: 0.7
+
+TARGET_MODEL_DEV:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 1024
+  temperature: 0.7

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -140,3 +141,14 @@ def test_estimate_paid_cost_known_model() -> None:
 
 def test_estimate_paid_cost_unknown_model_returns_zero() -> None:
     assert estimate_paid_cost_usd("openai", "gpt-unobtainium", 1000, 500) == 0.0
+
+
+def test_anthropic_usage_includes_estimated_cost() -> None:
+    provider = AnthropicProvider(
+        ProviderConfig(provider_type="anthropic", model_id="claude-sonnet-test")
+    )
+    response = SimpleNamespace(usage=SimpleNamespace(input_tokens=1000, output_tokens=100))
+    usage = provider._extract_usage(response)
+    assert usage.prompt_tokens == 1000
+    assert usage.completion_tokens == 100
+    assert usage.cost_usd > 0

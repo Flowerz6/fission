@@ -8,7 +8,7 @@ branches by node, and non-multi-turn traces pass through untouched.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from advtest_ext.dashboard.tree import build_tree_forest, collapse_conversations
 
@@ -80,7 +80,7 @@ def test_tap_crescendo_branches_by_node() -> None:
     # And the forest links them: root has 2 children.
     forest = build_tree_forest(nodes)
     assert len(forest) == 1
-    cell = forest[0]
+    cell = cast(dict[str, Any], forest[0])
     assert cell["n_traces"] == 3  # conversations, not turns
     assert cell["n_success"] == 1
     assert len(cell["roots"]) == 1

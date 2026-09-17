@@ -1,4 +1,4 @@
-"""25 concrete hiding techniques, one class each.
+"""28 concrete hiding techniques, one class each.
 
 Grouped by mechanism class:
 
@@ -11,8 +11,8 @@ Grouped by mechanism class:
   suggested_edit, table_cell_hidden, image_alt_text, document_metadata,
   citation_block, table_of_contents, linked_content
 * Semantic / encoded text:
-  encoded_payload, multilingual, role_confusion, tool_format_mimicry,
-  markdown_injection
+  encoded_payload, task_in_prompt, multilingual, role_confusion,
+  tool_format_mimicry, markdown_injection
 * Cross-resource / rendering:
   cross_document_chain, image_rendering_exfil
 
@@ -697,6 +697,58 @@ class EncodedPayload(HidingTechniqueImpl):
         return out
 
 
+class TaskInPromptCarrier(HidingTechniqueImpl):
+    """Task-in-Prompt (TIP) carrier — plant ``x_task + E(u)``.
+
+    Distinct from :class:`EncodedPayload`, which embeds a bare encoded blob and
+    hopes the target decodes it. TIP embeds an explicit *task*: "this is
+    Base64 / a Caesar cipher — decode it and follow the result." The visible
+    surface is a benign decode exercise, so keyword and classifier filters that
+    scan the rendered text miss the instruction; the model decodes and acts in
+    one step. ``depersonalise`` reframes the ask as a third party's, the
+    paper's second lever. Berezin et al., arXiv:2501.18626.
+
+    ``encoding`` is any :func:`advtest_ext.attacks.tip_encoding.supported_schemes`
+    value (base64 / caesar / rot13 / atbash / morse), so several instances with
+    different schemes can be registered side by side."""
+
+    id: ClassVar[str] = "task_in_prompt"
+    name: ClassVar[str] = "Task-in-Prompt decode-and-act carrier"
+    description: ClassVar[str] = (
+        "Embed the payload as an encoded 'decode this and follow it' task "
+        "(x_task + E(u)); the visible surface is a benign decoding exercise."
+    )
+    references: ClassVar[list[str]] = ["berezin2025tip"]
+    attack_class: ClassVar[AttackClass] = "encoded"
+    applies_to: ClassVar[list[str]] = ["body_blocks"]
+    requires_capability: ClassVar[list[str]] = []
+
+    def __init__(self, encoding: str = "base64", *, depersonalise: bool = False) -> None:
+        from advtest_ext.attacks.tip_encoding import supported_schemes
+
+        if encoding not in supported_schemes():
+            raise ValueError(f"unknown TIP encoding {encoding!r}; supported: {supported_schemes()}")
+        self._encoding = encoding
+        self._depersonalise = depersonalise
+        super().__init__()
+
+    @property
+    def encoding(self) -> str:
+        return self._encoding
+
+    def apply(self, document: AbstractDocument, payload: Payload) -> AbstractDocument:
+        from advtest_ext.attacks.tip_encoding import tip_transform
+
+        out = _clone(document)
+        out.body_blocks.append(
+            TextBlock(
+                text=tip_transform(payload.text, self._encoding, depersonalise=self._depersonalise),
+                hidden=self._marker(payload),
+            )
+        )
+        return out
+
+
 class Multilingual(HidingTechniqueImpl):
     id: ClassVar[str] = "multilingual"
     name: ClassVar[str] = "Multilingual instruction"
@@ -923,7 +975,7 @@ class ImageRenderingExfil(HidingTechniqueImpl):
 
 
 def build_default_techniques() -> dict[str, HidingTechniqueImpl]:
-    """Build the canonical 27-technique registry. Returns a fresh
+    """Build the canonical 28-technique registry. Returns a fresh
     dict on each call so callers can mutate without poisoning a
     module-level shared registry."""
     techniques: list[HidingTechniqueImpl] = [
@@ -948,6 +1000,7 @@ def build_default_techniques() -> dict[str, HidingTechniqueImpl]:
         TableOfContentsCarrier(),
         LinkedContentCarrier(),
         EncodedPayload(encoding="base64"),
+        TaskInPromptCarrier(encoding="base64"),
         Multilingual(),
         RoleConfusion(),
         ToolFormatMimicry(),
@@ -979,6 +1032,7 @@ __all__ = [
     "SuggestedEditCarrier",
     "TableCellHidden",
     "TableOfContentsCarrier",
+    "TaskInPromptCarrier",
     "TextBoxOffscreen",
     "TinyFont",
     "ToolFormatMimicry",

@@ -131,6 +131,13 @@ def test_entity_falls_back_to_id_when_absent() -> None:
     assert kw["topic"] is None  # no entity -> no topic steering
 
 
+def test_default_focus_matches_target_app_instead_of_legacy_mail_hint() -> None:
+    data = {**_FULL, "focus": None}
+    kw = map_guide(_guide(data)).attack_kwargs
+    assert "spreadsheet" in kw["focus"].lower()
+    assert "gmail" not in kw["focus"].lower()
+
+
 def test_exemplar_turns_become_a_seed_chain() -> None:
     kw = map_guide(_guide(_FULL)).attack_kwargs
     assert kw["seed_chain"] == [
@@ -202,7 +209,7 @@ class _Fake:
 
 def test_build_attack_constructs_a_configured_tap_crescendo() -> None:
     plan = map_guide(_guide(_FULL))
-    attack = plan.build_attack(attacker=_Fake(), judge=_Fake(), max_depth=1, branching_factor=1)
+    attack = plan.build_attack(attacker=_Fake(), judge=_Fake(), max_depth=1, branching_factor=1)  # type: ignore[arg-type]
     assert attack.name == "tap_crescendo"
     assert attack._entity == "QA_Assessment"
     assert attack._seed_chain == [
@@ -216,8 +223,54 @@ def test_build_attack_constructs_a_configured_tap_crescendo() -> None:
 
 
 def test_shipped_guides_all_map() -> None:
+    from advtest_ext.guides.corpus import resolve_guide_path
+
     for name in ("sheets_skill_leak", "docs_language_override"):
-        plan = map_guide(load_guide(GUIDES_DIR / f"{name}.json"))
+        path = resolve_guide_path(GUIDES_DIR, name)
+        assert path is not None, f"guide {name} not found"
+        plan = map_guide(load_guide(path))
         assert isinstance(plan, GuidePlan)
         assert plan.behavior.description
         assert plan.behavior.success_criteria
+
+
+def test_guide_runtime_controls_map_to_attack_kwargs() -> None:
+    data: dict[str, Any] = {
+        **_FULL,
+        "partial_success": {
+            "signals": [{"kind": "token_appears", "name": "partial", "token": "P"}],
+            "rubric": "partial",
+        },
+        "branch_suggestions": ["branch one"],
+        "seed_prompts": ["benign opener"],
+        "refusal_conditions": ["firm refusal"],
+    }
+    kwargs = map_guide(_guide(data)).attack_kwargs
+    assert kwargs["partial_signal_specs"][0]["name"] == "partial"
+    assert kwargs["stop_signal_specs"] == data["success"]["signals"]
+    assert kwargs["initial_branches"] == [
+        "branch one",
+        "Open with this documented seed prompt: benign opener",
+    ]
+    assert kwargs["refusal_patience"] == 2
+
+
+def test_mapper_enables_typed_gates_and_dual_replay() -> None:
+    guide = _guide(
+        {
+            "id": "typed-guide",
+            "objective": "exercise the documented mechanism",
+            "target": {"app": "google_docs"},
+            "success": {"rubric": "the effect occurs"},
+            "mutation_surface": ["persona labels"],
+            "invariants": ["keep the probe unchanged"],
+            "exemplar_turns": ["user: first", "assistant: reply", "user: second"],
+            "provenance": {"source": "test"},
+        }
+    )
+    kwargs = map_guide(guide).attack_kwargs
+    assert kwargs["mutation_surface"] == ["persona labels"]
+    assert kwargs["invariants"] == ["keep the probe unchanged"]
+    assert kwargs["hard_invariant_validation"] is True
+    assert kwargs["semantic_validation_required"] is True
+    assert kwargs["replay_mode"] == "strict"  # the seed is reproduced once

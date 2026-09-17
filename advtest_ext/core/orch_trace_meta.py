@@ -136,6 +136,11 @@ _GROUND_TRUTH_SIGNAL_KINDS: frozenset[str] = frozenset(
 _VERDICT_RANK: dict[str, int] = {"error": -1, "refused": 0, "partial": 1, "success": 2}
 
 
+def signal_kind_is_ground_truth(kind: str) -> bool:
+    """Return whether ``kind`` is precise enough to prove success alone."""
+    return kind in _GROUND_TRUTH_SIGNAL_KINDS
+
+
 def upgrade_verdict_for_signals(base_verdict: Verdict, fired_kinds: Iterable[str]) -> Verdict:
     """Precision-aware replacement for the old ``if n_fired > 0: success``
     rule, shared by the orchestrator and the rescore path.

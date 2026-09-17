@@ -24,9 +24,11 @@ similarly.
 
 from __future__ import annotations
 
+from advtest_ext.adapters.calendar import recipe_ops as calendar_ops
 from advtest_ext.adapters.gmail import recipe_ops as gmail_ops
 from advtest_ext.adapters.google_docs import recipe_ops as docs_ops
 from advtest_ext.adapters.outlook import recipe_ops as outlook_ops
+from advtest_ext.adapters.slides import recipe_ops as slides_ops
 from advtest_ext.core.recipe_operations import OperationRegistry
 
 
@@ -49,6 +51,15 @@ def default_operations() -> OperationRegistry:
     registry.register("docs", "open_document")(docs_ops.open_document)
     registry.register("docs", "set_document_body")(docs_ops.set_document_body)
     registry.register("docs", "type_prompt")(docs_ops.type_prompt)
+
+    # Slides-side operations (deck body + speaker notes are the payload).
+    registry.register("slides", "open_deck")(slides_ops.open_deck)
+    registry.register("slides", "set_speaker_notes")(slides_ops.set_speaker_notes)
+    registry.register("slides", "type_prompt")(slides_ops.type_prompt)
+
+    # Calendar-side operations (event title + description are the payload).
+    registry.register("calendar", "create_event")(calendar_ops.create_event)
+    registry.register("calendar", "type_prompt")(calendar_ops.type_prompt)
 
     # Outlook-side operations — UI-mode email send, no OAuth gate.
     # Registered alongside (not instead of) gmail.send_email; a

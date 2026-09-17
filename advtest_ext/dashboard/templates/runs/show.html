@@ -1,33 +1,18 @@
 {% extends "base.html" %}
-{% block title %}run {{ run.id }} · advtest{% endblock %}
+{% block title %}{{ run_name }} · Fission{% endblock %}
 {% block content %}
-
-{# Five auto-refreshing panels. Each is a self-contained partial
-   that knows whether the run is still in flight and decides on its
-   own whether to opt into HTMX polling. See runs/_*.html. #}
-
+<nav class="run-section-nav" aria-label="Run sections"><a href="/runs">← Runs</a><a href="#run-findings">Findings ({{ findings|length }})</a><a href="#run-timeline">Attempts</a><a href="#run-attack-tree">Attack tree</a></nav>
+<script src="/static/run-findings.js?v={{ static_v() }}" defer></script>
 {% include "runs/_hero.html" %}
+<section class="run-tree-section" id="run-attack-tree">
+  <div class="section-head"><h2>Attack tree</h2><div class="run-analysis-actions"><a href="/runs/{{ run.id }}/transcript-report.pdf">Export transcript PDF ↓</a></div></div>
+  {% include "runs/_tree_live.html" %}
+</section>
+{% include "runs/_findings.html" %}
+{% include "runs/_timeline.html" %}
 
-{# Live attack-tree visualisation — a Cytoscape graph (static/tree.js
-   + static/tree.css, loaded by runs/_tree_live.html) that grows as TAP
-   explores branches. Sits high on the page so during a live pitch it's
-   the first thing the audience sees alongside the Chrome window. The
-   partial self-polls while the run is in flight; see runs/_tree_live.html. #}
-<div class="section-head" style="margin-top: 0.5rem;">
-  <h2 style="margin: 0;">Attack tree
-    {% if not run.finished_at %}<span class="pill error" style="font-size: 0.55em; vertical-align: middle;">LIVE</span>{% endif %}
-  </h2>
-  <a class="muted" href="/runs/{{ run.id }}/tree">Full-screen view →</a>
-  <a class="muted" href="/runs/{{ run.id }}/transcript">Multi-turn transcript →</a>
-</div>
-{% include "runs/_tree_live.html" %}
 
-<div class="reveal">{% include "runs/_findings.html" %}</div>
-
-<div class="reveal">{% include "runs/_techniques.html" %}</div>
-
-<div class="reveal">{% include "runs/_heatmap_wrap.html" %}</div>
-
-<div class="reveal">{% include "runs/_timeline.html" %}</div>
-
+{% include "runs/_techniques.html" %}
+{% include "runs/_heatmap_wrap.html" %}
+{% if search_report %}<details class="run-analysis"><summary>Search coverage</summary>{% include "runs/_search_report.html" %}</details>{% endif %}
 {% endblock %}

@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block title %}New run · Fission{% endblock %}
+{% block content %}
+<style>
+  .app{grid-template-columns:220px minmax(0,1fr)}
+  main{max-width:none;width:100%;padding-left:2rem;padding-right:2rem}
+  .test-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;margin:1.4rem 0 2rem}
+  .test-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;box-shadow:var(--shadow-sm);display:flex;flex-direction:column}
+  .test-card h2{margin:.25rem 0 .45rem;font-size:1.28rem}
+  .test-meta{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.7rem}
+  .test-chip{font-size:.7rem;padding:.18rem .48rem;border-radius:var(--r-pill);background:var(--surface-2);color:var(--muted);border:1px solid var(--border)}
+  .test-card p{font-size:.88rem;margin:.25rem 0 .8rem}
+  .test-card ul{font-size:.78rem;color:var(--muted);padding-left:1.15rem;margin:.2rem 0 1rem}
+  .test-actions{margin-top:auto;display:flex;gap:.6rem;align-items:center}
+  .assessment-options{display:grid;grid-template-columns:1fr 110px;gap:.65rem;margin:0 0 1rem}
+  .assessment-options label{font-size:.72rem;color:var(--muted)}
+  .assessment-options select,.assessment-options input{width:100%;margin-top:.3rem;padding:.52rem;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--ink)}
+  .launch{border:0;border-radius:var(--r-sm);padding:.62rem .9rem;background:var(--accent);color:white;font:600 .82rem var(--sans);cursor:pointer}
+  .launch:hover{background:var(--accent-hover)} .launch:disabled{cursor:not-allowed;opacity:.45}
+  .operator-note{padding:.85rem 1rem;border:1px solid var(--high);background:var(--high-soft);border-radius:var(--r);font-size:.84rem;color:var(--ink-soft)}
+  .activity-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-sm);overflow:hidden}
+  .activity-head{display:flex;justify-content:space-between;align-items:center;color:var(--ink);padding:.8rem 1rem;border-bottom:1px solid var(--border);font-size:.82rem;background:var(--surface-2)}
+  .activity-controls{display:flex;align-items:center;gap:.65rem}.stop-run{border:1px solid #b9383f;background:var(--surface);color:#a12b31;border-radius:var(--r-sm);padding:.38rem .7rem;font:600 .76rem var(--sans);cursor:pointer}.stop-run:hover{background:#fde5e6}.stop-run:disabled{opacity:.45;cursor:default}.live-tree-link{color:var(--accent);font-weight:600;text-decoration:none}.live-tree-link:hover{text-decoration:underline}
+  .activity-feed{display:block;margin:0;padding:1rem;min-height:150px;max-height:390px;overflow:auto;background:var(--surface) !important;color:var(--ink) !important;-webkit-text-fill-color:var(--ink);opacity:1;font:13px/1.65 var(--sans);white-space:pre-wrap}
+  .state{font-weight:700;padding:.2rem .5rem;border-radius:var(--r-pill)}
+  .state.running,.state.starting,.state.stopping{color:#805b00;background:#fff2c7}.state.stopped{color:var(--muted);background:var(--surface-2)}.state.succeeded{color:#176b42;background:#dcf6e9}.state.failed{color:#a12b31;background:#fde5e6}
+  /* live progress instrument */
+  .run-live{display:grid;grid-template-columns:300px minmax(0,1fr);gap:1rem;margin:1.4rem 0 1rem}
+  @media (max-width:960px){.run-live{grid-template-columns:1fr}}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-sm);overflow:hidden}
+  .panel-head{padding:.6rem .85rem;border-bottom:1px solid var(--border);background:var(--surface-2);font:600 .74rem var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .plan-body{padding:.35rem 0}
+  .plan-step{display:grid;grid-template-columns:26px 1fr;gap:.5rem;padding:.5rem .85rem;border-bottom:1px solid var(--border);font-size:.8rem;align-items:baseline}
+  .plan-step:last-child{border-bottom:0}
+  .plan-num{font:600 .72rem var(--mono,ui-monospace,monospace);color:var(--muted)}
+  .plan-op{font:.72rem var(--mono,ui-monospace,monospace);color:var(--accent)}
+  .plan-intent{color:var(--ink-soft);display:block;margin-top:.15rem}
+  .plan-acct{color:var(--muted);font-size:.68rem}
+  .sig-row{display:flex;flex-wrap:wrap;gap:.3rem;padding:.55rem .85rem}
+  .sig-tag{font:.66rem var(--mono,ui-monospace,monospace);border:1px solid var(--border);border-radius:var(--r-sm);padding:.14rem .4rem;color:var(--muted);background:var(--surface-2)}
+  .summary-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:1rem}
+  .stat{background:var(--surface);padding:.7rem .85rem}
+  .stat .n{font:700 1.5rem var(--mono,ui-monospace,monospace);color:var(--ink);line-height:1.1}
+  .stat .k{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:.15rem}
+  .stat.verified .n{color:#176b42}
+  .turns{width:100%;border-collapse:collapse;font-size:.82rem}
+  .turns th{text-align:left;font:600 .68rem var(--sans);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:.5rem .85rem;border-bottom:1px solid var(--border);background:var(--surface-2)}
+  .turns td{padding:.5rem .85rem;border-bottom:1px solid var(--border);vertical-align:top}
+  .turns tr:last-child td{border-bottom:0}
+  .turns .num,.turns .score{font:.78rem var(--mono,ui-monospace,monospace)}
+  .vd{font:600 .68rem var(--sans);text-transform:uppercase;letter-spacing:.03em;padding:.12rem .42rem;border-radius:var(--r-sm);border:1px solid var(--border)}
+  .vd.success{color:#176b42;background:#dcf6e9;border-color:#a6e0c2}.vd.partial{color:#805b00;background:#fff2c7;border-color:#ecd68a}.vd.refused,.vd.error,.vd.pending{color:var(--muted);background:var(--surface-2)}
+  .prov{font:600 .64rem var(--mono,ui-monospace,monospace);letter-spacing:.03em;padding:.12rem .4rem;border:1px solid var(--border);border-radius:var(--r-sm)}
+  .prov.signal{color:#176b42;border-color:#a6e0c2;background:#f0fbf5}.prov.judge{color:var(--muted);background:var(--surface-2)}
+  .move-tag{font:.7rem var(--mono,ui-monospace,monospace);color:#1a3a6b;background:#eef2ff;border:1px solid #cdd8e6;border-radius:var(--r-sm);padding:.1rem .38rem;display:inline-block}
+  .sig-chips{display:flex;flex-wrap:wrap;gap:.25rem}
+  .sig-chip{font:.64rem var(--mono,ui-monospace,monospace);padding:.1rem .34rem;border-radius:var(--r-sm);border:1px solid var(--border);color:var(--muted)}
+  .sig-chip.fired{color:#176b42;border-color:#a6e0c2;background:#f0fbf5}
+  .turns-empty{padding:1.1rem .85rem;color:var(--muted);font-size:.84rem}
+  @media (max-width:1100px){.test-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media (max-width:640px){.test-grid{grid-template-columns:1fr}.assessment-options{grid-template-columns:1fr}}
+</style>
+
+<div class="page-head">
+  <div class="eyebrow">Run configuration</div>
+  <h1>New run</h1>
+</div>
+
+{% if not state.enabled %}
+<div class="operator-note">
+  Assessment execution is locked. An administrator must enable execution after validating the required accounts and credentials.
+</div>
+{% endif %}
+
+<div class="test-grid">
+{% for test in tests %}
+  <article class="test-card">
+    <div class="test-meta">
+      <span class="test-chip">{{ test.surface }}</span>
+      <span class="test-chip">{{ test.method }}</span>
+    </div>
+    <h2>{{ test.title }}</h2>
+    <p>{{ test.description }}</p>
+    <div class="lbl">Before launch</div>
+    <ul>{% for item in test.prerequisites %}<li>{{ item }}</li>{% endfor %}</ul>
+    {% if test.id == "guided-workspace-playbook" %}
+    <div class="assessment-options">
+      <label>Guide
+        <select class="playbook-select">
+          {% for playbook in playbooks %}
+          <option value="{{ playbook }}" {% if playbook == "sheets_skill_leak" %}selected{% endif %}>{{ playbook | replace("_", " ") | title }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Branching factor
+        <input class="branching-factor" type="number" min="1" max="5" value="3" inputmode="numeric">
+      </label>
+      <label>Tree depth
+        <input class="max-depth" type="number" min="1" max="12" value="6" inputmode="numeric">
+      </label>
+      <label>Node budget / seed
+        <input class="max-nodes" type="number" min="1" max="400" value="80" inputmode="numeric">
+      </label>
+    </div>
+    <p class="hint">Node budget is the hard cap on nodes explored per seed — raise it (with depth) to search widely for more successful mutations. Larger values mean longer runs and more live sessions.</p>
+    {% endif %}
+    <div class="test-actions">
+      <button class="launch" data-test-id="{{ test.id }}" {% if not state.enabled %}disabled{% endif %}>Launch run</button>
+      <span class="muted" id="note-{{ test.id }}"></span>
+    </div>
+  </article>
+{% endfor %}
+</div>
+
+<h2>Live progress</h2>
+<div class="summary-strip" id="summary-strip">
+  <div class="stat"><div class="n" id="stat-turns">0</div><div class="k">Turns run</div></div>
+  <div class="stat"><div class="n" id="stat-success">0</div><div class="k">Successes</div></div>
+  <div class="stat verified"><div class="n" id="stat-verified">0</div><div class="k">Signal-verified</div></div>
+  <div class="stat"><div class="n" id="stat-best">0.00</div><div class="k">Best judge score</div></div>
+</div>
+
+<div class="run-live">
+  <div class="panel" id="plan-panel">
+    <div class="panel-head">Staging plan · <span id="plan-title">select a guide</span></div>
+    <div class="plan-body" id="plan-steps"></div>
+    <div class="panel-head" style="border-top:1px solid var(--border)">Success signals (L0 deterministic)</div>
+    <div class="sig-row" id="plan-signals"><span class="sig-tag"> </span></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head">Crescendo turns · live from evidence store</div>
+    <table class="turns">
+      <thead><tr><th style="width:48px">Turn</th><th style="width:110px">Verdict</th><th style="width:80px">Score</th><th style="width:190px">Move</th><th>Signals</th><th style="width:120px">Provenance</th></tr></thead>
+      <tbody id="turns-body"></tbody>
+    </table>
+    <div class="turns-empty" id="turns-empty">No turns yet. Launch a run to watch the crescendo climb.</div>
+  </div>
+</div>
+
+<h2>Run activity</h2>
+<div class="activity-panel">
+  <div class="activity-head">
+    <span id="active-test">{{ state.active_id or "No test selected" }}</span>
+    {% set status_labels = {"idle":"Ready", "starting":"Starting", "running":"In progress", "stopping":"Stopping", "stopped":"Stopped", "succeeded":"Completed", "failed":"Needs attention"} %}
+    <div class="activity-controls">
+      <span id="test-state" class="state {{ state.status }}">{{ status_labels.get(state.status, "Ready") }}</span>
+      <a id="live-tree-link" class="live-tree-link" href="{{ ('/runs/' ~ state.run_id ~ '#run-attack-tree') if state.run_id else '#' }}" {% if not state.run_id %}hidden{% endif %}>Open live tree ↗</a>
+      <button id="stop-run" class="stop-run" type="button" {% if state.status not in ("starting", "running") %}hidden{% endif %}>Stop run</button>
+    </div>
+  </div>
+  <div id="live-console" class="activity-feed" role="status" aria-live="polite">{{ state.lines | join("\n") if state.lines else "No run selected." }}</div>
+</div>
+
+<script>
+(() => {
+  const consoleEl = document.getElementById("live-console");
+  const stateEl = document.getElementById("test-state");
+  const activeEl = document.getElementById("active-test");
+  const stopEl = document.getElementById("stop-run");
+  const treeEl = document.getElementById("live-tree-link");
+  const buttons = [...document.querySelectorAll(".launch")];
+  const statusLabels = {idle: "Ready", starting: "Starting", running: "In progress", stopping: "Stopping", stopped: "Stopped", succeeded: "Completed", failed: "Needs attention"};
+
+  function render(state) {
+    activeEl.textContent = state.active_id || "No test selected";
+    stateEl.textContent = statusLabels[state.status] || "Ready";
+    stateEl.className = "state " + state.status;
+    treeEl.hidden = !state.run_id;
+    if (state.run_id) treeEl.href = "/runs/" + state.run_id + "#run-attack-tree";
+    if (state.lines && state.lines.length) {
+      consoleEl.textContent = state.lines.join("\n");
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+    const stoppable = state.status === "starting" || state.status === "running";
+    const busy = stoppable || state.status === "stopping";
+    stopEl.hidden = !stoppable;
+    stopEl.disabled = !stoppable;
+    buttons.forEach(button => button.disabled = {{ "false" if state.enabled else "true" }} || busy);
+  }
+
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+  function renderProgress(state) {
+    const summary = state.summary || {turns: 0, successes: 0, verified: 0, best_score: 0};
+    document.getElementById("stat-turns").textContent = summary.turns;
+    document.getElementById("stat-success").textContent = summary.successes;
+    document.getElementById("stat-verified").textContent = summary.verified;
+    document.getElementById("stat-best").textContent = Number(summary.best_score || 0).toFixed(2);
+    const body = document.getElementById("turns-body");
+    const empty = document.getElementById("turns-empty");
+    const turns = state.turns || [];
+    empty.hidden = turns.length > 0;
+    body.innerHTML = turns.map(t => {
+      const vd = esc((t.verdict || "pending").toLowerCase());
+      const chips = (t.signals || []).map(s =>
+        `<span class="sig-chip ${s.fired ? "fired" : ""}">${esc(s.name || s.kind)}${s.fired ? " ✓" : ""}</span>`
+      ).join("") || '<span class="muted" style="font-size:.72rem"> </span>';
+      const prov = t.signal_verified
+        ? '<span class="prov signal">SIGNAL-VERIFIED</span>'
+        : ((t.verdict || "").toLowerCase() === "success" ? '<span class="prov judge">JUDGE-ONLY</span>' : '<span class="muted" style="font-size:.7rem"> </span>');
+      const move = t.move ? `<span class="move-tag">${esc(t.move)}</span>` : '<span class="muted" style="font-size:.7rem">seed</span>';
+      return `<tr>
+        <td class="num">${esc(t.index)}<span class="plan-acct"> · d${esc(t.depth)}</span></td>
+        <td><span class="vd ${vd}">${vd}</span></td>
+        <td class="score">${Number(t.score || 0).toFixed(3)}</td>
+        <td>${move}</td>
+        <td><div class="sig-chips">${chips}</div></td>
+        <td>${prov}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  async function loadPlan(playbook) {
+    const stepsEl = document.getElementById("plan-steps");
+    const sigEl = document.getElementById("plan-signals");
+    const titleEl = document.getElementById("plan-title");
+    if (!playbook) return;
+    try {
+      const r = await fetch("/live-tests/plan/" + encodeURIComponent(playbook), {cache: "no-store"});
+      if (!r.ok) { titleEl.textContent = playbook; stepsEl.innerHTML = ''; return; }
+      const plan = await r.json();
+      titleEl.textContent = plan.title || plan.id;
+      stepsEl.innerHTML = (plan.steps || []).map(s =>
+        `<div class="plan-step"><span class="plan-num">${esc(s.n)}</span><span>
+          <span class="plan-op">${esc(s.op)}</span> <span class="plan-acct">[${esc(s.account)}]</span>
+          <span class="plan-intent">${esc(s.intent)}</span></span></div>`
+      ).join("") || '<div class="plan-step"><span class="plan-num"> </span><span class="plan-intent">Direct chat, no out-of-band staging.</span></div>';
+      stepsEl.innerHTML += `<div class="plan-step"><span class="plan-num">↳</span><span class="plan-intent">then ${esc(plan.seed_turns)} seed turn(s), then adaptive crescendo → ${esc(plan.target)}</span></div>`;
+      sigEl.innerHTML = (plan.signals || []).map(s => `<span class="sig-tag">${esc(s.kind)}:${esc(s.name)}</span>`).join("") || '<span class="sig-tag"> </span>';
+    } catch (e) { titleEl.textContent = playbook; }
+  }
+
+  async function refresh() {
+    try {
+      const response = await fetch("/live-tests/progress", {cache: "no-store"});
+      if (response.ok) {
+        const state = await response.json();
+        render(state);
+        renderProgress(state);
+      }
+    } finally {
+      window.setTimeout(refresh, 1500);
+    }
+  }
+
+  stopEl.addEventListener("click", async () => {
+    if (!window.confirm("Stop the active run? Completed evidence will be retained.")) return;
+    stopEl.disabled = true;
+    const response = await fetch("/live-tests/stop", {method: "POST"});
+    const payload = await response.json();
+    if (!response.ok) {
+      consoleEl.textContent = payload.detail || "Unable to stop run.";
+      stopEl.disabled = false;
+      return;
+    }
+    render(payload);
+  });
+
+  buttons.forEach(button => button.addEventListener("click", async () => {
+    const card = button.closest(".test-card");
+    const title = card.querySelector("h2").textContent;
+    const selectEl = card.querySelector(".playbook-select");
+    const playbook = selectEl ? (selectEl.value || null) : null;
+    if (selectEl && !playbook) {
+      consoleEl.textContent = "Select a guide before launching. If the dropdown is empty, hard-refresh the page (Ctrl-Shift-R) and try again.";
+      return;
+    }
+    const branchingFactor = card.querySelector(".branching-factor")?.valueAsNumber || null;
+    if (branchingFactor !== null && (branchingFactor < 1 || branchingFactor > 5)) {
+      consoleEl.textContent = "Branching factor must be between 1 and 5.";
+      return;
+    }
+    const maxDepth = card.querySelector(".max-depth")?.valueAsNumber || null;
+    if (maxDepth !== null && (maxDepth < 1 || maxDepth > 12)) {
+      consoleEl.textContent = "Tree depth must be between 1 and 12.";
+      return;
+    }
+    const maxNodes = card.querySelector(".max-nodes")?.valueAsNumber || null;
+    if (maxNodes !== null && (maxNodes < 1 || maxNodes > 400)) {
+      consoleEl.textContent = "Node budget must be between 1 and 400.";
+      return;
+    }
+    if (!window.confirm(`Launch ${title}? This will interact with the configured test accounts.`)) return;
+    buttons.forEach(item => item.disabled = true);
+    consoleEl.textContent = "Starting…";
+    const response = await fetch(`/live-tests/${button.dataset.testId}/start`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({confirmed: true, playbook, branching_factor: branchingFactor, max_depth: maxDepth, max_nodes_per_seed: maxNodes})
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      consoleEl.textContent = payload.detail || "Unable to launch run.";
+      buttons.forEach(item => item.disabled = false);
+      return;
+    }
+    render(payload);
+  }));
+
+  const playbookSelect = document.querySelector(".playbook-select");
+  if (playbookSelect) {
+    playbookSelect.addEventListener("change", () => loadPlan(playbookSelect.value));
+    loadPlan(playbookSelect.value);
+  }
+  refresh();
+})();
+</script>
+{% endblock %}

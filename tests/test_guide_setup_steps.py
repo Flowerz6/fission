@@ -34,8 +34,14 @@ def test_v1_guide_has_tool_bound_setup_steps_and_target_workspace() -> None:
     assert (steps["plant_email"].region, steps["plant_email"].operation) == ("gmail", "send_email")
     assert steps["plant_email"].account_role == "attacker_sender"
     assert (steps["ack_email"].region, steps["ack_email"].operation) == ("gmail", "reply")
-    assert (steps["open_carrier_doc"].region, steps["open_carrier_doc"].operation) == ("docs", "open_document")
-    assert (steps["drive_side_panel"].region, steps["drive_side_panel"].operation) == ("docs", "type_prompt")
+    assert (steps["open_carrier_doc"].region, steps["open_carrier_doc"].operation) == (
+        "docs",
+        "open_document",
+    )
+    assert (steps["drive_side_panel"].region, steps["drive_side_panel"].operation) == (
+        "docs",
+        "type_prompt",
+    )
     # The email step carries the real op's param names (to/subject/body).
     assert {"to", "subject", "body"} <= set(steps["plant_email"].params)
     # Inter-step reference to a prior step's output (Runner substitution shape).
@@ -50,7 +56,7 @@ def test_every_shipped_guide_setup_step_is_a_real_registered_operation() -> None
 
 
 def test_guides_without_setup_steps_default_empty_and_skip_validation() -> None:
-    g = load_guide(_GUIDES / "sheets_skill_leak.json")
+    g = load_guide(_GUIDES / "sheets_skill_leak.yaml")
     assert g.setup_steps == []
     validate_setup_operations(g)  # no-op, must not raise or need the registry
 

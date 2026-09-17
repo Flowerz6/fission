@@ -1,46 +1,37 @@
+{% set total = findings_total if findings_total is defined else findings|length %}
+{% if total %}
+<div class="sev-summary">
+  <span class="sev-total">{{ total }} finding{{ 's' if total != 1 }}</span>
+  {% for s in ('critical', 'high', 'med', 'low') %}
+  <a class="sev-chip sevdot {{ s }}{{ ' on' if severity == s }}" href="/findings?severity={{ '' if severity == s else s }}{% if run_id %}&run_id={{ run_id }}{% endif %}{% if behavior_id %}&behavior_id={{ behavior_id }}{% endif %}{% if selected_service %}&service={{ selected_service.key }}{% endif %}"><span class="d"></span>{{ s|capitalize }} <b>{{ (sev_counts or {}).get(s, 0) }}</b></a>
+  {% endfor %}
+</div>
+{% endif %}
 {% if findings %}
-<table>
+<div class="table-scroll"><table>
   <thead>
     <tr>
-      <th>Severity</th><th>Title</th><th>Run</th>
-      <th>Behaviour</th><th>Score</th><th>Promoted</th><th></th>
+      <th>Finding</th><th>Severity</th><th>Target</th><th>Run</th><th>Detected</th><th></th>
     </tr>
   </thead>
   <tbody>
     {% for f in findings %}
-    {%- set scores = f.trace.judge_scores if f.trace else [] -%}
-    {%- set top_score = (scores | map(attribute='score') | max) if scores else None -%}
-    {%- if top_score is not none and top_score >= 0.7 -%}
-      {%- set score_class = 'score-hot' -%}
-    {%- elif top_score is not none and top_score >= 0.3 -%}
-      {%- set score_class = 'score-warm' -%}
-    {%- else -%}
-      {%- set score_class = 'score-cool' -%}
-    {%- endif -%}
+    {% set sev = finding_severity(f) %}
     <tr>
-      <td><span class="pill severity-{{ f.severity }}">{{ f.severity }}</span></td>
-      <td><a href="/findings/{{ f.id }}">{{ f.title or '(untitled)' }}</a></td>
-      <td><a href="/runs/{{ f.run_id }}">{{ f.run_id }}</a></td>
-      <td>{{ f.trace.behavior_id }}</td>
       <td>
-        {% if top_score is not none %}
-        <span class="score-cell {{ score_class }}">{{ '%.2f'|format(top_score) }}</span>
-        {% else %}
-        <span class="muted">—</span>
-        {% endif %}
+        <a class="fname" href="/findings/{{ f.id }}">{{ finding_title(f) }}</a>{% if f.authenticity and f.authenticity.verdict == 'real' %}<span class="authn-chip authn-real" title="{{ f.authenticity.reasoning }}">Corroborated · {{ f.authenticity.n_runs }} runs</span>{% endif %}
+        {% set m = finding_method(f) %}{% if m %}<div class="fmeta muted">{{ m }}</div>{% endif %}
       </td>
-      <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') }}</td>
-      <td>
-        {% if f.replay_bundle_path %}
-        <a href="/findings/{{ f.id }}/replay">replay.zip</a>
-        {% else %}
-        <span class="muted">—</span>
-        {% endif %}
-      </td>
+      <td><span class="sevdot {{ sev }}"><span class="d"></span>{{ sev|capitalize }}</span></td>
+      <td>{{ surface_label(f.trace.target_name) if f.trace else "Unknown" }}</td>
+      <td class="muted"><a class="frun mono" href="/runs/{{ f.run_id }}" title="{{ run_display_name(f.run) if f.run else '' }}">{{ f.run_id }}</a>{% if finding_seq.get(f.id) %} <span class="frun-n">· #{{ finding_seq[f.id] }}</span>{% endif %}</td>
+      <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') if f.promoted_at else '—' }}</td>
+      <td><a class="rowmenu" href="/findings/{{ f.id }}" aria-label="Open finding">&#8943;</a></td>
     </tr>
     {% endfor %}
   </tbody>
-</table>
+</table></div>
+<div class="pager"><span class="info">Showing {{ findings|length }} finding{{ 's' if findings|length != 1 else '' }}{% if severity %} · {{ severity|capitalize }} severity{% endif %}</span></div>
 {% else %}
-<p>No findings match this filter.</p>
+<div class="empty-state">No findings match this filter.</div>
 {% endif %}

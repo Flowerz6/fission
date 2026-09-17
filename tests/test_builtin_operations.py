@@ -15,6 +15,8 @@ adapter integration tests use). What we test here:
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from advtest_ext.adapters.gmail import recipe_ops as gmail_ops
@@ -27,7 +29,7 @@ from advtest_ext.core.recipe_operations import (
 from advtest_ext.core.surface import Surface
 
 
-def _ctx(params: dict | None = None, app: str = "docs") -> OperationContext:
+def _ctx(params: dict[str, Any] | None = None, app: str = "docs") -> OperationContext:
     step = Step(
         id="t",
         intent="test",
@@ -63,7 +65,7 @@ def test_default_operations_returns_fresh_registry_each_call() -> None:
     r1 = default_operations()
     r2 = default_operations()
     assert r1 is not r2
-    assert len(r1) == len(r2) == 6
+    assert len(r1) == len(r2) == 11
 
 
 def test_default_operations_registered_pairs_match_expected() -> None:
@@ -75,6 +77,11 @@ def test_default_operations_registered_pairs_match_expected() -> None:
             ("docs", "open_document"),
             ("docs", "set_document_body"),
             ("docs", "type_prompt"),
+            ("slides", "open_deck"),
+            ("slides", "set_speaker_notes"),
+            ("slides", "type_prompt"),
+            ("calendar", "create_event"),
+            ("calendar", "type_prompt"),
             ("outlook", "send_email"),
         ]
     )

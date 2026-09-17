@@ -1,11 +1,12 @@
 {# Live attack-tree EXPLORER (Cytoscape.js). A cell navigator (left) drives
    one Cytoscape canvas per (behaviour, technique) cell (right). Each node is
-   a conversation; edges are ``parent_id`` links; node colour/shape is the
-   verdict-derived status (success / partial / refused / pruned-dashed).
+   a conversation, drawn as an HTML card over the canvas; edges are
+   ``parent_id`` links; the card's dot/tint is the verdict-derived status
+   (success / partial / refused / pruned-dashed).
 
    The graph is rendered entirely client-side (see /static/tree.js). While the
    run is in flight the client polls ``/runs/{id}/_tree.json`` and adds only
-   the new nodes/edges — no full repaint, so branches settle smoothly instead
+   the new nodes/edges, no full repaint, so branches settle smoothly instead
    of the old Mermaid flicker. The component is self-contained: it loads its
    own vendored libraries and stylesheet and does NOT depend on base.html.
 
@@ -14,23 +15,23 @@
 {# tree.css / tree.js are loaded globally in base.html (so this partial also
    mounts inside the slide-over, where injected <script> tags wouldn't run). #}
 {% set tg = tree_graph %}
-{% set ns = namespace(any=false) %}
-{% for phase in tg.phases %}{% if phase.cells %}{% set ns.any = true %}{% endif %}{% endfor %}
+{% set ns = namespace(any=false, cell_count=0) %}
+{% for phase in tg.phases %}{% if phase.cells %}{% set ns.any = true %}{% set ns.cell_count = ns.cell_count + (phase.cells | length) %}{% endif %}{% endfor %}
 
 <section id="run-tree-live">
   {% if not ns.any %}
   <p class="muted">
-    No traces yet — waiting for the first branch to land.
-    {% if not run.finished_at %}(this view updates live as branches land){% endif %}
+    No traces yet, waiting for the first branch to land.
+    {% if run_is_active(run) %}(this view updates live as branches land){% endif %}
   </p>
   {% else %}
-  <div class="tree-explorer"
+  <div class="tree-explorer{{ ' single-cell' if ns.cell_count == 1 }}"
        data-run-id="{{ run.id }}"
-       data-live="{{ 0 if run.finished_at else 1 }}"
+       data-live="{{ 1 if run_is_active(run) else 0 }}"
        data-tree-hash="{{ tg.hash }}">
 
     {# ---- navigator ---- #}
-    <div class="cell-nav">
+    {% if ns.cell_count > 1 %}<div class="cell-nav">
       {% for phase in tg.phases %}
       {% if phase.label %}<div class="cell-nav-group">{{ phase.label }} &middot; {{ phase.n_success }}/{{ phase.n_traces }}</div>{% endif %}
       {% for cell in phase.cells %}
@@ -40,11 +41,11 @@
         <span class="ci-b">{{ cell.behavior_id }}</span>
         <span class="ci-t">{{ cell.technique_id }}</span>
         <span class="ci-n">{{ cell.n_success }}/{{ cell.n_traces }}</span>
-        <span class="ci-bar"><span style="width: {{ pct }}%; background: {{ '#d5595b' if pct >= 66 else ('#cf9a4c' if pct >= 33 else '#948f9f') }}"></span></span>
+        <span class="ci-bar"><span style="width: {{ pct }}%; background: {{ 'var(--crit)' if pct >= 66 else ('var(--high)' if pct >= 33 else 'var(--muted)') }}"></span></span>
       </button>
       {% endfor %}
       {% endfor %}
-    </div>
+    </div>{% endif %}
 
     {# ---- viewer ---- #}
     <div class="tree-viewer">
@@ -53,23 +54,27 @@
       <div class="tree-panel{{ ' active' if cell.cell_index == 0 }}"
            data-cell="{{ cell.cell_index }}" data-cell-key="{{ cell.key }}">
         <div class="tree-panel-head">
-          <code>{{ cell.behavior_id }}</code> &times; <code>{{ cell.technique_id }}</code>
-          <span class="muted">&mdash; <span class="th-count">{{ cell.n_success }}/{{ cell.n_traces }} success</span></span>
+          <span class="th-title">{{ cell.behavior_id }}{% if cell.technique_id and cell.technique_id != '(none)' %} <span class="th-x">&times;</span> {{ cell.technique_id }}{% endif %}</span>
+          <span class="th-count">{{ cell.n_success }}/{{ cell.n_traces }} success</span>
         </div>
-        <div class="tree-toolbar">
-          <button type="button" class="tree-btn" data-tree-fit>Fit</button>
-          {% if not run.finished_at %}<span class="tree-live-flag" data-live="1">&#9679; live</span>{% endif %}
+        <div class="cy-wrap">
+          <div class="cy-mount"></div>
+          <div class="tree-toolbar" role="group" aria-label="Tree view controls">
+            <button type="button" class="tree-btn" data-tree-zoom="out" aria-label="Zoom out">&minus;</button>
+            <button type="button" class="tree-btn" data-tree-zoom="in" aria-label="Zoom in">+</button>
+            <button type="button" class="tree-btn" data-tree-fit>Fit</button>
+          </div>
         </div>
-        <div class="cy-mount"></div>
         <div class="tree-legend">
-          <span class="lg"><span class="sw" style="background:#e8f3ee;border:1.5px solid #57a880"></span>success</span>
-          <span class="lg"><span class="sw" style="background:#f8f0dd;border:1.5px solid #cf9a4c"></span>partial</span>
-          <span class="lg"><span class="sw" style="background:#f4f4f8;border:1.5px solid #948f9f"></span>refused</span>
-          <span class="lg"><span class="sw" style="background:#faebec;border:1.5px dashed #d5595b"></span>pruned</span>
+          <span class="lg"><span class="sw success"></span>Success</span>
+          <span class="lg"><span class="sw partial"></span>Partial</span>
+          <span class="lg"><span class="sw refused"></span>Refused</span>
+          <span class="lg"><span class="ln win"></span>Successful path</span>
+          <span class="lg"><span class="ln dead"></span>Pruned branch</span>
         </div>
         <div class="tree-detail">
           <div class="td-h"><span class="td-t">Select a node</span></div>
-          <p class="td-hint">Each node is one conversation. Click a node to read its transcript.</p>
+          <p class="td-hint">Each node is an attempt or a grouped conversation. Select a node to inspect what was attempted, its time, method, and evidence.</p>
         </div>
         <script type="application/json" class="cell-data">{"nodes": {{ cell.nodes | tojson }}, "edges": {{ cell.edges | tojson }}}</script>
       </div>

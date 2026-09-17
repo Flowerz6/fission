@@ -32,10 +32,17 @@ _CORPUS_DIR = Path(__file__).resolve().parents[1] / "seeds_corpus"
 
 
 def load_seed_corpus(corpus_dir: Path = _CORPUS_DIR) -> list[Seed]:
-    """Parse every ``*.json`` in the corpus dir into a validated Seed."""
+    """Parse every seed file (YAML or JSON) in the corpus dir into a validated Seed."""
+    import yaml
+
     seeds: list[Seed] = []
-    for path in sorted(corpus_dir.glob("*.json")):
-        seeds.append(Seed.model_validate_json(path.read_text()))
+    for pattern in ("*.json", "*.yml", "*.yaml"):
+        for path in sorted(corpus_dir.glob(pattern)):
+            text = path.read_text(encoding="utf-8")
+            if path.suffix.lower() in {".yaml", ".yml"}:
+                seeds.append(Seed.model_validate(yaml.safe_load(text)))
+            else:
+                seeds.append(Seed.model_validate_json(text))
     return seeds
 
 

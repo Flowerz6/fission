@@ -1,76 +1,108 @@
 {% extends "base.html" %}
 {% block title %}Runs · Fission{% endblock %}
 {% block content %}
-<style>
-  .runs-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-  .runs-head h1 { margin: 0; }
-  .runs-head .sub { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
-
-  .runlist { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
-  .runlist .head, .runlist .row {
-    display: grid;
-    grid-template-columns: 14px 1.6fr 1.2fr 0.8fr 0.7fr 1.4fr;
-    gap: 1rem; align-items: center; padding: 0.7rem 1rem;
-  }
-  .runlist .head { background: var(--surface-2); border-bottom: 1px solid var(--border); }
-  .runlist .head span { font-family: var(--sans); font-size: 0.75rem; text-transform: none; letter-spacing: normal; color: var(--muted); font-weight: 600; }
-  .runlist .row { border-top: 1px solid var(--border); text-decoration: none; color: inherit; transition: background 0.12s; }
-  .runlist .row:first-of-type { border-top: none; }
-  .runlist .row:hover { background: var(--surface-2); }
-
-  .st { width: 8px; height: 8px; flex: none; }
-  .st.done { background: var(--muted); } .st.live { background: var(--success); }
-  .rid { font-family: var(--font-mono); font-size: 0.86rem; font-weight: 600; color: var(--accent); }
-  .rmeta { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
-  .rtime, .rnum { font-family: var(--font-mono); font-size: 0.8rem; color: var(--fg-soft); font-variant-numeric: tabular-nums; }
-  .rnum .lo { color: var(--muted); }
-
-  .asr { display: flex; align-items: center; gap: 0.6rem; }
-  .asr .track { flex: 1; height: 7px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-  .asr .fill { height: 100%; }
-  .asr .val { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 650; font-variant-numeric: tabular-nums; width: 3.2em; text-align: right; }
-
-  .empty { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 2rem; color: var(--muted); font-size: 0.9rem; }
-  @media (max-width: 760px) {
-    .runlist .head, .runlist .row { grid-template-columns: 12px 1.4fr 0.9fr; }
-    .runlist .c-strat, .runlist .c-traces, .runlist .head .c-strat, .runlist .head .c-traces { display: none; }
-  }
-</style>
-
-<p class="eyebrow">Campaign</p>
-<div class="runs-head">
-  <h1>Runs</h1>
-  <span class="sub">{{ runs|length }} run{{ 's' if runs|length != 1 }} · most recent first</span>
+<div class="head-bar">
+  <div class="ht">
+    <p class="eyebrow" style="margin:0">Assessment</p>
+    <h1>Runs</h1>
+    <p>Manage adversarial test runs across your target surfaces.</p>
+  </div>
+  <div class="ha">
+    <a class="btn-primary" href="/runs/new" data-open-new-run><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v10M3 8h10"/></svg>New run</a>
+  </div>
 </div>
+
+{% set n_done = runs|selectattr('finished_at')|list|length %}
+{% set ns_state = namespace(live=0) %}
+{% for run in runs %}{% if run_is_active(run) %}{% set ns_state.live = ns_state.live + 1 %}{% endif %}{% endfor %}
+{% set n_live = ns_state.live %}
+{% set n_stopped = runs|length - n_done - n_live %}
+<div class="list-controls"><div class="tabs" id="camp-tabs">
+  <button class="on" data-f="all">All <span class="c">{{ runs|length }}</span></button>
+  <button data-f="running">Running <span class="c">{{ n_live }}</span></button>
+  <button data-f="completed">Completed <span class="c">{{ n_done }}</span></button>
+  {% if n_stopped %}<button data-f="interrupted">Interrupted <span class="c">{{ n_stopped }}</span></button>{% endif %}
+</div><div class="searchbox"><input id="campaign-search" aria-label="Search runs" placeholder="Search runs…"></div></div>
 
 {% if runs %}
-<div class="runlist">
-  <div class="head">
-    <span></span><span>Run</span><span class="c-strat">Started · target</span>
-    <span class="c-traces">Traces</span><span>Success</span><span>Attack success rate</span>
-  </div>
-  {% for run in runs %}
-  {% set asr = run.summary.get('overall_asr', 0.0) %}
-  {% set pct = (asr * 100)|round(0, 'floor')|int %}
-  <a class="row" href="/runs/{{ run.id }}" onclick="return openRunPanel(event, '{{ run.id }}', '{{ run.id }}')">
-    <span class="st {{ 'done' if run.finished_at else 'live' }}" title="{{ 'finished' if run.finished_at else 'in progress' }}"></span>
-    <div>
-      <div class="rid">{{ run.id }}</div>
-      <div class="rmeta">{{ run.strategy }} · {{ run.target_name }}</div>
-    </div>
-    <div class="rtime c-strat">
-      {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}
-    </div>
-    <div class="rnum c-traces">{{ run.summary.get('total_traces', 0) }}</div>
-    <div class="rnum">{{ run.summary.get('successful_traces', 0) }}<span class="lo"> / {{ run.summary.get('total_traces', 0) }}</span></div>
-    <div class="asr">
-      <span class="track"><span class="fill" style="width: {{ pct }}%; background: {{ 'var(--error)' if asr >= 0.66 else ('var(--partial)' if asr >= 0.33 else 'var(--refused)') }}"></span></span>
-      <span class="val">{{ '%.0f'|format(asr * 100) }}%</span>
-    </div>
-  </a>
-  {% endfor %}
-</div>
+<div class="table-scroll"><table class="campaign-table">
+  <thead>
+    <tr><th>Name</th><th>Target</th><th>Type</th><th>Status</th><th>Attack success</th><th>Created</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for run in runs %}
+    {% set asr = run.summary.get('overall_asr', 0.0) %}
+    {% set pct = (asr * 100)|round(0, 'floor')|int %}
+    {% set done = run.finished_at is not none %}
+    {% set state = run_state(run) %}
+    <tr data-status="{{ state }}">
+      <td>
+        <a class="fname" title="{{ run_display_name(run) }}" href="/runs/{{ run.id }}">{{ run_display_name(run) }}</a>
+        <span class="sr-only">{{ run.id }}</span>
+      </td>
+      <td class="muted" title="{{ run.target_name }}">{{ target_surface_label(run.target_name) }}</td><td class="muted" title="{{ run_method_label(run) }}">{{ run_method_label(run) }}</td>
+      <td><span class="pill {{ 'inactive' if state == 'interrupted' else state }}">{{ state|capitalize }}</span></td>
+      <td>
+        <div class="cellprog">
+          <span class="tk"><span class="fl" style="width:{{ pct }}%;background:{{ 'var(--crit)' if asr >= 0.66 else ('var(--high)' if asr >= 0.33 else 'var(--ink)') }}"></span></span>
+          <span class="pc">{{ '%.0f'|format(asr * 100) }}%</span>
+        </div>
+      </td>
+      <td class="muted">{{ run.started_at.strftime('%b %d') if run.started_at else '—' }}</td>
+      <td><button type="button" class="rowmenu run-actions-trigger" aria-label="Actions for {{ run_display_name(run) }}" aria-haspopup="menu" aria-expanded="false" aria-controls="run-actions-menu" data-run-id="{{ run.id }}" data-run-name="{{ run_display_name(run) }}" data-run-deletable="{{ 'false' if state == 'running' else 'true' }}">&#8943;</button></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+<div class="pager"><span class="info">Showing {{ runs|length }} run{{ 's' if runs|length != 1 else '' }}</span></div>
 {% else %}
-<div class="empty">No runs yet. Start one with <code>advtest run --config &lt;path&gt;.yaml</code>.</div>
+<div class="empty-state"><div class="big">No runs yet</div>Launch a run and it appears here with its status and attack-success rate.</div>
 {% endif %}
+
+<div id="run-actions-menu" class="run-actions-menu" popover="auto" role="menu" aria-label="Run actions">
+  <a role="menuitem" data-run-view>View details</a>
+  <button type="button" role="menuitem" data-run-rename>Rename run</button>
+  <a role="menuitem" data-run-export target="_blank" rel="noopener">Export report</a>
+  <button type="button" role="menuitem" class="danger-text" data-run-delete>Delete run</button>
+</div>
+<dialog id="run-action-dialog" class="run-action-dialog" aria-labelledby="run-action-title" aria-describedby="run-action-description">
+  <form id="run-action-form">
+    <h2 id="run-action-title"></h2>
+    <p id="run-action-description"></p>
+    <p class="run-action-identity"><strong id="run-action-name"></strong><code id="run-action-id"></code></p>
+    <div id="run-rename-field"><label for="run-new-name">Run name</label><input id="run-new-name" name="name" maxlength="120" required autocomplete="off"></div>
+    <p id="run-action-error" role="alert" hidden></p>
+    <div class="run-dialog-actions"><button type="button" class="btn-outline" data-run-cancel>Cancel</button><button type="submit" class="btn-primary" id="run-action-submit">Save name</button></div>
+  </form>
+</dialog>
+<dialog id="new-run-dialog" class="launch-dialog" aria-labelledby="new-run-title">
+  <form id="new-run-form">
+    <header class="ld-head">
+      <div><h2 id="new-run-title">Launch a new run</h2><p class="ld-sub">Choose a workspace and a guide, then launch.</p></div>
+      <button type="button" class="ld-x" data-nr-cancel aria-label="Close">&times;</button>
+    </header>
+    <div class="ld-locked" id="nr-locked" hidden>Run execution is turned off on this deployment. An administrator must enable it before a run can be launched.</div>
+    <div class="ld-body">
+      <div class="ld-workspaces" id="nr-workspaces" role="radiogroup" aria-label="Workspace"></div>
+      <div class="ld-config" id="nr-config"></div>
+    </div>
+    <footer class="ld-foot">
+      <p class="ld-err" id="nr-error" role="alert" hidden></p>
+      <div class="ld-actions">
+        <a class="ld-full" href="/runs/new">Open full launcher &amp; live console &rarr;</a>
+        <button type="button" class="btn-outline" data-nr-cancel>Cancel</button>
+        <button type="submit" class="btn-primary" id="nr-launch">Launch run</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+<script src="/static/new-run.js?v={{ static_v() }}" defer></script>
+<script src="/static/run-actions.js?v={{ static_v() }}" defer></script>
+<script>
+(function(){
+ var tabs=document.getElementById('camp-tabs'),search=document.getElementById('campaign-search');
+ function filter(){var f=tabs.querySelector('.on').dataset.f,q=search.value.toLowerCase();document.querySelectorAll('tr[data-status]').forEach(function(row){row.hidden=!( (f==='all'||row.dataset.status===f)&&row.textContent.toLowerCase().includes(q));});}
+ tabs.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;tabs.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b)});filter();});search.addEventListener('input',filter);
+})();
+</script>
 {% endblock %}

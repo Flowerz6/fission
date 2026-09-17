@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Proven variants · Fission{% endblock %}
+{% block content %}
+<style>
+  main{max-width:1100px}
+  .v-intro{color:var(--muted);font-size:.9rem;margin:.2rem 0 1.3rem;max-width:72ch}
+  .v-guide{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-sm);margin-bottom:1.2rem;overflow:hidden}
+  .v-guide-head{padding:.7rem 1rem;background:var(--surface-2);border-bottom:1px solid var(--border);font:600 .92rem var(--sans);display:flex;justify-content:space-between;align-items:center}
+  .v-guide-head a{color:var(--accent);text-decoration:none}
+  .v-count{font:.72rem var(--mono,ui-monospace,monospace);color:var(--muted)}
+  table.v-tbl{width:100%;border-collapse:collapse;font-size:.85rem}
+  .v-tbl th{text-align:left;font:600 .68rem var(--sans);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:.5rem 1rem;border-bottom:1px solid var(--border)}
+  .v-tbl td{padding:.5rem 1rem;border-bottom:1px solid var(--border);vertical-align:top}
+  .v-tbl tr:last-child td{border-bottom:0}
+  .v-id{font:.74rem var(--mono,ui-monospace,monospace);color:var(--muted)}
+  .st{font:600 .66rem var(--sans);text-transform:uppercase;letter-spacing:.03em;padding:.12rem .45rem;border-radius:var(--r-sm);border:1px solid var(--border)}
+  .st.verified_by_reproduction{color:#176b42;background:#dcf6e9;border-color:#a6e0c2}
+  .st.candidate{color:#805b00;background:#fff2c7;border-color:#ecd68a}
+  .st.canonical{color:#1a3a6b;background:#e7eefb;border-color:#b9cdf0}
+  .sig-chip{font:.64rem var(--mono,ui-monospace,monospace);padding:.1rem .34rem;border:1px solid #a6e0c2;border-radius:var(--r-sm);color:#176b42;background:#f0fbf5;margin-right:.25rem}
+  .empty{padding:1.2rem;color:var(--muted)}
+</style>
+
+<div class="page-head">
+  <div class="eyebrow">Flywheel</div>
+  <h1>Proven variants</h1>
+</div>
+<p class="v-intro">
+  Winning trajectories harvested from runs, each parented to its guide and stored as a replayable
+  seed chain. Only signal-verified wins are banked. A variant stays a <strong>candidate</strong>
+  until a re-run reproduces it (<strong>verified by reproduction</strong>), and can then be promoted
+  to <strong>canonical</strong>.
+</p>
+
+{% if total == 0 %}
+<div class="v-guide"><div class="empty">
+  No proven variants yet. They appear automatically when a run produces a signal-verified win.
+  Nothing is harvested from oracle-only ("judge thinks so") successes.
+</div></div>
+{% endif %}
+
+{% for guide_id, variants in by_guide.items() %}
+<div class="v-guide">
+  <div class="v-guide-head">
+    <span><a href="/playbooks/{{ guide_id }}">{{ guide_id }}</a></span>
+    <span class="v-count">{{ variants | length }} variant{{ '' if variants|length == 1 else 's' }}</span>
+  </div>
+  <table class="v-tbl">
+    <thead><tr><th style="width:150px">Status</th><th style="width:60px">Turns</th><th>Signals</th><th>From run</th><th>Variant</th></tr></thead>
+    <tbody>
+      {% for v in variants %}
+      <tr>
+        <td><span class="st {{ v.status }}">{{ v.status | replace('_',' ') }}</span></td>
+        <td class="v-id">{{ v.turns }}</td>
+        <td>{% for s in v.signals %}<span class="sig-chip">{{ s }}</span>{% else %}<span class="muted"> </span>{% endfor %}</td>
+        <td class="v-id">{{ v.run_id }}</td>
+        <td class="v-id">{{ v.id }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+{% endblock %}

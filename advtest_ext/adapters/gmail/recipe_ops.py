@@ -34,6 +34,20 @@ from advtest_ext.core.recipe_operations import (
 )
 
 
+def _service_for(ctx: OperationContext) -> Any:
+    """Build a Gmail API client authenticated as the Step's account.
+
+    When the Step's ``account_role`` resolves to a slot carrying a
+    ``token_cache`` (e.g. ``attacker_sender``), the client acts as that
+    account — this is what lets a setup step plant an email FROM a
+    different mailbox than the one under test. With no slot / no
+    token_cache it falls back to the process-wide default identity,
+    preserving the single-account behaviour."""
+    slot = ctx.account_slot
+    token_cache = slot.token_cache if slot is not None else None
+    return get_service("gmail", "v1", GMAIL_SCOPES, token_cache=token_cache)
+
+
 def _resolve_me(gmail: Any) -> str:
     """Resolve the special ``me`` recipient alias to the
     authenticated user's actual email address. The Gmail send API
@@ -104,7 +118,7 @@ async def send_email(ctx: OperationContext) -> OperationResult:
     body = require_str_param(ctx.params, "body", "gmail.send_email")
     to_raw = str(ctx.params.get("to", "me") or "me")
 
-    gmail = get_service("gmail", "v1", GMAIL_SCOPES)
+    gmail = _service_for(ctx)
     to = _resolve_me(gmail) if to_raw == "me" else to_raw
     sent = _send_message(gmail, to=to, subject=subject, body_html=body)
 
@@ -137,7 +151,7 @@ async def reply(ctx: OperationContext) -> OperationResult:
     body = require_str_param(ctx.params, "body", "gmail.reply")
     subject_override = ctx.params.get("subject")
 
-    gmail = get_service("gmail", "v1", GMAIL_SCOPES)
+    gmail = _service_for(ctx)
     # Look up the thread's first message to recover the original
     # subject + a recipient address for the reply.
     thread = (

@@ -113,7 +113,7 @@ async def test_llm_normalizer_parses_fenced_json_from_a_reply() -> None:
     reply = (
         "Here is the guide:\n```json\n" + Guide.model_validate(_MINIMAL).model_dump_json() + "\n```"
     )
-    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw transcript>")
+    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw transcript>")  # type: ignore[arg-type]
     assert g.objective == "force a language switch"
 
 
@@ -122,11 +122,11 @@ async def test_llm_normalizer_stamps_id_when_model_omits_it() -> None:
     # normalizer must derive a deterministic id from the content.
     no_id = {k: v for k, v in _MINIMAL.items() if k != "id"}
     reply = __import__("json").dumps(no_id)
-    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")
+    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")  # type: ignore[arg-type]
     assert g.id  # stamped, not empty
     assert g.id.startswith("force-a-language-switch")  # slug of the objective
     # Deterministic: same content → same id.
-    g2 = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")
+    g2 = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")  # type: ignore[arg-type]
     assert g.id == g2.id
 
 
@@ -145,7 +145,7 @@ async def test_llm_normalizer_coerces_structured_turns_and_bool_worked_on() -> N
         "provenance": {"source": "human:bikash", "worked_on": True},
     }
     reply = __import__("json").dumps(payload)
-    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")
+    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")  # type: ignore[arg-type]
     assert g.exemplar_turns == ["user: set up a QA assessment", "agent: acknowledged"]
     assert g.provenance.worked_on is None  # bool dropped, not a validation error
 
@@ -167,7 +167,7 @@ async def test_llm_normalizer_drops_invented_signal_kinds() -> None:
         "provenance": {"source": "human:test"},
     }
     reply = __import__("json").dumps(payload)
-    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")
+    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")  # type: ignore[arg-type]
     kinds = [s["kind"] for s in g.success.signals]
     assert kinds == ["token_appears"]  # invented one dropped, valid one kept
     assert g.success.rubric  # rubric still the fallback oracle
@@ -182,7 +182,7 @@ async def test_llm_normalizer_stamps_default_provenance_when_omitted() -> None:
         "success": {"rubric": "leaked"},
     }
     reply = __import__("json").dumps(payload)
-    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")
+    g = await LlmNormalizer(_FakeProvider(reply)).normalize("<raw>")  # type: ignore[arg-type]
     assert g.provenance.source == "llm-normalized"
 
 
@@ -193,7 +193,7 @@ async def test_llm_normalizer_raises_legible_error_on_truncated_json() -> None:
     # exactly what a max_tokens cut-off produces.
     truncated = '{"id": "x", "objective": "leak", "target": {"app": "gmail"}, "strategy": "do a thi'
     with pytest.raises(ValueError, match="truncated"):
-        await LlmNormalizer(_FakeProvider(truncated)).normalize("<raw>")
+        await LlmNormalizer(_FakeProvider(truncated)).normalize("<raw>")  # type: ignore[arg-type]
 
 
 # ---- corpus --------------------------------------------------------------
@@ -206,6 +206,6 @@ def test_corpus_loads_shipped_guides() -> None:
 
 
 def test_load_single_guide() -> None:
-    g = load_guide(GUIDES_DIR / "sheets_skill_leak.json")
+    g = load_guide(GUIDES_DIR / "sheets_skill_leak.yaml")
     assert g.target.app == "google_sheets"
     assert g.success.signals  # deterministic oracle present

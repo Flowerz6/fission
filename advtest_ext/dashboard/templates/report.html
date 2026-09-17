@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>advtest report — run {{ run.id }}</title>
+  <title>advtest report, run {{ run.id }}</title>
   <style>
     @page { size: A4; margin: 22mm 18mm; }
     body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; font-size: 10pt; line-height: 1.45; }
@@ -64,9 +64,22 @@
     .tree-pre .verdict.error   { background: #ddd;    color: #444; }
     .tree-pre .score { color: #555; margin-left: 3px; }
     .tree-pre .draw  { color: #888; }
+    .report-export { padding: 16px; margin-bottom: 24px; border: 1px solid #e5e3de; background: #faf9f6; font-size: 13px; }
+    .report-export a, .report-export button { display: inline-block; margin-right: 12px; color: #202321; }
+    .report-export button { padding: 8px 12px; background: #202321; color: white; border: 0; border-radius: 3px; cursor: pointer; }
+    .report-export p { margin-bottom: 0; color: #666; }
+    @media print { .report-export { display: none !important; } }
   </style>
 </head>
 <body>
+{% if export_view %}
+<nav class="report-export" aria-label="Export report">
+  <a href="/runs/{{ run.id }}">Back to run</a>
+  {% if pdf_available %}<a href="/runs/{{ run.id }}/report.pdf" download>Download PDF</a>{% endif %}
+  <button type="button" onclick="window.print()">Print / Save as PDF</button>
+  <p>Choose “Save as PDF” in the print dialog to download this report.</p>
+</nav>
+{% endif %}
 
 <section class="cover">
   <h1>advtest run report</h1>
@@ -102,7 +115,7 @@
     {% for c in summary.get('asr_by_carrier', []) %}
     <tr>
       <td style="text-align:left">{{ c.carrier_id }}</td>
-      <td>{{ c.attack_class or '—' }}</td>
+      <td>{{ c.attack_class or ', ' }}</td>
       <td>{{ '%.2f'|format(c.asr) }}</td>
       <td>{{ c.successes }} / {{ c.attempts }}</td>
     </tr>
@@ -164,9 +177,7 @@
     a persisted trace; edges are reconstructed from <code>parent_id</code>.
     Linear-chain attacks (PAIR, single-step) render as a flat list under
     their cell. The colour next to each trace is its verdict
-    (<span class="severity-low">refused</span>,
-    <span class="severity-med">partial</span>,
-    <span class="severity-high">success</span>).
+    (<span class="severity-low">refused</span> <span class="severity-med">partial</span> <span class="severity-high">success</span>).
   </p>
   {% if not tree_forest %}
   <p class="muted">No traces recorded for this run.</p>
@@ -176,7 +187,7 @@
     <h3>
       <code>{{ cell.behavior_id }}</code> &times;
       <code>{{ cell.technique_id }}</code>
-      <span class="muted">— {{ cell.n_success }}/{{ cell.n_traces }} success</span>
+      <span class="muted"> {{ cell.n_success }}/{{ cell.n_traces }} success</span>
     </h3>
 <pre class="tree-pre">{% for line in cell.lines -%}
 {% set t = line.trace -%}

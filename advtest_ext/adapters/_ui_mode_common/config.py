@@ -27,10 +27,15 @@ PROFILE_ENV = "ADVTEST_PLAYWRIGHT_PROFILE_DIR"
 TIMEOUT_ENV = "ADVTEST_PLAYWRIGHT_TIMEOUT"
 INTERCEPT_ENV = "ADVTEST_INTERCEPT_TRAFFIC"
 POST_RESPONSE_HOLD_ENV = "ADVTEST_UI_MODE_HOLD_S"
+WINDOW_X_ENV = "ADVTEST_BROWSER_WINDOW_X"
+WINDOW_Y_ENV = "ADVTEST_BROWSER_WINDOW_Y"
+WINDOW_WIDTH_ENV = "ADVTEST_BROWSER_WINDOW_WIDTH"
+WINDOW_HEIGHT_ENV = "ADVTEST_BROWSER_WINDOW_HEIGHT"
 
 DEFAULT_PROFILE_DIR = Path.home() / ".advtest" / "playwright-profile"
 DEFAULT_TIMEOUT_MS = 20_000
 DEFAULT_POST_RESPONSE_HOLD_S = 6.0
+DEFAULT_WINDOW_GEOMETRY = (640, 0, 1280, 1040)
 
 # ----------------------------------------------------------------------
 # Pacing constants — identical across products by design. Tweaking one
@@ -96,6 +101,25 @@ SELECTOR_DRIFT_MESSAGE = (
 # Env-var resolvers — return resolved values with the documented
 # defaults. Pure I/O helpers; safe to call freely.
 # ----------------------------------------------------------------------
+
+
+def resolve_window_geometry() -> tuple[int, int, int, int]:
+    """Chrome outer-window geometry as ``(x, y, width, height)``.
+
+    Defaults dock a 1280px-wide runner flush right on the 1920x1080
+    demo display, leaving the dashboard visible on the left.
+    """
+    names = (WINDOW_X_ENV, WINDOW_Y_ENV, WINDOW_WIDTH_ENV, WINDOW_HEIGHT_ENV)
+    values: list[int] = []
+    for name, default in zip(names, DEFAULT_WINDOW_GEOMETRY, strict=True):
+        raw = os.environ.get(name)
+        try:
+            value = int(raw) if raw else default
+        except ValueError:
+            value = default
+        values.append(value)
+    x, y, width, height = values
+    return x, y, max(640, width), max(480, height)
 
 
 def intercept_enabled() -> bool:

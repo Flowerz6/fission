@@ -1,0 +1,88 @@
+{# TAP search-coverage panel. Reads the per-run tap_search_report.json
+   (loaded by _load_search_report -> context 'search_report'). Renders
+   nothing when the run produced no report (non-TAP run, or older run
+   before the report existed), so it never fabricates coverage. #}
+{% if search_report %}
+{% set archive = search_report.archive or {} %}
+{% set possible = archive.possible_cells or [] %}
+{% set attempted = archive.attempted_cells or [] %}
+{% set unexplored = archive.unexplored_cells or [] %}
+{% set refused = search_report.refused_framings or {} %}
+{% set causal = search_report.causal or {} %}
+<section id="run-search-report">
+  <div class="section-head">
+    <h2>Search coverage</h2>
+    <span class="muted">What the TAP search actually explored, verified, and left untried.</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+    <div class="hero-stat">
+      <div class="label">MAP-Elites coverage</div>
+      <div class="value">{{ '%.0f'|format((archive.coverage or 0.0) * 100) }}<span class="unit">%</span></div>
+      <div class="bar-wrap"><div class="bar-fill" style="width: {{ (archive.coverage or 0.0) * 100 }}%;"></div></div>
+      <div class="muted" style="font-size: 0.72rem; margin-top: 0.4rem;">{{ attempted|length }} / {{ possible|length }} cells tried</div>
+    </div>
+    <div class="hero-stat">
+      <div class="label">Verifier quorum</div>
+      <div class="value">{{ search_report.verifier_quorum if search_report.verifier_quorum is not none else ', ' }}</div>
+      <div class="muted" style="font-size: 0.72rem; margin-top: 0.4rem;">{{ (search_report.verifier_models or [])|length }} checker(s)</div>
+    </div>
+    <div class="hero-stat">
+      <div class="label">Judge calibration</div>
+      <div class="value">
+        {% if search_report.judge_calibrated %}<span class="pill success">fitted</span>
+        {% else %}<span class="pill grey">identity</span>{% endif %}
+      </div>
+      <div class="muted" style="font-size: 0.72rem; margin-top: 0.4rem;">drift ≥ {{ '%.2f'|format(search_report.onmech_drift_threshold or 0.0) }} prunes</div>
+    </div>
+    <div class="hero-stat">
+      <div class="label">Rewind budget</div>
+      <div class="value">{{ search_report.rewind_budget if search_report.rewind_budget is not none else 0 }}</div>
+      <div class="muted" style="font-size: 0.72rem; margin-top: 0.4rem;">{{ search_report.checkpointed_nodes or 0 }} checkpointed</div>
+    </div>
+  </div>
+
+  {% if search_report.planner_models or search_report.verifier_models %}
+  <div class="muted" style="font-size: 0.78rem; margin-top: 1rem;">
+    {% if search_report.planner_models %}<strong>Planners:</strong> {{ search_report.planner_models|join(', ') }}. {% endif %}
+    {% if search_report.executor_models %}<strong>Executors:</strong> {{ search_report.executor_models|join(', ') }}. {% endif %}
+    {% if search_report.verifier_models %}<strong>Verifiers:</strong> {{ search_report.verifier_models|join(', ') }}.{% endif %}
+  </div>
+  {% endif %}
+
+  {% if refused %}
+  <h3 style="margin: 1.25rem 0 0.5rem;">Framings that hard-refused</h3>
+  <table>
+    <thead><tr><th>Framing</th><th style="width: 6rem; text-align: right;">Refusals</th></tr></thead>
+    <tbody>
+      {% for framing, count in refused.items() %}
+      <tr><td>{{ framing }}</td><td style="text-align: right; font-variant-numeric: tabular-nums;">{{ count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if causal.controls %}
+  <h3 style="margin: 1.25rem 0 0.5rem;">Causal controls</h3>
+  <table>
+    <thead><tr><th>Control / variant cell</th><th style="width: 7rem; text-align: right;">Best score</th><th style="width: 7rem; text-align: right;">Δ vs control</th></tr></thead>
+    <tbody>
+      {% for kind, score in causal.controls.items() %}
+      <tr><td><span class="pill grey">control</span> {{ kind }}</td><td style="text-align: right; font-variant-numeric: tabular-nums;">{{ '%.2f'|format(score) }}</td><td class="muted" style="text-align: right;"> </td></tr>
+      {% endfor %}
+      {% for variant in causal.variants %}
+      <tr><td>{{ variant.cell }}</td><td style="text-align: right; font-variant-numeric: tabular-nums;">{{ '%.2f'|format(variant.score) }}</td><td style="text-align: right; font-variant-numeric: tabular-nums;">{{ '%+.2f'|format(variant.delta) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if unexplored %}
+  <h3 style="margin: 1.25rem 0 0.5rem;">Never explored <span class="muted" style="font-weight: normal; font-size: 0.8rem;">({{ unexplored|length }} cell(s))</span></h3>
+  <div class="muted" style="font-size: 0.76rem; font-family: var(--mono, monospace); line-height: 1.7;">
+    {% for cell in unexplored[:24] %}<span class="pill grey" style="margin: 0 0.2rem 0.2rem 0;">{{ cell }}</span>{% endfor %}
+    {% if unexplored|length > 24 %}<span class="muted">… and {{ unexplored|length - 24 }} more</span>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}

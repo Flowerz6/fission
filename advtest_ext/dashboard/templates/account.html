@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Your account · Fission{% endblock %}
+{% block content %}
+<div class="head-bar"><div class="ht"><h1>Your account</h1><p>Manage your profile and preferences.</p></div></div>
+<div class="tabs"><a class="on" href="/account">Profile</a></div>
+<form class="preference-form" data-preferences="profile"><div class="profile-layout"><div class="profile-photo"><span class="avatar-lg" data-image-preview="profile"><span data-profile-initials>F</span></span><label class="btn-outline">Change photo<input type="file" accept="image/png,image/jpeg,image/webp" data-image-upload="profile" hidden></label></div>
+<div class="acct-grid"><label class="fld">Name<input name="name" placeholder="Your name" maxlength="80" required></label><label class="fld profile-email">Email<input name="email" type="email" placeholder="you@example.com" maxlength="160"></label><label class="fld profile-role">Display role<input name="role" placeholder="e.g. Analyst" maxlength="80"></label><label class="fld profile-timezone">Timezone<select name="timezone"><option value="Europe/London">London</option><option value="UTC">UTC</option><option value="America/New_York">New York</option><option value="America/Los_Angeles">Los Angeles</option><option value="Asia/Kolkata">Kolkata</option></select></label></div></div>
+<p class="preference-note">Profile preferences are saved in this browser. Display role does not change access permissions.</p><div class="form-actions"><span class="save-status" role="status"></span><button class="btn-primary" type="submit">Save changes</button></div></form>
+{% endblock %}

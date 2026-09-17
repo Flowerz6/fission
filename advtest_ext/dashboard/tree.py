@@ -17,11 +17,13 @@ from collections import defaultdict
 from types import SimpleNamespace
 from typing import Any
 
+from advtest_ext.dashboard.presentation import attack_label, objective_label
+
 
 def _score_of(trace: Any) -> float:
     js = getattr(trace, "judge_scores", None)
     try:
-        return float(js[0].score) if js else 0.0
+        return max((float(score.score) for score in js), default=0.0) if js else 0.0
     except (AttributeError, TypeError, ValueError):
         return 0.0
 
@@ -103,7 +105,17 @@ def collapse_conversations(traces: list[Any]) -> list[Any]:
             )
         convs[key].append(trace)
 
-    rep = {key: max(convs[key], key=_score_of) for key in order}  # best turn per conversation
+    verdict_rank = {"success": 3, "partial": 2, "refused": 1, "error": 0}
+    rep = {
+        key: max(
+            convs[key],
+            key=lambda trace: (
+                verdict_rank.get(getattr(trace, "verdict", None) or "", 0),
+                _score_of(trace),
+            ),
+        )
+        for key in order
+    }  # best turn per conversation
     nodes: list[Any] = []
     for key in order:
         depth, parent_key, behavior, technique = info[key]
@@ -122,6 +134,14 @@ def collapse_conversations(traces: list[Any]) -> list[Any]:
                 # tree's node-detail panel can show the real transcript inline
                 # for collapsed multi-turn conversations (single-step traces
                 # already expose these on the ORM row).
+                attack_name=getattr(best, "attack_name", ""),
+                timestamp=min(
+                    (t.timestamp for t in convs[key] if getattr(t, "timestamp", None)), default=None
+                ),
+                ended_at=max(
+                    (t.timestamp for t in convs[key] if getattr(t, "timestamp", None)), default=None
+                ),
+                turn_count=len(convs[key]),
                 raw_request=getattr(best, "raw_request", None),
                 raw_response=getattr(best, "raw_response", None),
                 # Carry the phase tag through the collapse so the per-phase
@@ -344,7 +364,7 @@ def _node_score(trace: Any) -> float | None:
     if not js:
         return None
     try:
-        return float(js[0].score)
+        return max(float(score.score) for score in js)
     except (AttributeError, TypeError, ValueError):
         return None
 
@@ -356,14 +376,110 @@ def _node_name(trace: Any, index: int) -> str:
     meta = getattr(trace, "extra_metadata", None)
     name = ""
     if isinstance(meta, dict):
+        demo_flow = meta.get("demo_flow")
+        if isinstance(demo_flow, dict):
+            name = str(demo_flow.get("label") or demo_flow.get("variant") or "").strip()
         tcr = meta.get("tap_crescendo")
-        if isinstance(tcr, dict):
-            name = str(tcr.get("strategy") or "").strip()
+        if not name and isinstance(tcr, dict):
+            return _strategy_name(str(tcr.get("strategy") or ""), tcr.get("mutation"))
+        tap = meta.get("tap")
+        if not name and isinstance(tap, dict):
+            reasoning = str(tap.get("attacker_reasoning") or "").lower()
+            if "operator-provided seed" in reasoning:
+                family = "Seed prompt"
+            elif "chain-of-thought" in reasoning and any(
+                token in reasoning for token in ("yaml", "front-matter", "metadata")
+            ):
+                family = "Reasoning + YAML"
+            elif "chain-of-thought" in reasoning and any(
+                token in reasoning for token in ("footnote", "editorial", "annotation")
+            ):
+                family = "Reasoning footnote"
+            elif "chain-of-thought" in reasoning:
+                family = "Reasoning hijack"
+            elif any(token in reasoning for token in ("tool-call", "tool call", "function-")):
+                if "calendar" in reasoning:
+                    family = "Calendar API mimic"
+                elif "plugin" in reasoning:
+                    family = "Plugin response mimic"
+                else:
+                    family = "Tool-response mimic"
+            elif any(token in reasoning for token in ("yaml", "front-matter")):
+                family = "YAML metadata embed"
+            elif "audit-log" in reasoning:
+                family = "Audit-log directive"
+            elif any(token in reasoning for token in ("footnote", "editorial", "comment thread")):
+                family = "Editorial annotation"
+            elif "role confusion" in reasoning:
+                family = "Role confusion"
+            elif "conditional" in reasoning or "deferred trigger" in reasoning:
+                family = "Conditional trigger"
+            else:
+                family = "TAP variation"
+            # No depth/branch suffix: the node's position in the tree shows both.
+            name = family
     if not name:
-        name = str(getattr(trace, "technique_id", None) or "").strip()
+        # technique ids are snake_case slugs; show them as words.
+        name = (
+            str(getattr(trace, "technique_id", None) or "").replace("_", " ").strip().capitalize()
+        )
     if not name:
-        name = f"step {index}"
-    return _short_label(name)
+        name = f"Attempt {index}"
+    return _short_label(name, _NAME_LIMIT)
+
+
+# Fixed nodes the runtime always labels with the same strategy sentence.
+_FIXED_STRATEGY_NAMES = (
+    ("strict byte-for-byte reproduction", "Seed replay, verbatim"),
+    ("replay the documented seed conversation verbatim", "Seed replay, verbatim"),
+    ("reproduce the documented", "Seed replay, adaptive"),
+    ("paired no-carrier", "No-carrier control"),
+    ("natural, gradual build-up", "Natural build-up"),
+)
+# "Pose as a …" / "Frame the session as a …" lead-ins say nothing; the noun
+# phrase after them is the name. The phrase ends where the elaboration starts.
+_STRATEGY_LEAD_IN = re.compile(
+    r"^(?:pose|present yourself|frame (?:yourself|it|this|the \w+))\s+as\s+(?:an?\s+|the\s+)?",
+    re.IGNORECASE,
+)
+_STRATEGY_TAIL = re.compile(
+    r"\s*(?:[,;:.(]|\s(?:who|whom|whose|where|which|that|while|when|so|by|between|and then|writing|asking|claiming|contracting|doing|running|trying|needing)\s).*$",
+    re.IGNORECASE,
+)
+_NAME_LIMIT = 44  # two lines of a node card
+_DANGLING = frozenset(
+    "a an the of for to in on at with from and or as into about over under than".split()
+)
+
+
+def _strategy_name(strategy: str, mutation: Any = None) -> str:
+    """A proper, complete name for a tap_crescendo node (never an ellipsised
+    sentence): the mutated axis and value, a fixed name for the runtime's own
+    nodes, else the persona/framing noun phrase of a free-form strategy."""
+    if isinstance(mutation, dict) and mutation.get("dimension"):
+        axis = str(mutation["dimension"]).replace("_", " ").strip().capitalize()
+        value = str(mutation.get("feature_value") or "").replace("_", " ").replace("->", " → ")
+        value = " ".join(value.split())
+        # Values are single tokens/arrows that wrap cleanly, so allow a bit more.
+        return f"{axis}: {value}" if value and len(axis) + len(value) + 2 <= 52 else axis
+    text = " ".join(strategy.replace("*", "").split())
+    lowered = text.lower()
+    for needle, fixed in _FIXED_STRATEGY_NAMES:
+        if needle in lowered:
+            return fixed
+    stripped = _STRATEGY_LEAD_IN.sub("", text)
+    if stripped != text:
+        phrase = _STRATEGY_TAIL.sub("", stripped)
+        phrase = "".join(ch for ch in phrase if ch not in '"“”').strip()
+        if len(phrase) > _NAME_LIMIT:
+            phrase = phrase[:_NAME_LIMIT].rsplit(" ", 1)[0].strip(" ,.:;-")
+            words = phrase.split()
+            while len(words) > 1 and words[-1].lower() in _DANGLING:
+                words.pop()  # never end a name on "… certification for the"
+            phrase = " ".join(words)
+        if len(phrase) >= 4:
+            return phrase[0].upper() + phrase[1:]
+    return _short_label(text) if text else "Attempt"
 
 
 # Match a quoted framing (the distinctive bit of a strategy) as the label.
@@ -399,6 +515,20 @@ def _clip(text: Any, limit: int = 1200) -> str:
     return s if len(s) <= limit else s[:limit] + "…"
 
 
+def _attempt_description(trace: Any, index: int) -> str:
+    meta = getattr(trace, "extra_metadata", None) or {}
+    strategy = (meta.get("tap_crescendo") or {}).get("strategy")
+    demo = meta.get("demo_flow") or {}
+    description = strategy or demo.get("label") or demo.get("variant")
+    if not description and isinstance(meta.get("tap"), dict):
+        # Indirect TAP sends the same carrier prompt on every branch; the
+        # injection family is what tells the nodes apart.
+        description = _node_name(trace, index)
+    if not description:
+        description = getattr(trace, "raw_request", None) or _node_name(trace, index)
+    return " ".join(str(description).split())
+
+
 def _cell_nodes_edges(
     cell: dict[str, object], node_prefix: str
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -411,7 +541,7 @@ def _cell_nodes_edges(
     prepended and parents every opening variant, so the tree has ONE top node —
     the playbook — that fans out into the attacker's approaches, instead of
     several unconnected sibling roots."""
-    lines = cell.get("lines", [])  # type: ignore[assignment]
+    lines = cell.get("lines", [])
     assert isinstance(lines, list)
     ids_in_cell = {getattr(ln["trace"], "id", None) for ln in lines}
 
@@ -423,19 +553,44 @@ def _cell_nodes_edges(
         tid = str(getattr(t, "id", "") or "").replace("-", "")
         nid = f"{node_prefix}_t{tid}"
         score = _node_score(t)
+        attempted = _attempt_description(t, i)
+        method = attack_label(str(getattr(t, "attack_name", "") or ""))
+        started = getattr(t, "timestamp", None)
+        ended = getattr(t, "ended_at", None)
+        time_label = started.strftime("%H:%M:%S") if started else "Time not recorded"
+        if started and ended and ended != started:
+            time_label += "–" + ended.strftime("%H:%M:%S")  # noqa: RUF001 (en dash range)
+        turn_count = getattr(t, "turn_count", 1)
         name = _node_name(t, i)
-        label = f"{name}\n{score:.2f}" if score is not None else name
+        label = f"{name}\n{time_label}\n{method}"
+        if turn_count > 1:
+            label += f" · {turn_count} turns"
         nodes.append(
             {
                 "data": {
                     "id": nid,
                     "label": label,
+                    "name": name,
+                    "attempted": _clip(attempted, 3000),
+                    "method": method,
+                    "time": time_label,
+                    "turn_count": turn_count,
                     "status": _node_status(getattr(t, "verdict", None)),
                     "score": score,
                     "depth": getattr(t, "depth", None),
                     "trace_id": getattr(t, "id", None),
                     "u": _clip(getattr(t, "raw_request", None)),
                     "a": _clip(getattr(t, "raw_response", None)),
+                    "email": _clip(
+                        ((getattr(t, "extra_metadata", None) or {}).get("demo_flow") or {}).get(
+                            "visible_email"
+                        )
+                    ),
+                    "injection": _clip(
+                        ((getattr(t, "extra_metadata", None) or {}).get("demo_flow") or {}).get(
+                            "hidden_injection"
+                        )
+                    ),
                 }
             }
         )
@@ -455,13 +610,13 @@ def _cell_nodes_edges(
             {
                 "data": {
                     "id": pb_id,
-                    "label": _short_label(behavior),
+                    "label": _short_label(objective_label(behavior), 60),
                     "status": "root",
                     "score": None,
                     "depth": -1,
                     "trace_id": None,
-                    "u": "Playbook",
-                    "a": f"Attack playbook: {behavior}. The opening moves branch from here.",
+                    "u": "Guide",
+                    "a": f"Guide: {behavior}. The opening moves branch from here.",
                 }
             },
         )
@@ -501,7 +656,7 @@ def tree_graph_payload(
     for phase in phases:
         p_idx = phase.get("index", 0)
         cells_out: list[dict[str, Any]] = []
-        forest = phase.get("forest", [])  # type: ignore[assignment]
+        forest = phase.get("forest", [])
         assert isinstance(forest, list)
         for pos, cell in enumerate(forest, start=1):
             node_prefix = f"p{p_idx}c{pos}"

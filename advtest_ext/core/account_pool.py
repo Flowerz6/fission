@@ -60,11 +60,28 @@ class AccountSlot(BaseModel):
             "shouldn't land in the operator-facing UI."
         ),
     )
+    token_cache: Path | None = Field(
+        default=None,
+        description=(
+            "OAuth token JSON for API-based operations performed AS "
+            "this account (e.g. gmail.send_email). Lets one Run act as "
+            "distinct Google identities: the attacker_sender plants an "
+            "email via its own token while the recipient drives the "
+            "side panel via its browser profile. None → the process-wide "
+            "default cache (ADVTEST_OAUTH_TOKEN_CACHE); UI-only accounts "
+            "can leave it unset."
+        ),
+    )
 
     @field_validator("profile_dir")
     @classmethod
     def _expand_user(cls, v: Path) -> Path:
         return Path(v).expanduser()
+
+    @field_validator("token_cache")
+    @classmethod
+    def _expand_token_cache(cls, v: Path | None) -> Path | None:
+        return Path(v).expanduser() if v is not None else None
 
 
 class AccountPool(BaseModel):

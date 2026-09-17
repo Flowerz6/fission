@@ -16,7 +16,7 @@
 </h1>
 <p class="muted">
   Run <a href="/runs/{{ trace.run_id }}">{{ trace.run_id }}</a> ·
-  <a href="/runs/{{ trace.run_id }}/tree">attack tree</a>
+  <a href="/runs/{{ trace.run_id }}#run-attack-tree">attack tree</a>
   {% if trace.parent_id %}· Parent <a href="/traces/{{ trace.parent_id }}"><code>{{ trace.parent_id }}</code></a>{% endif %}
 </p>
 
@@ -44,25 +44,8 @@
 {{ doc_content_panel(trace) }}
 {{ attacker_reasoning_block(trace) }}
 
-<h2>User prompt typed in the Gemini side panel</h2>
-<pre>{{ trace.raw_request }}</pre>
-
-<h2>Gemini's response</h2>
-{# raw_response is now the COMPLETE assembled response (the ui_mode invokers
-   persist the full intercepted stream, not Playwright's mid-stream read);
-   full_response is the same text re-extracted live. Prefer the intercepted
-   full, fall back to raw_response. No truncation on either path. #}
-{% set response_text = full_response or trace.raw_response %}
-<pre class="full-response">{{ response_text }}</pre>
-{% if not full_response and not (trace.raw_response_data or {}).get('intercepted_traffic_path') %}
-<p class="muted" style="font-size: 0.85em;">
-  Rendered side-panel text (api_mode / interception disabled — no intercepted
-  stream captured for this trace).
-</p>
-{% endif %}
-
-{% if node_turns and node_turns|length > 1 %}
-<h2>Full conversation for this branch <span class="muted" style="font-weight:400">· {{ node_turns|length }} turns</span></h2>
+{% if node_turns %}
+<h2>Full Gemini conversation for this branch <span class="muted" style="font-weight:400">· {{ node_turns|length }} turn{% if node_turns|length != 1 %}s{% endif %}</span></h2>
 <p class="muted" style="font-size: 0.85em;">Every turn of this node's side-panel conversation, with the complete Gemini reply.</p>
 <div class="node-convo">
   {% for turn in node_turns %}
@@ -77,7 +60,7 @@
 </div>
 {% endif %}
 
-{# Phase 3 — typed signal stack. Populates from the SignalRecord
+{# Phase 3, typed signal stack. Populates from the SignalRecord
    rows when the run was configured with a ``signals:`` block.
    Pure additive panel: existing judge-scores table below stays. #}
 {% if signals %}
@@ -86,7 +69,7 @@
   Typed predicates evaluated against this trace. Each row is
   one signal: <em>fired</em> means the predicate matched. Unlike
   the judge-scores table below, signals can read the
-  intercepted Gemini stream — useful for compromise that lives
+  intercepted Gemini stream, useful for compromise that lives
   only in the raw body and never reaches the rendered UI.
 </p>
 <table>
@@ -114,8 +97,7 @@
           <summary>view</summary>
           <pre style="font-size: 0.9em; margin: 0.3em 0 0;">{{ s.evidence | tojson(indent=2) }}</pre>
         </details>
-        {% else %}
-        —
+        {% else %}, 
         {% endif %}
       </td>
     </tr>
@@ -126,11 +108,8 @@
 
 <h2>Judge scores</h2>
 <div class="judge-blurb">
-  <strong>Score direction:</strong> these are <em>compliance</em> scores, not <em>refusal</em> scores.
-  <strong>0.00</strong> means the model refused the attack (good for the model, bad for the attacker).
-  <strong>1.00</strong> means the model fully complied (attack landed). The judge name <code>strong_reject</code>
-  refers to the <a href="https://arxiv.org/abs/2402.10260" target="_blank" rel="noopener">StrongREJECT rubric</a>
-  used to compute the score — it does <em>not</em> mean the attack was rejected.
+  Scores measure observed instruction compliance: <strong>0.00</strong> indicates none;
+  <strong>1.00</strong> indicates complete compliance.
 </div>
 {% if trace.judge_scores %}
 <table>
@@ -153,33 +132,4 @@
 <p class="muted">No judge scores recorded for this trace.</p>
 {% endif %}
 
-{# Intercepted Workspace Gemini API traffic. Populated when the
-   ui_mode adapter ran with ``ADVTEST_INTERCEPT_TRAFFIC`` on (the
-   default). Path stored in ``raw_response_data`` keeps the
-   storage schema additive — no new column needed. #}
-{% set raw = trace.raw_response_data or {} %}
-{% set intercepted_path = raw.get('intercepted_traffic_path') %}
-<h2>Intercepted Gemini traffic</h2>
-{% if intercepted_path %}
-<p class="muted">
-  Raw Workspace Gemini API responses captured alongside the UI flow.
-  Same data the Burp Suite path produced in the Google Red Team Report.
-  Useful when a signal is visible only in the streamed response and
-  not in the rendered side-panel reply.
-</p>
-<p>
-  <a href="/traces/{{ trace.id }}/intercepted">⤓ Download capture (JSONL)</a>
-  <span class="muted">— one JSON entry per response, auth headers redacted</span>
-</p>
-{% else %}
-<p class="muted">
-  No intercepted traffic captured for this trace
-  {% if trace.target_name in ('GoogleDocsTarget', 'GmailTarget') %}
-    (interception was disabled via <code>ADVTEST_INTERCEPT_TRAFFIC=0</code>,
-     or this trace pre-dates the interception layer).
-  {% else %}
-    (target was not a ui_mode adapter).
-  {% endif %}
-</p>
-{% endif %}
 {% endblock %}

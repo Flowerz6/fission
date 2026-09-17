@@ -27,6 +27,7 @@ from typing import Any
 from advtest_ext.adapters._ui_mode_common.config import (
     DEMO_SLOW_MO_MS,
     NAVIGATOR_WEBDRIVER_SHIM,
+    resolve_window_geometry,
 )
 
 
@@ -41,6 +42,7 @@ async def launch_context(profile_dir: Path) -> Any:
     from playwright.async_api import async_playwright
 
     pw = await async_playwright().start()
+    window_x, window_y, window_width, window_height = resolve_window_geometry()
     context = await pw.chromium.launch_persistent_context(
         user_data_dir=str(profile_dir),
         headless=False,
@@ -50,6 +52,8 @@ async def launch_context(profile_dir: Path) -> Any:
             "--disable-blink-features=AutomationControlled",
             "--no-default-browser-check",
             "--no-first-run",
+            f"--window-position={window_x},{window_y}",
+            f"--window-size={window_width},{window_height}",
         ],
         # ``--enable-automation`` — strips the "Chrome is being
         #     controlled by automated test software" infobar.
@@ -57,7 +61,7 @@ async def launch_context(profile_dir: Path) -> Any:
         #     Chromium launches; system Chrome warns the user via
         #     a yellow infobar that's an eyesore during a live demo.
         ignore_default_args=["--enable-automation", "--no-sandbox"],
-        viewport={"width": 1280, "height": 900},
+        no_viewport=True,
     )
     # Mask the navigator.webdriver tell on EVERY launched context.
     # This used to live only in ``UiModeSession.ensure_open``, so the
@@ -72,7 +76,7 @@ async def launch_context(profile_dir: Path) -> Any:
     # Stash the playwright handle on the context so the caller can
     # close it cleanly on teardown. Playwright's persistent_context
     # doesn't carry a back-reference to the driver.
-    context.__advtest_pw = pw
+    setattr(context, "__advtest_pw", pw)
     return context
 
 
@@ -169,6 +173,29 @@ class UiModeSession:
         await self.ensure_open()
         if self._page is not None:
             return self._page
+        self._page = await self._context.new_page()
+        return self._page
+
+    async def new_page(self) -> Any:
+        """Swap in a CLEAN page on the same warm context — a fresh tab for the
+        next tree node — without a cold browser relaunch.
+
+        Reusing one page (``ensure_page``) is right for a single linear
+        crescendo, but in TAP tree mode each node is an independent branch:
+        node N must not inherit node N-1's populated document, left-over
+        confirmation dialogs, or side-panel conversation state (which was
+        surfacing as ``SidePanelUnavailable`` on later nodes). Closing just the
+        page and opening a new one keeps the persistent context — and its
+        login — warm, so Google's anti-automation heuristics don't see a
+        relaunch."""
+        await self.ensure_open()
+        old = self._page
+        self._page = None
+        if old is not None:
+            try:
+                await old.close()
+            except Exception:
+                pass
         self._page = await self._context.new_page()
         return self._page
 

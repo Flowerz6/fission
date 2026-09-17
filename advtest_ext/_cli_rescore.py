@@ -15,8 +15,12 @@ stored responses for the price of one judge call per trace.
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 import typer
+
+if TYPE_CHECKING:
+    from advtest_ext.core.rescore import RescoreStats
 
 __all__ = ["register"]
 
@@ -89,7 +93,7 @@ def register(app: typer.Typer) -> None:
             advtest rescore --all --judge decomposed_ipi --review-budget 40
         """
         from advtest_ext._cli_factories import _resolve_judge
-        from advtest_ext.cli import _resolve_db_url
+        from advtest_ext._cli_providers import _resolve_db_url
         from advtest_ext.core import load_seed_behaviors
         from advtest_ext.core.rescore import RescoreStats, rescore_traces
         from advtest_ext.storage import (
@@ -168,7 +172,7 @@ def register(app: typer.Typer) -> None:
         if dry_run:
             typer.echo("  (dry run — nothing written)")
 
-    def _echo_run(rid: str, stats) -> None:
+    def _echo_run(rid: str, stats: RescoreStats) -> None:
         typer.echo(
             f"  {rid}: {stats.n_scored}/{stats.n_traces} scored, "
             f"{stats.n_changed} changed, {stats.n_findings} finding(s)"
@@ -181,7 +185,7 @@ def register(app: typer.Typer) -> None:
         if stats.n_changed > 3:
             typer.echo(f"      ... and {stats.n_changed - 3} more")
 
-    def _accumulate(totals, stats) -> None:
+    def _accumulate(totals: RescoreStats, stats: RescoreStats) -> None:
         totals.n_traces += stats.n_traces
         totals.n_scored += stats.n_scored
         totals.n_skipped_empty += stats.n_skipped_empty

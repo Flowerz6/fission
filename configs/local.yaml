@@ -1,0 +1,60 @@
+# All-local provider profile. Every role, including the ones the guide runner
+# uses (CLAUDE_ATTACKER strategist + CLAUDE_JUDGE), points at the local vLLM /
+# Ollama server, so a guide run branches and mutates without touching the
+# Anthropic API. Use this when Anthropic credit is unavailable.
+#
+# Switch: set ADVTEST_PROVIDER_CONFIG=configs/local.yaml (see .env).
+# Switch back to Claude: set ADVTEST_PROVIDER_CONFIG=configs/dev.yaml.
+#
+# Start the local server with: scripts/start_vllm.sh dev
+
+ATTACKER_MODEL:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 1024
+  temperature: 0.7
+
+JUDGE_MODEL:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 256
+  temperature: 0.0
+
+CHECKER_MODEL:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 8
+  temperature: 0.0
+
+TARGET_MODEL_DEV:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 1024
+  temperature: 0.7
+
+# No GEMINI_TARGET / GEMINI_API_KEY here: live runs use ui_mode, where the
+# logged-in browser side panel IS the target model. The API-mode Gemini target
+# (configs/dev.yaml) is a separate path this profile does not use.
+
+# The guide runner's strategist role. Pointed at the LOCAL model here (in
+# configs/dev.yaml this is Anthropic Claude). This is the switch that lets the
+# TAP tree branch and propose mutations without Anthropic credit.
+CLAUDE_ATTACKER:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 1024
+  temperature: 1.0
+
+# The judge role. Local here too, so confirm/verify calls during branching never
+# hit Anthropic.
+CLAUDE_JUDGE:
+  provider_type: local_vllm
+  endpoint: http://localhost:11434/v1
+  model_id: qwen2.5:7b-instruct
+  max_tokens: 512
+  temperature: 0.0

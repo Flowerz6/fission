@@ -75,6 +75,10 @@ class Run(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     target_name: Mapped[str] = mapped_column(String(128))
     strategy: Mapped[str] = mapped_column(String(32))
+    guide_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    """The guide/playbook this run was launched from, when any. Lets the
+    authenticity view list only same-guide runs so cross-run comparisons
+    are apples-to-apples. Null for ad-hoc config runs."""
     output_dir: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     """Frozen RunConfig dump (target_name, attacks, behaviors,
@@ -233,6 +237,11 @@ class Finding(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     promoted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     replay_bundle_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Cross-run authenticity verdict for self-extraction findings (skill/schema/
+    # system-prompt leaks): whether the leak reproduces across independent runs
+    # or looks hallucinated. Computed on run completion; empty for other findings.
+    # See advtest_ext.core.authenticity_pipeline.
+    authenticity: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     run: Mapped[Run] = relationship(back_populates="findings")
     trace: Mapped[Trace] = relationship(back_populates="finding")
@@ -509,17 +518,83 @@ class RecipeStepRow(Base):
     recipe: Mapped[RecipeRow] = relationship(back_populates="steps")
 
 
+class GuideVariant(Base):
+    """A proven winning variant of a guide, harvested from a real run.
+
+    Not a seed (raw inbox) and not a new top-level guide (corpus clutter): a
+    variant is parented to the guide it descends from (``guide_id``) and carries
+    the winning trajectory as its seed chain, so it is directly replayable while
+    keeping its lineage. Deduped by ``id`` (a content hash of the trajectory).
+    ``status``: candidate → verified_by_reproduction → canonical.
+    """
+
+    __tablename__ = "guide_variants"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    guide_id: Mapped[str] = mapped_column(String(128), index=True)
+    behavior_id: Mapped[str] = mapped_column(String(128), index=True)
+    status: Mapped[str] = mapped_column(String(48), default="candidate", index=True)
+    seed_chain: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    """The winning turns [{n, attacker, target}] — replayed as the variant's opening moves."""
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    """run_id, trace_id, verified_signals, worked_on, reverify_* — audit trail."""
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class SeedReliability(Base):
+    """Durable per-seed execution ledger: does this seed still work as an exploit?
+
+    One row per guide (the seed = the guide's exemplar chain). Recomputed from
+    trace history at run completion (idempotent), so it is always reconstructable
+    from the raw traces and never drifts. Each of a guide's runs is reduced to one
+    *session outcome* for the seed, and the counters below tally those outcomes
+    across runs.
+
+    Discard rule: a seed is ``retired`` when ``n_attack_failed >= discard_n`` with
+    ``n_success == 0``. Crucially, ``n_bot_detected`` and ``n_error`` (harness /
+    selector drift) are *inconclusive* — the exploit never actually ran — so they
+    never count toward the attack-failure total and never trigger retirement. This
+    stops a seed that only ever hit Google's bot wall from being wrongly discarded.
+    """
+
+    __tablename__ = "seed_reliability"
+
+    guide_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    n_sessions: Mapped[int] = mapped_column(Integer, default=0)
+    """Total scored sessions = success + attack_failed + bot_detected + error."""
+    n_success: Mapped[int] = mapped_column(Integer, default=0)
+    """Sessions where the seed replay reached verdict 'success'."""
+    n_attack_failed: Mapped[int] = mapped_column(Integer, default=0)
+    """Sessions the seed ran but did not succeed (verdict refused / partial)."""
+    n_bot_detected: Mapped[int] = mapped_column(Integer, default=0)
+    """Sessions blocked by anti-automation (inconclusive; not a fail)."""
+    n_error: Mapped[int] = mapped_column(Integer, default=0)
+    """Sessions lost to harness/selector error (inconclusive; not a fail)."""
+    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    """active | retired. Set by the discard rule; a human can override via HITL."""
+    discard_n: Mapped[int] = mapped_column(Integer, default=10)
+    """The N used for this seed's discard threshold (default 10)."""
+    manual_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    """True when an operator set the status by hand; recompute then leaves it be."""
+    last_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, onupdate=_utc_now
+    )
+
+
 __all__ = [
     "Base",
     "CalibrationExample",
     "CalibrationResult",
     "Finding",
     "GoldLabel",
+    "GuideVariant",
     "HitlItem",
     "JudgeScore",
     "RecipeRow",
     "RecipeStepRow",
     "Run",
+    "SeedReliability",
     "SeedRow",
     "SignalRecord",
     "Trace",

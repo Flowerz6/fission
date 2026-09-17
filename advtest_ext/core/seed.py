@@ -33,7 +33,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SeedKind = Literal["dataset_entry", "human_chat"]
+SeedKind = Literal["dataset_entry", "human_chat", "harvested"]
+# ``harvested`` — a winning crescendo trajectory promoted back into the corpus
+# by the orchestrator (source_format ``tap_harvest``). Gated on signal-verified
+# success, novelty-deduped, and marked ``status: candidate`` until re-validated,
+# so it is auditable and kept distinct from human-authored chains.
 
 
 # Source format tags so loaders / dashboards can disambiguate
@@ -51,6 +55,7 @@ SourceFormat = Literal[
     "strongreject_csv",
     "safemtdata_jsonl",  # SafeMTData / ActorAttack multi-turn escalation
     "mcptox_jsonl",  # MCPTox MCP tool-poisoning benchmark
+    "tap_harvest",  # winning TAP-tree trajectory harvested from a run
 ]
 
 

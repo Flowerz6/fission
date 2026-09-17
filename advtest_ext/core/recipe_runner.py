@@ -359,12 +359,19 @@ class RecipeRunner:
         step: Step,
     ) -> tuple[Any, Any]:
         """Look up the per-account session + account slot for a
-        Step. Returns ``(None, None)`` when no session_pool is
-        configured — the handler is expected to either tolerate
-        that (api-only operations) or fail with a clear error."""
-        if self.session_pool is None or self.account_pool is None:
-            return None, None
+        Step.
+
+        The two are resolved independently. When an ``account_pool``
+        is configured the Step's role is resolved to its slot even if
+        there is no ``session_pool`` — API-based handlers
+        (e.g. gmail.send_email) need the slot's ``token_cache`` to act
+        as that account without ever opening a browser session. The
+        UI ``session`` is resolved only when a ``session_pool`` exists.
+        Returns ``(None, None)`` when neither is configured (legacy
+        single-account path)."""
         role = step.surface.account_role
-        session = await self.session_pool.session_for(role)
-        slot = self.account_pool.get_slot(role)
+        slot = self.account_pool.get_slot(role) if self.account_pool is not None else None
+        session = (
+            await self.session_pool.session_for(role) if self.session_pool is not None else None
+        )
         return session, slot

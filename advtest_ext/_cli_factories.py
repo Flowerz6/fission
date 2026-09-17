@@ -370,6 +370,30 @@ def _tap_crescendo_attack_factory(options: dict[str, Any] | None = None) -> Atta
         missing_role_hint="add one (provider_type: anthropic, model_id: …)",
     )
     opts = options or {}
+    attacker_roles = opts.get("attacker_roles", [])
+    if not isinstance(attacker_roles, list) or not all(
+        isinstance(role, str) and role for role in attacker_roles
+    ):
+        raise typer.BadParameter(
+            "attack_options.tap_crescendo.attacker_roles must be a list of provider-role names"
+        )
+    extra_attackers = [
+        _load_provider_role(
+            cfg_path,
+            role,
+            missing_role_hint=f"add a {role} role or remove it from attacker_roles",
+        )
+        for role in attacker_roles
+        if role != "CLAUDE_ATTACKER"
+    ]
+    planner = attacker
+    planner_role = opts.get("planner_role")
+    if planner_role and planner_role != "CLAUDE_ATTACKER":
+        planner = _load_provider_role(
+            cfg_path,
+            str(planner_role),
+            missing_role_hint=f"add a {planner_role} planner role",
+        )
     seed_chain = opts.get("seed_chain")
     if seed_chain is not None and (
         not isinstance(seed_chain, list) or not all(isinstance(m, str) for m in seed_chain)
@@ -403,7 +427,10 @@ def _tap_crescendo_attack_factory(options: dict[str, Any] | None = None) -> Atta
     # (Gemini). Fail-open: if the role is missing the check is simply off,
     # never silently the attacker checking itself.
     checker = None
-    if opts.get("on_mechanism_check"):
+    if opts.get("on_mechanism_check") or (
+        opts.get("hard_invariant_validation", True)
+        and (opts.get("mutation_surface") or opts.get("invariants"))
+    ):
         checker_role = str(opts.get("checker_role", "CHECKER_MODEL"))
         try:
             checker = _load_provider_role(
@@ -415,6 +442,13 @@ def _tap_crescendo_attack_factory(options: dict[str, Any] | None = None) -> Atta
                 ),
             )
         except typer.BadParameter:
+            if bool(
+                opts.get(
+                    "semantic_validation_required",
+                    bool(opts.get("mutation_surface") or opts.get("invariants")),
+                )
+            ):
+                raise
             if not opts.get("checker_role"):
                 # Default role absent and the operator didn't name one:
                 # degrade to no checking rather than fail the run.
@@ -425,20 +459,68 @@ def _tap_crescendo_attack_factory(options: dict[str, Any] | None = None) -> Atta
                 )
             else:
                 raise
+    checker_roles = opts.get("checker_roles", [])
+    if not isinstance(checker_roles, list) or not all(
+        isinstance(role, str) and role for role in checker_roles
+    ):
+        raise typer.BadParameter(
+            "attack_options.tap_crescendo.checker_roles must be a list of provider-role names"
+        )
+    extra_checkers = [
+        _load_provider_role(
+            cfg_path,
+            role,
+            missing_role_hint=f"add a {role} verifier role or remove it from checker_roles",
+        )
+        for role in checker_roles
+        if role != opts.get("checker_role", "CHECKER_MODEL")
+    ]
     return TapCrescendoAttack(
         attacker=attacker,
+        attackers=extra_attackers,
+        planner=planner,
         judge=_retrieval_judge_from_opts(opts),
         confirm_judge=confirm_judge,
         checker=checker,
+        checkers=extra_checkers,
+        verifier_quorum=(
+            int(opts["verifier_quorum"]) if opts.get("verifier_quorum") is not None else None
+        ),
         entity=str(opts.get("entity", "QUILLFEATHER")),
         canary=opts.get("canary"),
         handshake_token=opts.get("handshake_token", "QUILLFEATHER-ENGINEER"),
         topic=opts.get("topic") or opts.get("entity"),
         focus=opts.get("focus"),
+        mutation_surface=list(opts.get("mutation_surface") or []),
+        mutation_operators=list(opts.get("mutation_operators") or []),
+        invariants=list(opts.get("invariants") or []),
+        hard_invariant_validation=bool(opts.get("hard_invariant_validation", True)),
+        semantic_validation_required=bool(
+            opts.get(
+                "semantic_validation_required",
+                bool(opts.get("mutation_surface") or opts.get("invariants")),
+            )
+        ),
+        duplicate_threshold=float(opts.get("duplicate_threshold", 0.78)),
+        candidate_retries=int(opts.get("candidate_retries", 2)),
+        archive_path=opts.get("archive_path"),
+        archive_scope=opts.get("archive_scope"),
+        checkpoint_path=opts.get("checkpoint_path"),
+        checkpoint_scope=opts.get("checkpoint_scope"),
+        resume_from_checkpoint=bool(opts.get("resume_from_checkpoint", True)),
+        search_report_path=opts.get("search_report_path"),
+        partial_calibration_path=opts.get("partial_calibration_path"),
+        judge_calibration_path=opts.get("judge_calibration_path"),
+        onmech_drift_threshold=float(opts.get("onmech_drift_threshold", 0.5)),
+        rewind_max_attempts=int(opts.get("rewind_max_attempts", 0)),
+        ucb_exploration=float(opts.get("ucb_exploration", 0.20)),
+        causal_controls=bool(opts.get("causal_controls", True)),
         seeds=seeds,
         max_nodes_per_seed=int(opts.get("max_nodes_per_seed", 4)),
         seed_chain=seed_chain,
         seed_chain_depth=int(opts.get("seed_chain_depth", 0)),
+        seed_adaptive=bool(opts.get("seed_adaptive", True)),
+        replay_mode=str(opts.get("replay_mode", "legacy")),
         branching_factor=int(opts.get("branching_factor", 2)),
         max_depth=int(opts.get("max_depth", 3)),
         keep_top=int(opts.get("keep_top", 2)),
@@ -452,6 +534,10 @@ def _tap_crescendo_attack_factory(options: dict[str, Any] | None = None) -> Atta
         textgrad_floor=(
             float(opts["textgrad_floor"]) if opts.get("textgrad_floor") is not None else None
         ),
+        attacker_temperature=float(opts.get("attacker_temperature", 1.0)),
+        attacker_max_tokens=int(opts.get("attacker_max_tokens", 512)),
+        attacker_retries=int(opts.get("attacker_retries", 2)),
+        diversity_weight=float(opts.get("diversity_weight", 0.10)),
     )
 
 
@@ -552,6 +638,12 @@ _MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
 _SHEETS_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
     {"ui_output_dir", "sheet_id", "sheet_ids", "browser_mint"}
 )
+_SLIDES_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
+    {"ui_output_dir", "deck_id", "deck_ids", "browser_mint"}
+)
+_CALENDAR_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
+    {"ui_output_dir", "event_id", "event_ids", "browser_mint"}
+)
 
 
 def _multiturn_target_factory(options: dict[str, Any] | None = None) -> DocumentTarget:
@@ -632,6 +724,80 @@ def _sheets_multiturn_target_factory(options: dict[str, Any] | None = None) -> D
     )
 
 
+def _slides_multiturn_target_factory(options: dict[str, Any] | None = None) -> DocumentTarget:
+    """Build a ``GeminiSlidesMultiTurnTarget`` — the Slides peer of
+    ``google_docs_multiturn``: a warm, multi-turn Gemini Slides side-panel
+    target (crescendo / tap_chain drive it). Needs only a logged-in Playwright
+    profile. NOTE: the Slides side-panel selectors are seeded from Docs and
+    need live validation before a real run.
+
+    target_options: ``ui_output_dir`` (screenshots + intercepted JSONL;
+    default ./out), ``deck_id`` (reuse a blank deck, never deleted),
+    ``deck_ids`` (rotate one per node), ``browser_mint`` (mint one blank deck
+    through the browser, no API/OAuth)."""
+    from advtest_ext.adapters.slides.ui_mode.multi_turn_target import (
+        GeminiSlidesMultiTurnTarget,
+    )
+
+    opts = options or {}
+    unknown = set(opts) - _SLIDES_MULTITURN_TARGET_OPTION_KEYS
+    if unknown:
+        raise typer.BadParameter(
+            f"unknown target_options keys for google_slides_multiturn: {sorted(unknown)}; "
+            f"allowed: {sorted(_SLIDES_MULTITURN_TARGET_OPTION_KEYS)}"
+        )
+    deck_ids = opts.get("deck_ids")
+    if deck_ids is not None and (
+        not isinstance(deck_ids, list) or not all(isinstance(d, str) for d in deck_ids)
+    ):
+        raise typer.BadParameter(
+            "target_options.deck_ids for google_slides_multiturn must be a list of strings"
+        )
+    return GeminiSlidesMultiTurnTarget(
+        output_dir=Path(str(opts.get("ui_output_dir", "./out"))),
+        deck_id=opts.get("deck_id"),
+        deck_ids=deck_ids,
+        browser_mint=bool(opts.get("browser_mint", False)),
+    )
+
+
+def _calendar_multiturn_target_factory(options: dict[str, Any] | None = None) -> DocumentTarget:
+    """Build a ``GeminiCalendarMultiTurnTarget`` — the Calendar peer of
+    ``google_docs_multiturn``: a warm, multi-turn Gemini Calendar side-panel
+    target (crescendo / tap_chain drive it). Needs only a logged-in Playwright
+    profile. NOTE: the Calendar side-panel selectors are seeded from Sheets/Docs
+    and need live validation before a real run.
+
+    target_options: ``ui_output_dir`` (screenshots + intercepted JSONL;
+    default ./out), ``event_id`` (reuse a planted event, never deleted),
+    ``event_ids`` (rotate one per node), ``browser_mint`` (mint one event
+    through the browser, no API/OAuth)."""
+    from advtest_ext.adapters.calendar.ui_mode.multi_turn_target import (
+        GeminiCalendarMultiTurnTarget,
+    )
+
+    opts = options or {}
+    unknown = set(opts) - _CALENDAR_MULTITURN_TARGET_OPTION_KEYS
+    if unknown:
+        raise typer.BadParameter(
+            f"unknown target_options keys for google_calendar_multiturn: {sorted(unknown)}; "
+            f"allowed: {sorted(_CALENDAR_MULTITURN_TARGET_OPTION_KEYS)}"
+        )
+    event_ids = opts.get("event_ids")
+    if event_ids is not None and (
+        not isinstance(event_ids, list) or not all(isinstance(e, str) for e in event_ids)
+    ):
+        raise typer.BadParameter(
+            "target_options.event_ids for google_calendar_multiturn must be a list of strings"
+        )
+    return GeminiCalendarMultiTurnTarget(
+        output_dir=Path(str(opts.get("ui_output_dir", "./out"))),
+        event_id=opts.get("event_id"),
+        event_ids=event_ids,
+        browser_mint=bool(opts.get("browser_mint", False)),
+    )
+
+
 def _stub_target(options: dict[str, Any] | None = None) -> DocumentTarget:
     """Adapter signature shim: the CLI registry callable returns a
     fresh ``StubDocumentTarget``. The stub doesn't accept per-run
@@ -656,18 +822,24 @@ def _register_workspace_targets() -> None:
     google-genai). Splitting this into a function also gives tests
     a clean injection point — they call it once after the env var
     is set."""
+    from advtest_ext.adapters.calendar import CalendarTarget
     from advtest_ext.adapters.gmail import GmailTarget
     from advtest_ext.adapters.google_docs import GoogleDocsTarget
     from advtest_ext.adapters.sheets import SheetsTarget
+    from advtest_ext.adapters.slides import SlidesTarget
 
     _TARGET_REGISTRY["google_docs"] = _workspace_target_factory(GoogleDocsTarget)
     _TARGET_REGISTRY["gmail"] = _workspace_target_factory(GmailTarget)
     _TARGET_REGISTRY["sheets"] = _workspace_target_factory(SheetsTarget)
+    _TARGET_REGISTRY["slides"] = _workspace_target_factory(SlidesTarget)
+    _TARGET_REGISTRY["calendar"] = _workspace_target_factory(CalendarTarget)
     # Live multi-turn side-panel target for crescendo / tap_chain. Needs
     # no Gemini provider (the side panel IS the model), so it's a plain
     # factory rather than a _workspace_target_factory.
     _TARGET_REGISTRY["google_docs_multiturn"] = _multiturn_target_factory
     _TARGET_REGISTRY["google_sheets_multiturn"] = _sheets_multiturn_target_factory
+    _TARGET_REGISTRY["google_slides_multiturn"] = _slides_multiturn_target_factory
+    _TARGET_REGISTRY["google_calendar_multiturn"] = _calendar_multiturn_target_factory
 
 
 _register_workspace_targets()

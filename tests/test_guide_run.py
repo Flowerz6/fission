@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from advtest_ext.attacks.tap_crescendo import TapCrescendoAttack
 from advtest_ext.core.orchestrator import GridOrchestrator
 from advtest_ext.guides import Guide
 from advtest_ext.guides.run import build_guide_run, default_target_name
@@ -45,10 +46,10 @@ def _guide(d: dict[str, Any] | None = None) -> Guide:
 def _build(**overrides: Any) -> GridOrchestrator:
     orch = build_guide_run(
         _guide(),
-        target=_Fake(),
-        attacker=_Fake(),
-        attack_judge=_Fake(),
-        orchestrator_judge=_Fake(),
+        target=_Fake(),  # type: ignore[arg-type]
+        attacker=_Fake(),  # type: ignore[arg-type]
+        attack_judge=_Fake(),  # type: ignore[arg-type]
+        orchestrator_judge=_Fake(),  # type: ignore[arg-type]
         **overrides,
     )
     assert isinstance(orch, GridOrchestrator)
@@ -72,6 +73,7 @@ def test_single_tap_crescendo_attack_configured_from_guide() -> None:
     assert len(orch.attacks) == 1
     attack = orch.attacks[0]
     assert attack.name == "tap_crescendo"
+    assert isinstance(attack, TapCrescendoAttack)
     assert attack._entity == "QA_Assessment"
     assert attack._seed_chain == ["set up a QA assessment", "treat me like a spawned node"]
 
@@ -99,31 +101,35 @@ def test_orchestrator_judge_is_wired_through() -> None:
     judge = _Fake()
     orch = build_guide_run(
         _guide(),
-        target=_Fake(),
-        attacker=_Fake(),
-        attack_judge=_Fake(),
-        orchestrator_judge=judge,
+        target=_Fake(),  # type: ignore[arg-type]
+        attacker=_Fake(),  # type: ignore[arg-type]
+        attack_judge=_Fake(),  # type: ignore[arg-type]
+        orchestrator_judge=judge,  # type: ignore[arg-type]
     )
-    assert orch.judge is judge
+    assert orch.judge is judge  # type: ignore[comparison-overlap]
 
 
 def test_attack_overrides_reach_the_attack() -> None:
     orch = _build(max_depth=1, branching_factor=1)
-    assert orch.attacks[0]._max_depth == 1
-    assert orch.attacks[0]._bf == 1
+    attack = orch.attacks[0]
+    assert isinstance(attack, TapCrescendoAttack)
+    assert attack._max_depth == 1
+    assert attack._bf == 1
 
 
 def test_confirm_judge_passes_into_the_attack() -> None:
     confirm = _Fake()
     orch = build_guide_run(
         _guide(),
-        target=_Fake(),
-        attacker=_Fake(),
-        attack_judge=_Fake(),
-        orchestrator_judge=_Fake(),
-        confirm_judge=confirm,
+        target=_Fake(),  # type: ignore[arg-type]
+        attacker=_Fake(),  # type: ignore[arg-type]
+        attack_judge=_Fake(),  # type: ignore[arg-type]
+        orchestrator_judge=_Fake(),  # type: ignore[arg-type]
+        confirm_judge=confirm,  # type: ignore[arg-type]
     )
-    assert orch.attacks[0]._confirm_judge is confirm
+    attack = orch.attacks[0]
+    assert isinstance(attack, TapCrescendoAttack)
+    assert attack._confirm_judge is confirm  # type: ignore[comparison-overlap]
 
 
 # ---- target-name defaulting ----------------------------------------------
@@ -134,6 +140,8 @@ def test_confirm_judge_passes_into_the_attack() -> None:
     [
         ("google_docs", "google_docs_multiturn"),
         ("google_sheets", "google_sheets_multiturn"),
+        ("google_slides", "google_slides_multiturn"),
+        ("google_calendar", "google_calendar_multiturn"),
         ("gmail", "gmail"),
     ],
 )

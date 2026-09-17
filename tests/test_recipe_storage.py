@@ -86,7 +86,7 @@ def test_list_seeds_filters_by_kind() -> None:
             session,
             seed=Seed(
                 id=f"seed-{i}",
-                kind=kind,
+                kind=kind,  # type: ignore[arg-type]
                 title=f"t{i}",
                 source_format="docx_report" if kind == "human_chat" else "harmbench_jsonl",
                 raw_artefact_path="x",

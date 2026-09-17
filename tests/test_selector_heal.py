@@ -155,7 +155,7 @@ async def test_propose_fixes_returns_only_requested_string_keys() -> None:
         '"unrelated": "x", "side_panel_input": 5}\n```'
     )
     fixes = await propose_fixes(
-        provider,
+        provider,  # type: ignore[arg-type]
         drifted=["side_panel_button", "side_panel_input"],
         intents={"side_panel_button": "opens the panel"},
         candidates={"labelled": []},
@@ -173,7 +173,7 @@ async def test_heal_accepts_validated_and_rejects_unvalidated() -> None:
     provider = _FakeProvider('{"side_panel_button": "fixed-btn", "side_panel_close": "fixed-x"}')
     report = await heal(
         page,
-        provider,
+        provider,  # type: ignore[arg-type]
         selectors={
             "side_panel_button": "old-btn",
             "side_panel_close": "old-x",
@@ -189,5 +189,5 @@ async def test_heal_accepts_validated_and_rejects_unvalidated() -> None:
 
 async def test_heal_noop_when_nothing_drifted() -> None:
     page = _FakePage({"a": 1, "b": 1})
-    report = await heal(page, _FakeProvider("{}"), selectors={"x": "a", "y": "b"}, intents={})
+    report = await heal(page, _FakeProvider("{}"), selectors={"x": "a", "y": "b"}, intents={})  # type: ignore[arg-type]
     assert report.drifted == [] and report.fixes == {}

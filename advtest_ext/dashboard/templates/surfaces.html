@@ -1,91 +1,74 @@
 {% extends "base.html" %}
 {% block title %}Surfaces · Fission{% endblock %}
 {% block content %}
-{% set a = agreement %}
-<div class="page-head">
-  <p class="eyebrow">Deployment-surface coverage</p>
-  <h1>Surface inventory</h1>
-  <p>Every Gemini surface under test, driven live through the product UI. Select a row for the full assessment.</p>
-</div>
+{% from "surfaces/_status.html" import target_status %}
+{% set tested_count = surface_groups|selectattr('attempts')|list|length %}
+<div class="head-bar"><div class="ht"><h1>Targets</h1><p>{{ 'Workspace surfaces for ' ~ selected_service.label ~ '.' if selected_service.key != 'all' else 'Workspace surfaces across your services.' }}</p></div><div class="ha"><a class="btn-primary" href="/runs/new">＋ Add target</a></div></div>
 
-<section class="signature">
-  <div>
-    <p class="sig-label">Oracle agreement vs expert consensus</p>
-    <div class="sig-value">{{ '%.2f' % a.kappa_oracle }}<span class="unit"> κ</span>
-      {% if a.has_ceiling %}<span class="ci">· ceiling {{ '%.2f' % a.alpha_human }}</span>{% endif %}</div>
-    <div class="meter" aria-label="Oracle kappa {{ '%.2f' % a.kappa_oracle }}">
-      <svg viewBox="0 0 520 44" preserveAspectRatio="none" role="img">
-        <line x1="8" y1="29" x2="512" y2="29" stroke="var(--border-2)" stroke-width="2" stroke-linecap="round"/>
-        {% if a.has_ceiling %}
-        <line x1="{{ 8 + a.alpha_human * 504 }}" y1="15" x2="{{ 8 + a.alpha_human * 504 }}" y2="29" stroke="var(--muted-2)" stroke-width="1.5"/>
-        <text x="{{ 8 + a.alpha_human * 504 }}" y="11" font-size="9" fill="var(--muted)" text-anchor="middle">human {{ '%.2f' % a.alpha_human }}</text>
-        {% endif %}
-        <circle cx="{{ 8 + a.kappa_oracle * 504 }}" cy="29" r="5" fill="var(--accent)"/>
-        <text x="{{ 8 + a.kappa_oracle * 504 }}" y="43" font-size="9" fill="var(--accent-ink)" text-anchor="middle">oracle {{ '%.2f' % a.kappa_oracle }}</text>
-      </svg>
-    </div>
-    <div class="sig-sub">n = {{ a.n }} in-house gold label{{ '' if a.n == 1 else 's' }}
-      {% if not a.has_ceiling %}· human ceiling pending (needs ≥2 raters per item){% endif %}
-      {% if benchmark %}· JailbreakBench held-out κ {{ '%.2f' % benchmark.kappa }} (n={{ benchmark.n_scored }}){% endif %}</div>
-  </div>
-  <div class="sig-divider"></div>
-  <div class="kpi-row">
-    <div class="kpi"><div class="k">Surfaces</div><div class="v">{{ totals.surfaces }}</div><div class="m">under test</div></div>
-    <div class="kpi"><div class="k">Exposed</div><div class="v" style="color:var(--crit)">{{ totals.exposed }}</div><div class="m">≥1 finding</div></div>
-    <div class="kpi"><div class="k">Findings</div><div class="v">{{ totals.findings }}</div><div class="m">across surfaces</div></div>
-    <div class="kpi"><div class="k">Attempts</div><div class="v">{{ totals.attempts }}</div><div class="m">{{ totals.runs }} runs</div></div>
-    <div class="kpi"><div class="k">Runs</div><div class="v">{{ totals.runs }}</div><div class="m">campaigns</div></div>
-    <div class="kpi"><div class="k">Gold set</div><div class="v">{{ totals.gold }}</div><div class="m">labelled traces</div></div>
-  </div>
-</section>
 
-<div class="toolbar">
-  <span class="count" id="surf-count">{{ totals.surfaces }} surface{{ '' if totals.surfaces == 1 else 's' }}</span>
-  <span class="spacer"></span>
-  <button class="chip-filter on" data-filter="all" onclick="filterSurfaces(this,'all')">All</button>
-  <button class="chip-filter" data-filter="exposed" onclick="filterSurfaces(this,'exposed')">Exposed</button>
-</div>
 
+<div class="list-controls"><div class="tabs" id="target-tabs"><button class="on" data-filter="all">All <span class="c">{{ totals.surfaces }}</span></button><button data-filter="tested">Tested <span class="c">{{ tested_count }}</span></button></div><div class="searchbox"><input aria-label="Search targets" id="target-search" placeholder="Search targets…"></div></div>
 <div class="inventory" id="surf-inventory">
-  <div class="inv-head"><span>Surface</span><span>Attempts</span><span>Runs</span><span>Open findings</span><span>Exposure</span></div>
-  {% for s in surfaces %}
-  <button class="inv-row" data-exposure="{{ s.exposure }}"
-          onclick="loadSurfacePanel('{{ s.target_name }}','{{ s.label }}')">
-    <div class="surface-name"><span class="s-app">{{ s.label }}</span><span class="s-region">{{ s.region }}</span></div>
+  <div class="inv-head"><span>Surface</span><span>Attempts</span><span>Runs</span><span>Findings</span><span>Status</span></div>
+  {% for s in surface_groups %}
+  <button class="inv-row" data-exposure="{{ s.exposure }}" data-status="{{ 'tested' if s.attempts else ('untested' if s.configured else 'unconfigured') }}"
+          data-surface="{{ s.key }}" data-service="{{ s.service }}" onclick='loadSurfaceGroup({{ s.service|tojson }},{{ s.key|tojson }},{{ s.label|tojson }})'>
+    <div class="surface-name">{% if s.service == 'gemini' and s.key in ('docs', 'sheets', 'gmail', 'slides', 'drive', 'calendar') %}<img class="target-icon product-logo" src="/static/product-icons/google-{{ s.key }}.svg" width="24" height="24" alt="" aria-hidden="true">{% else %}<svg class="target-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" aria-hidden="true"><rect x="4" y="5" width="16" height="13" rx="3"/><path d="M9 21h6m-3-3v3M9 10h.01M15 10h.01M8 14h8M12 2v3"/></svg>{% endif %}<span class="s-app">{{ s.label }}{% if selected_service.key == 'all' %}<small class="surface-service">{{ s.service_label }}</small>{% endif %}</span><span class="s-region">{{ s.adapters|map(attribute='target_name')|join(', ') }}</span></div>
     <div class="inv-num">{{ s.attempts }}<span class="sub">traces</span></div>
-    <div class="inv-num">{{ s.runs }}<span class="sub">campaign{{ '' if s.runs == 1 else 's' }}</span></div>
+    <div class="inv-num">{{ s.runs }}<span class="sub">run{{ '' if s.runs == 1 else 's' }}</span></div>
     <div class="findings-chips">
       {% if s.sev_chips %}
         {% for sev, cnt in s.sev_chips %}
         <span class="sev {{ 'crit' if sev in ['crit','critical'] else 'high' if sev == 'high' else 'med' }}"><span class="n">{{ cnt }}</span>&nbsp;{{ sev }}</span>
         {% endfor %}
       {% else %}
-        <span class="sev none">no findings yet</span>
+        <span class="sev none">{{ 'No findings' if s.attempts else '—' }}</span>
       {% endif %}
     </div>
-    <div class="exposure {{ s.exposure }}"><span class="mk"></span>{{ s.exposure_label }}</div>
+    {{ target_status(s) }}
   </button>
   {% endfor %}
 </div>
 
+<div class="pager"><span class="info" id="surf-count">{{ totals.surfaces }} surfaces</span></div>
+<section class="testing-coverage" aria-labelledby="coverage-title">
+  <div class="coverage-heading"><div><h2 id="coverage-title">Testing coverage</h2><p>{{ 'Across all services.' if selected_service.key == 'all' else 'Across all ' ~ selected_service.label ~ ' surfaces.' }}</p></div></div>
+  <dl class="coverage-metrics">
+    <div><dt>Surfaces</dt><dd>{{ totals.surfaces }}</dd></div>
+    <div><dt>Tested</dt><dd>{{ tested_count }}</dd></div>
+    <div><dt>With findings</dt><dd>{{ totals.exposed }}</dd></div>
+    <div><dt>Findings</dt><dd>{{ "{:,}".format(totals.findings) }}</dd></div>
+    <div><dt>Attempts</dt><dd>{{ "{:,}".format(totals.attempts) }}</dd><p>Across {{ "{:,}".format(totals.runs) }} run{{ '' if totals.runs == 1 else 's' }}</p></div>
+  </dl>
+</section>
 <script>
+  function loadSurfaceGroup(service, surface, title) {
+    fetch('/surface-groups/' + encodeURIComponent(service) + '/' + encodeURIComponent(surface) + '/_panel?service=' + {{ selected_service.key|tojson }})
+      .then(function(r){return r.ok ? r.text() : Promise.reject(r.status);})
+      .then(function(html){openPanel(title,html);})
+      .catch(function(){openPanel(title,'<p class="detail-text">Could not load surface detail. Please try again.</p>');});
+  }
+
   function loadSurfacePanel(target, title) {
-    fetch('/surfaces/' + encodeURIComponent(target) + '/_panel')
+    fetch('/surfaces/' + encodeURIComponent(target) + '/_panel?service=' + {{ selected_service.key|tojson }})
       .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
       .then(function (html) { openPanel(title, html); })
       .catch(function () { openPanel(title, '<p class="detail-text">Could not load surface detail.</p>'); });
   }
-  function filterSurfaces(btn, mode) {
-    document.querySelectorAll('.toolbar .chip-filter').forEach(function (b) { b.classList.remove('on'); });
-    btn.classList.add('on');
-    var shown = 0;
-    document.querySelectorAll('#surf-inventory .inv-row').forEach(function (row) {
-      var on = mode === 'all' || row.getAttribute('data-exposure') === 'exposed';
-      row.style.display = on ? '' : 'none';
-      if (on) shown++;
+  function filterSurfaces() {
+    var mode=document.querySelector('#target-tabs .on').dataset.filter;
+    var q=document.getElementById('target-search').value.toLowerCase();
+    var shown=0;
+    document.querySelectorAll('#surf-inventory .inv-row').forEach(function(row){
+      row.hidden = !((mode==='all'||row.dataset.status===mode) && row.textContent.toLowerCase().includes(q));
+      if(!row.hidden) shown++;
     });
-    var c = document.getElementById('surf-count');
-    if (c) c.textContent = shown + ' surface' + (shown === 1 ? '' : 's');
+    document.getElementById('surf-count').textContent=shown+' surfaces';
   }
+  document.getElementById('target-search').addEventListener('input',filterSurfaces);
+  document.getElementById('target-tabs').addEventListener('click',function(e){
+    var b=e.target.closest('button');if(!b)return;
+    this.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b)});filterSurfaces();
+  });
 </script>
 {% endblock %}

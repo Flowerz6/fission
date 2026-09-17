@@ -40,7 +40,7 @@ def _step(
     *,
     app: str = "docs",
     operation: str = "type_prompt",
-    params: dict | None = None,
+    params: dict[str, Any] | None = None,
     on_fail: str = "abort",
     role: str = "recipient",
 ) -> Step:

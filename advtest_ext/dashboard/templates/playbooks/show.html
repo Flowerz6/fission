@@ -4,7 +4,6 @@
 <div class="page-head">
   <p class="eyebrow">Playbook</p>
   <h1>{{ title }}</h1>
-  <p>One canonical, versioned, replayable object — compiled from a Seed. Both seed kinds compile to this same shape; everything downstream is identical for both.</p>
 </div>
 <p class="muted"><a href="/playbooks">&larr; all playbooks</a></p>
 
@@ -45,7 +44,7 @@
 
   <div class="row"><span class="key"><span class="k">playbook_id:</span></span><span class="s">{{ config.playbook_id }}</span></div>
   <div class="row"><span class="key"><span class="k">version:</span></span><span class="s">{{ config.version }}</span><span class="c">   # immutable identity; re-extraction increments</span></div>
-  <div class="row"><span class="key"><span class="k">seed_ref:</span></span><span class="s">{{ config.seed_ref }}</span><span class="c">   # exactly one Seed — provenance never mixed</span></div>
+  <div class="row"><span class="key"><span class="k">seed_ref:</span></span><span class="s">{{ config.seed_ref }}</span><span class="c">   # exactly one Seed, provenance never mixed</span></div>
   {% if g.provenance.author %}<div class="block"><span class="c"># author: {{ g.provenance.author }}{% if g.provenance.worked_on %} · {{ g.provenance.worked_on }}{% endif %}</span></div>{% endif %}
   <div class="row"><span class="key"><span class="k">intent:</span></span><span class="s">{{ config.intent }}</span><span class="c">   # effect &amp; mechanism (gate G2 checks against this)</span></div>
   <div class="block"><span class="c"># {{ g.objective }}</span></div>
@@ -66,7 +65,7 @@
   <div class="blank"></div>
   <div class="row"><span class="key"><span class="k">steps:</span></span><span class="c"># ordered actions, exact parameters, per-step assertions</span></div>
   {% if config.steps %}{% for st in config.steps %}<div class="li"><span class="n">- {{ '%02d' % st.n }}</span>  <span class="s">{{ st.op }}</span>  <span class="c">→ {{ st.account }}  # {{ st.intent }}</span></div>{% endfor %}
-  {% else %}<div class="li c">[] # direct chat — no out-of-band environment setup</div>{% endif %}
+  {% else %}<div class="li c">[] # direct chat, no out-of-band environment setup</div>{% endif %}
 
   {% if config.seed_chain %}
   <div class="blank"></div>
@@ -75,9 +74,9 @@
   {% endif %}
 
   <div class="blank"></div>
-  <div class="row"><span class="key"><span class="k">signals:</span></span><span class="c"># canary tokens / handshakes — what L0 matches on (deterministic)</span></div>
+  <div class="row"><span class="key"><span class="k">signals:</span></span><span class="c"># canary tokens / handshakes, what L0 matches on (deterministic)</span></div>
   {% if config.signals %}{% for s in config.signals %}<div class="li"><span class="n">-</span> <span class="s">{{ s.kind }}</span>  <span class="k">{{ s.name }}</span>  <span class="c">{{ s.match }}</span></div>{% endfor %}
-  {% else %}<div class="li c">[] # no L0 signal declared — L2 rubric is the only verdict</div>{% endif %}
+  {% else %}<div class="li c">[] # no L0 signal declared, L2 rubric is the only verdict</div>{% endif %}
   {% if g.success.rubric %}
   <div class="li"><span class="k">rubric:</span> <span class="c">|  # L2 promotion criterion</span></div>
   <div class="block">{{ g.success.rubric }}</div>
@@ -86,7 +85,7 @@
   <div class="blank"></div>
   <div class="row"><span class="key"><span class="k">mutation_surface.allowed:</span></span><span class="c"># facets the Explorer may vary (gate G1)</span></div>
   {% if config.mutation_surface_allowed %}{% for m in config.mutation_surface_allowed %}<div class="li"><span class="n">-</span> {{ m }}</div>{% endfor %}
-  {% else %}<div class="li c">[] # nothing opted in — no facet is mutable</div>{% endif %}
+  {% else %}<div class="li c">[] # nothing opted in, no facet is mutable</div>{% endif %}
 
   <div class="blank"></div>
   <div class="row"><span class="key"><span class="k">invariants:</span></span><span class="c"># what must hold for a variant to still BE this attack (gate G1)</span></div>
@@ -94,7 +93,7 @@
   {% else %}<div class="li c">[] # no invariant declared</div>{% endif %}
 
   <div class="blank"></div>
-  <div class="row"><span class="key"><span class="k">last_replay_succeeded_at:</span></span><span class="s">null</span><span class="c">   # staleness stamp — no successful replay recorded yet</span></div>
+  <div class="row"><span class="key"><span class="k">last_replay_succeeded_at:</span></span><span class="s">null</span><span class="c">   # staleness stamp, no successful replay recorded yet</span></div>
   <div class="row"><span class="key"><span class="k">rediscovered_count:</span></span><span class="s">{{ config.rediscovered_count }}</span><span class="c">   # Trace-hash collisions folded in, not duplicated</span></div>
 </div>
 {% endblock %}

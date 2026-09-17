@@ -2,123 +2,149 @@
 {% block title %}Overview · Fission{% endblock %}
 {% block content %}
 <style>
-  .ov-head { margin-bottom: 1.25rem; }
-  .ov-head h1 { margin: 0.3rem 0 0.2rem; }
-  .ov-head .sub { color: var(--muted); font-family: var(--sans); font-size: 0.85rem; }
+  .ov-head { margin-bottom: 1.6rem; display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap; }
+  .ov-head h1 { margin: 0.25rem 0 0.15rem; }
+  .ov-head .sub { color: var(--muted); font-size: 0.86rem; }
+  .ov-actions { display:flex; gap:.5rem; flex-wrap:wrap; padding-top:.3rem; }
+  .ov-action { display:inline-flex; align-items:center; padding:.5rem .85rem; border:1px solid var(--border-strong); border-radius:var(--r-sm); background:var(--surface); color:var(--ink-soft); font-size:.78rem; font-weight:600; white-space:nowrap; }
+  .ov-action:hover { text-decoration:none; border-color:var(--ink); color:var(--ink); }
+  .ov-action.primary { color:#fff; background:var(--ink); border-color:var(--ink); }
+  .ov-action.primary:hover { color:#fff; background:#000; }
 
-  .ov-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-  .ov-kpis { grid-template-columns: 1.7fr 1fr 1fr; }
-  @media (max-width: 960px) { .ov-kpis { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 600px) { .ov-kpis { grid-template-columns: 1fr; } }
-  .cell { background: var(--surface); padding: 1rem 1.15rem; min-width: 0; }
-  .cell .ch { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; padding-bottom: 0.7rem; margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); }
-  .cell .ch h3 { margin: 0; font-size: 0.9rem; }
-  .num { font-family: var(--sans); font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -0.01em; }
+  /* KPI cards */
+  .kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:16px; }
+  .kc { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:18px 20px; }
+  .kc .v { font-family:var(--serif); font-weight:400; font-size:2.7rem; line-height:1; color:var(--ink); }
+  .kc .v.crit { color:var(--crit); }
+  .kc .k { font-size:0.82rem; color:var(--muted); margin-top:0.6rem; }
+  @media(max-width:820px){ .kpis{ grid-template-columns:1fr 1fr; } }
 
-  .hero { grid-row: span 2; display: flex; flex-direction: column; }
-  .hero .big { font-size: 2.9rem; line-height: 1; margin-top: 0.5rem; }
-  .hero .big .u { font-size: 1.2rem; color: var(--muted); }
-  .hero .big .pm { font-size: 1rem; color: var(--fg-soft); font-weight: 500; }
+  /* two-column analytics */
+  .ov2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+  @media(max-width:900px){ .ov2{ grid-template-columns:1fr; } }
+  .card2 { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:1.3rem 1.5rem; }
+  .card2 h2 { font-size:1.18rem; margin:0 0 1.1rem; }
 
-  /* calibration scale */
-  .scale svg { width: 100%; height: 58px; display: block; margin-top: 1rem; }
-  .scale .tick { stroke: var(--border-strong); } .scale .tickmaj { stroke: var(--muted); }
-  .scale .fill { stroke: var(--partial); stroke-width: 6; }
-  .scale .cap { stroke: var(--accent); stroke-width: 1.5; }
-  .scale .oracle { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; }
-  .scale text { font-family: var(--font-mono); fill: var(--muted); font-size: 8px; }
+  /* donut */
+  .donut-wrap { display:flex; align-items:center; gap:2rem; }
+  .donut { width:150px; height:150px; flex:none; }
+  .donut .hole-n { font-family:var(--serif); font-size:9px; fill:var(--ink); }
+  .donut .hole-l { font-family:var(--sans); font-size:2.6px; fill:var(--muted); letter-spacing:0.1px; text-transform:uppercase; }
+  .legend { display:flex; flex-direction:column; gap:0.7rem; font-size:0.86rem; }
+  .legend .row { display:grid; grid-template-columns:12px 1fr auto; gap:0.6rem; align-items:center; }
+  .legend .dot { width:9px; height:9px; border-radius:50%; }
+  .legend .n { font-variant-numeric:tabular-nums; font-weight:600; color:var(--ink); }
+  .dot.critical{background:var(--crit);} .dot.high{background:var(--high);}
+  .dot.med{background:var(--muted);} .dot.low{background:var(--border-strong);}
 
-  .dl { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem 1.2rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border); }
-  .dl .k { font-family: var(--sans); font-size: 0.75rem; text-transform: none; letter-spacing: normal; color: var(--muted); font-weight: 600; }
-  .dl .v { font-family: var(--sans); font-size: 1rem; font-weight: 600; margin-top: 0.15rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+  /* surface bars */
+  .sbars { display:flex; flex-direction:column; gap:0.85rem; }
+  .sbar { display:grid; grid-template-columns:130px 1fr 42px; gap:0.8rem; align-items:center; font-size:0.82rem; }
+  .sbar .lab { color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sbar .track { height:8px; background:var(--surface-2); border-radius:var(--r-pill); overflow:hidden; }
+  .sbar .fill { height:100%; background:var(--ink); border-radius:var(--r-pill); }
+  .sbar .val { text-align:right; font-variant-numeric:tabular-nums; font-weight:600; color:var(--ink); }
 
-  .kbig { font-size: 1.7rem; margin-top: 0.4rem; }
-  .kmini { font-family: var(--sans); font-size: 0.76rem; color: var(--muted); margin-top: 0.4rem; }
-  .split { display: flex; height: 7px; margin: 0.85rem 0 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-  .split .u { background: var(--accent); } .split .d { background: var(--partial); }
-  .keys { display: flex; gap: 1rem; font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
-  .keys .sw { display: inline-block; width: 8px; height: 8px; margin-right: 0.3rem; vertical-align: middle; }
-  .tagline { font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600; letter-spacing: 0.04em; padding: 0.08rem 0.4rem; border: 1px solid currentColor; border-radius: var(--radius-sm); }
-  .tagline.acc { color: var(--accent); } .tagline.warm { color: var(--error); } .tagline.cool { color: var(--success); }
+  /* recent findings */
+  .rf-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:1.3rem 1.5rem 0.4rem; margin-bottom:16px; }
+  .rf-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:0.4rem; }
+  .rf-head h2 { font-size:1.18rem; margin:0; }
+  .rf-head a { font-size:0.8rem; color:var(--muted); font-weight:600; }
+  .rf { width:100%; border-collapse:collapse; }
+  .rf th { text-align:left; font-size:0.66rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); font-weight:600; padding:0.7rem 0.4rem; border-bottom:1px solid var(--border); }
+  .rf td { padding:0.85rem 0.4rem; border-bottom:1px solid var(--border); font-size:0.86rem; vertical-align:middle; }
+  .rf tr:last-child td { border-bottom:none; }
+  .rf .fname { font-weight:500; color:var(--ink); }
+  .rf .sev { display:inline-flex; align-items:center; gap:0.45rem; }
+  .rf .sev .dot { width:8px; height:8px; border-radius:50%; }
+  .rf .sev.critical { color:var(--crit); } .rf .sev.high { color:var(--high); } .rf .sev.med { color:var(--ink-soft); }
+  .rf .num { font-variant-numeric:tabular-nums; }
+  .rf .when { color:var(--muted); font-size:0.8rem; }
 
-  .ov-2 { grid-template-columns: 1.4fr 1fr; margin-top: 1rem; }
-  @media (max-width: 820px) { .ov-2 { grid-template-columns: 1fr; } }
+  /* footer widgets */
+  .split { display:flex; height:8px; margin:0.9rem 0 0.6rem; border:1px solid var(--border); border-radius:var(--r-pill); overflow:hidden; }
+  .split .u{background:var(--ink);} .split .d{background:var(--high);}
+  .keys{ display:flex; gap:1.1rem; font-family:var(--mono); font-size:0.72rem; color:var(--muted); }
+  .keys .sw{ display:inline-block; width:8px; height:8px; margin-right:0.3rem; vertical-align:middle; }
+  .act { display:inline-flex; align-items:center; gap:0.4rem; margin-top:1.1rem; padding:0.55rem 0.95rem; background:var(--ink); color:#fff; border-radius:var(--r-sm); font-family:var(--mono); font-size:0.8rem; font-weight:600; text-decoration:none; }
+  .act:hover{ background:#000; color:#fff; text-decoration:none; }
+  .trend svg { width:100%; height:96px; display:block; margin-top:0.6rem; }
+  .trend .axis{ stroke:var(--border);} .trend .line{ fill:none; stroke:var(--ink); stroke-width:2; } .trend .end{ fill:var(--ink); }
+  .trend .foot{ display:flex; justify-content:space-between; font-size:0.74rem; color:var(--muted); margin-top:0.4rem; font-variant-numeric:tabular-nums; }
+  .pipe { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:var(--r-sm); margin-top:0.7rem; }
+  @media(max-width:600px){ .pipe{ grid-template-columns:1fr 1fr; } }
+  .tier { background:var(--surface); padding:0.8rem 0.9rem; }
+  .tier .tt{ font-size:0.8rem; font-weight:600; color:var(--ink); } .tier .td{ font-size:0.72rem; color:var(--muted); margin-top:0.15rem; }
+  .tier .ts{ font-size:0.74rem; margin-top:0.5rem; color:var(--ink-soft); display:flex; align-items:center; gap:0.35rem; }
+  .sq{ width:7px; height:7px; background:var(--ok); flex:none; } .sq.warn{ background:var(--high); }
 
-  .trend svg { width: 100%; height: 120px; display: block; }
-  .trend .axis { stroke: var(--border); } .trend .line { fill: none; stroke: var(--accent); stroke-width: 2; } .trend .end { fill: var(--accent); }
-  .trend .foot { display: flex; justify-content: space-between; font-family: var(--sans); font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; font-variant-numeric: tabular-nums; }
-
-  .diffs { display: flex; font-family: var(--font-mono); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-  .diffs > div { padding: 0.55rem 0.8rem; border-right: 1px solid var(--border); flex: 1; }
-  .diffs > div:last-child { border-right: none; }
-  .diffs .n { font-size: 1.1rem; font-weight: 700; }
-  .diffs .new .n { color: var(--error); } .diffs .fix .n { color: var(--success); } .diffs .per .n { color: var(--partial); }
-  .diffs .k { color: var(--muted); font-size: 0.72rem; text-transform: none; letter-spacing: normal; font-family: var(--sans); }
-
-  .rows { font-size: 0.84rem; }
-  .r { display: grid; grid-template-columns: 3px 1fr auto; gap: 0.7rem; align-items: center; padding: 0.5rem 0; border-top: 1px solid var(--border); }
-  .r:first-child { border-top: none; }
-  .r .stripe { align-self: stretch; }
-  .stripe.critical { background: var(--error); } .stripe.high { background: var(--partial); } .stripe.med { background: var(--muted); } .stripe.acc { background: var(--accent); }
-  .r .t { font-size: 0.86rem; }
-  .r .m { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); margin-top: 0.1rem; }
-  .r .s { font-family: var(--font-mono); font-weight: 650; }
-
-  .sevbars { display: grid; gap: 0.55rem; }
-  .sevbar { display: grid; grid-template-columns: 74px 1fr 32px; gap: 0.6rem; align-items: center; font-family: var(--font-mono); font-size: 0.76rem; }
-  .sevbar .track { height: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-  .sevbar .f { height: 100%; }
-  .act { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 1rem; padding: 0.5rem 0.85rem; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; text-decoration: none; }
-  .act:hover { background: var(--accent-hover); color: #fff; text-decoration: none; }
-
-  .heat { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-x: auto; margin-top: 0.6rem; }
-  .hrow { display: grid; gap: 1px; }
-  .hh { font-family: var(--sans); font-size: 0.68rem; color: var(--muted); text-transform: none; letter-spacing: normal; text-align: center; padding: 0.4rem 0; background: var(--surface); }
-  .hl { font-family: var(--font-mono); font-size: 0.68rem; color: var(--fg-soft); text-align: right; padding: 0 0.5rem; background: var(--surface); display: flex; align-items: center; justify-content: flex-end; }
-  .hc { height: 30px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; color: #fff; }
-
-  .pipe { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: 0.6rem; }
-  @media (max-width: 600px) { .pipe { grid-template-columns: 1fr 1fr; } }
-  .tier { background: var(--surface); padding: 0.7rem 0.8rem; }
-  .tier .tt { font-family: var(--sans); font-size: 0.78rem; font-weight: 600; color: var(--ink); }
-  .tier .td { font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; }
-  .tier .ts { font-family: var(--sans); font-size: 0.74rem; margin-top: 0.5rem; color: var(--fg-soft); display: flex; align-items: center; gap: 0.35rem; }
-  .sq { width: 7px; height: 7px; background: var(--success); flex: none; } .sq.warn { background: var(--partial); }
-
-  .empty { border: 1px solid var(--border); border-radius: var(--radius); padding: 2.5rem 2rem; text-align: center; color: var(--muted); }
-  .empty .big { font-family: var(--font-mono); font-size: 1.2rem; color: var(--fg); margin-bottom: 0.5rem; }
+  .empty { border:1px solid var(--border); border-radius:var(--r); padding:2.5rem 2rem; text-align:center; color:var(--muted); background:var(--surface); }
+  .empty .big { font-family:var(--serif); font-size:1.5rem; color:var(--ink); margin-bottom:0.5rem; }
 </style>
 
-<div class="ov-head">
-  <div class="eyebrow">Command center</div>
-  {% if latest %}
-  <h1>{{ latest.target_name }}</h1>
-  <div class="sub">latest run <a href="/runs/{{ latest.id }}">{{ latest.id }}</a> ·
-    {{ s.total_runs }} runs · {{ s.total_traces }} traces</div>
-  {% else %}
-  <h1>Overview</h1>
-  <div class="sub">no runs yet</div>
-  {% endif %}
-</div>
+<h1 class="sr-only">Overview</h1>
 
 {% if not latest %}
 <div class="empty">
   <div class="big">No runs to summarise</div>
-  Execute a run and this page reports the calibrated ASR ± CI, run-over-run trend,
-  findings by severity, the review queue, and the oracle pipeline.
+  Execute a run and this page reports attempts, findings by severity, attack
+  success by surface, the review queue, and the oracle pipeline.
 </div>
 {% else %}
 
-{# KPI row #}
-<div class="ov-grid ov-kpis">
-  <div class="cell hero">
-    <div class="ch">
-      <h3>Attack success rate</h3>
-      {% if ppi.method == 'ppi' %}<span class="tagline acc">PPI · calibrated</span>
-      {% else %}<span class="tagline warm">oracle · uncalibrated</span>{% endif %}
+{% set crit = s.findings_by_severity.get('critical',0) %}
+{% set high = s.findings_by_severity.get('high',0) %}
+{% set med  = s.findings_by_severity.get('med',0) %}
+{% set low  = s.findings_by_severity.get('low',0) %}
+{% set sevtot = (crit + high + med + low) %}
+{% set att = surface_rollup|sum(attribute='attempts') %}
+{% set suc = surface_rollup|sum(attribute='successes') %}
+{% set asr = (suc / att) if att else 0 %}
+
+{# ---- KPI cards ---- #}
+<div class="kpis">
+  <div class="kc"><div class="v">{{ "{:,}".format(s.total_traces) }}</div><div class="k">Attempts · {{ s.total_runs }} runs</div></div>
+  <div class="kc"><div class="v">{{ s.total_findings }}</div><div class="k">Findings · {{ high }} high · {{ med }} med</div></div>
+  <div class="kc"><div class="v crit">{{ crit }}</div><div class="k">Critical findings</div></div>
+  <div class="kc"><div class="v">{{ "%.0f"|format(asr * 100) }}%</div><div class="k">Attack success · {{ surface_rollup|length }} surfaces</div></div>
+</div>
+
+{# ---- distribution + surface bars ---- #}
+<div class="ov2">
+  <div class="card2">
+    <h2>Vulnerability distribution</h2>
+    <div class="donut-wrap">
+      <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="Findings by severity">
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--surface-2)" stroke-width="5"/>
+        {% set ns = namespace(cum=0) %}
+        {% for seg in [{'c':crit,'col':'var(--crit)'},{'c':high,'col':'var(--high)'},{'c':med,'col':'var(--ink)'},{'c':low,'col':'var(--border-strong)'}] %}
+          {% if seg.c > 0 and sevtot > 0 %}
+          {% set pct = seg.c / sevtot * 100 %}
+          <circle cx="21" cy="21" r="15.915" fill="none" stroke="{{ seg.col }}" stroke-width="5"
+                  stroke-dasharray="{{ '%.2f'|format(pct) }} {{ '%.2f'|format(100 - pct) }}"
+                  stroke-dashoffset="{{ '%.2f'|format((25 - ns.cum) % 100) }}"/>
+          {% set ns.cum = ns.cum + pct %}
+          {% endif %}
+        {% endfor %}
+        <text class="hole-n" x="21" y="21.5" text-anchor="middle">{{ sevtot }}</text>
+        <text class="hole-l" x="21" y="26" text-anchor="middle">findings</text>
+      </svg>
+      <div class="legend">
+        <div class="row"><span class="dot critical"></span><span>Critical</span><span class="n">{{ crit }}</span></div>
+        <div class="row"><span class="dot high"></span><span>High</span><span class="n">{{ high }}</span></div>
+        <div class="row"><span class="dot med"></span><span>Medium</span><span class="n">{{ med }}</span></div>
+        <div class="row"><span class="dot low"></span><span>Low</span><span class="n">{{ low }}</span></div>
+      </div>
     </div>
-    <div class="num big">{{ '%.1f'|format(ppi.asr * 100) }}<span class="u">%</span>
-      {% if ppi.method == 'ppi' %}<span class="pm">± {{ '%.1f'|format(ppi.ci_half_width * 100) }}</span>{% endif %}
+  </div>
+
+  <div class="card2">
+    <h2>Attack categories</h2>
+    <div class="sbars">
+      {% for category in s.attack_breakdown %}
+      {% set share = (category.total / s.total_traces * 100) if s.total_traces else 0 %}
+      <div class="sbar"><span class="lab" title="{{ category.attack }}">{{ category.attack|replace('_', ' ')|capitalize }}</span><span class="track"><span class="fill" style="width:{{ '%.1f'|format(share) }}%"></span></span><span class="val">{{ '%.0f'|format(share) }}%</span></div>
+      {% else %}<div class="muted">No attacks recorded yet.</div>{% endfor %}
     </div>
 
     {% if ppi.method == 'ppi' %}
@@ -191,109 +217,96 @@
   </div>
 </div>
 
-{# Trend + diff #}
-<div class="ov-grid ov-2">
-  <div class="cell trend">
-    <div class="ch"><h3>ASR · last {{ trend|length }} runs</h3><span class="eyebrow">oracle ASR per run</span></div>
+{# ---- recent findings ---- #}
+<div class="rf-card">
+  <div class="rf-head"><h2>Recent findings</h2><a href="/findings?run_id={{ latest.id }}">View all →</a></div>
+  {% if top_findings %}
+  <table class="rf">
+    <thead><tr><th>Finding</th><th>Severity</th><th>Scenario</th><th class="num">Score</th><th>Detected</th></tr></thead>
+    <tbody>
+      {% for f in top_findings %}
+      {% set sc = (f.trace.judge_scores | map(attribute='score') | max) if (f.trace and f.trace.judge_scores) else None %}
+      {% set sev = f.severity if f.severity in ('critical','high') else 'med' %}
+      <tr>
+        <td><a class="fname" href="/findings/{{ f.id }}">{{ f.title or '(untitled)' }}</a></td>
+        <td><span class="sev {{ sev }}"><span class="dot {{ 'critical' if f.severity=='critical' else ('high' if f.severity=='high' else 'med') }}"></span>{{ f.severity|capitalize }}</span></td>
+        <td class="when" style="color:var(--ink-soft)">{{ f.trace.behavior_id if f.trace else '—' }}</td>
+        <td class="num">{{ "%.2f"|format(sc) if sc is not none else '—' }}</td>
+        <td class="when">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') if f.promoted_at else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="muted" style="padding:1.2rem 0 1.6rem">No findings promoted from the latest run yet.</div>
+  {% endif %}
+</div>
+
+<details class="analysis-details"><summary>Surface results, review queue, trends and verdict pipeline</summary>
+<div class="ov-head">
+  <div>
+    <p class="eyebrow" style="margin:0">Overview</p>
+    <h1>Overview</h1>
+    {% if latest %}
+    <div class="sub">Latest run <a href="/runs/{{ latest.id }}">{{ run_display_name(latest) }}</a> ·
+      {{ s.total_runs }} runs · {{ s.total_traces }} attempts</div>
+    {% else %}<div class="sub">no runs yet</div>{% endif %}
+  </div>
+  <div class="ov-actions">
+    <a class="ov-action primary" href="/runs/new">New run</a>
+    {% if latest %}<a class="ov-action" href="/runs/{{ latest.id }}">View latest run</a>{% endif %}
+    <a class="ov-action" href="/findings">Review findings</a>
+  </div>
+</div>
+
+  <div class="card2">
+    <h2>Attack success by surface</h2>
+    <div class="sbars">
+      {% for surf in surface_rollup|sort(attribute='asr', reverse=true) %}
+      <div class="sbar">
+        <span class="lab">{{ surf.label }}</span>
+        <span class="track"><span class="fill" style="width: {{ "%.0f"|format(surf.asr * 100) }}%"></span></span>
+        <span class="val">{{ "%.0f"|format(surf.asr * 100) }}%</span>
+      </div>
+      {% else %}
+      <div class="muted">No surfaces assessed yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+<br>
+{# ---- review queue + trend ---- #}
+<div class="ov2">
+  <div class="card2">
+    <h2>Review queue</h2>
+    {% if queue.pending %}
+    {% set utot = queue.uniform + queue.disagreement %}
+    <div class="sub" style="color:var(--muted);font-size:0.82rem">{{ queue.pending }} pending · {{ queue.gold }} gold labels</div>
+    <div class="split"><div class="u" style="width: {{ (queue.uniform / utot * 100) if utot else 0 }}%"></div><div class="d" style="width: {{ (queue.disagreement / utot * 100) if utot else 0 }}%"></div></div>
+    <div class="keys"><span><span class="sw" style="background:var(--ink)"></span>uniform {{ queue.uniform }}</span><span><span class="sw" style="background:var(--high)"></span>disagreement {{ queue.disagreement }}</span></div>
+    <a class="act" href="/hitl/{{ queue.top[0].id }}">Start reviewing →</a>
+    {% else %}
+    <div class="muted">Nothing pending. Run with <code>review_sample_budget</code> set to populate the queue.</div>
+    {% endif %}
+  </div>
+
+  <div class="card2 trend">
+    <h2>Attack success rate · last {{ trend|length }} runs</h2>
     {% if trend|length > 1 %}
     <svg viewBox="0 0 {{ trend_svg.w }} {{ trend_svg.h }}" preserveAspectRatio="none" role="img" aria-label="ASR trend across runs">
-      <line class="axis" x1="0" y1="{{ trend_svg.h * 0.25 }}" x2="{{ trend_svg.w }}" y2="{{ trend_svg.h * 0.25 }}"/>
       <line class="axis" x1="0" y1="{{ trend_svg.h * 0.5 }}" x2="{{ trend_svg.w }}" y2="{{ trend_svg.h * 0.5 }}"/>
-      <line class="axis" x1="0" y1="{{ trend_svg.h * 0.75 }}" x2="{{ trend_svg.w }}" y2="{{ trend_svg.h * 0.75 }}"/>
       <polyline class="line" points="{{ trend_svg.points }}"/>
       {% if trend_svg.end %}<circle class="end" cx="{{ trend_svg.end.split(',')[0] }}" cy="{{ trend_svg.end.split(',')[1] }}" r="3"/>{% endif %}
     </svg>
     <div class="foot"><span>oldest · {{ '%.0f'|format(trend_svg.first_asr*100) }}%</span><span>latest · {{ '%.0f'|format(trend_svg.last_asr*100) }}%</span></div>
     {% else %}
-    <div class="empty-state">Not enough history yet — the ASR trend appears once a second run completes.</div>
-    {% endif %}
-  </div>
-
-  <div class="cell">
-    <div class="ch"><h3>Changed this run</h3>{% if prev %}<span class="eyebrow">vs {{ prev.id }}</span>{% endif %}</div>
-    {% if diff %}
-    <div class="diffs">
-      <div class="new"><div class="n">+{{ diff.new }}</div><div class="k">new</div></div>
-      <div class="fix"><div class="n">−{{ diff.fixed }}</div><div class="k">fixed</div></div>
-      <div class="per"><div class="n">{{ diff.persisting }}</div><div class="k">persisting</div></div>
-    </div>
-    <div class="kmini" style="margin-top:0.7rem">Vulnerable (behaviour × technique) cells vs the previous run.</div>
-    {% else %}
-    <div class="kmini">No previous run to diff against yet.</div>
-    {% endif %}
-    <div class="rows" style="margin-top:0.85rem">
-      {% for f in top_findings %}
-      <div class="r">
-        <span class="stripe {{ f.severity }}"></span>
-        <div><div class="t">{{ f.title or 'Finding' }}</div><div class="m">{{ f.trace.behavior_id if f.trace else '—' }}</div></div>
-        <span class="s pill {{ 'error' if f.severity in ('critical','high') else 'partial' }}">{{ f.severity }}</span>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-</div>
-
-{# Severity + review widget #}
-<div class="ov-grid ov-2">
-  <div class="cell">
-    <div class="ch"><h3>Findings by severity</h3><span class="eyebrow">all runs</span></div>
-    {% set maxsev = [s.findings_by_severity.get('critical',0), s.findings_by_severity.get('high',0), s.findings_by_severity.get('med',0), s.findings_by_severity.get('low',0), 1]|max %}
-    <div class="sevbars">
-      {% for name, col in [('critical','var(--error)'), ('high','var(--partial)'), ('med','var(--muted)'), ('low','var(--refused)')] %}
-      {% set c = s.findings_by_severity.get(name, 0) %}
-      <div class="sevbar">
-        <span>{{ name }}</span>
-        <span class="track"><span class="f" style="width: {{ (c / maxsev * 100)|round(0) }}%; background: {{ col }}"></span></span>
-        <span style="text-align:right">{{ c }}</span>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-
-  <div class="cell">
-    <div class="ch"><h3>Label the queue</h3><span class="eyebrow">≤30s · keyboard</span></div>
-    {% if queue.pending %}
-    <div class="rows">
-      {% for it in queue.top %}
-      <div class="r">
-        <span class="stripe {{ 'acc' if it.sample_reason == 'disagreement' else 'med' }}"></span>
-        <div><div class="t mono" style="font-size:0.78rem">{{ it.trace_id[:14] if it.trace_id else '—' }}</div><div class="m">uncertainty {{ '%.2f'|format(it.uncertainty) }}</div></div>
-        <span class="s pill {{ 'partial' if it.sample_reason == 'disagreement' else 'success' }}">{{ it.sample_reason or 'sample' }}</span>
-      </div>
-      {% endfor %}
-    </div>
-    <a class="act" href="/hitl/{{ queue.top[0].id }}">Start reviewing →</a>
-    {% else %}
-    <div class="kmini">Nothing pending. Run with <code>review_sample_budget</code> set to populate the queue.</div>
+    <div class="muted">The trend appears once a second run completes.</div>
     {% endif %}
   </div>
 </div>
 
-{# Heatmap #}
-{% if not heatmap.is_empty %}
-<div class="cell" style="border:1px solid var(--border); border-radius:var(--radius); margin-top:1rem">
-  <div class="ch"><h3>ASR · technique × payload family</h3><span class="eyebrow">latest run · darker = higher</span></div>
-  <div class="heat">
-    <div class="hrow" style="grid-template-columns: 150px repeat({{ heatmap.families|length }}, minmax(52px, 1fr))">
-      <span class="hh"></span>
-      {% for fam in heatmap.families %}<span class="hh">{{ fam }}</span>{% endfor %}
-    </div>
-    {% for row in heatmap.rows %}
-    <div class="hrow" style="grid-template-columns: 150px repeat({{ heatmap.families|length }}, minmax(52px, 1fr))">
-      <span class="hl">{{ row.technique }}</span>
-      {% for cell in row.cells %}
-      {% set a = cell.asr %}
-      <span class="hc" style="background: {{ 'var(--error)' if a >= 0.66 else ('var(--partial)' if a >= 0.33 else ('#7d8f8a' if a > 0 else 'var(--surface-2)')) }}; {{ 'color:var(--muted)' if a == 0 else '' }}">{{ '%.2f'|format(a) }}</span>
-      {% endfor %}
-    </div>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
-
-{# Oracle pipeline #}
-<div class="cell" style="border:1px solid var(--border); border-radius:var(--radius); margin-top:1rem">
-  <div class="ch"><h3>Layered oracle · verdict pipeline</h3><span class="eyebrow">confidence-gated escalation</span></div>
+{# ---- oracle pipeline ---- #}
+<div class="card2">
+  <h2>Layered oracle · verdict pipeline</h2>
   <div class="pipe">
     <div class="tier"><div class="tt">L0 · signals</div><div class="td">canary / beacon / tool-call assert</div><div class="ts"><span class="sq"></span> {{ s.total_traces }} evaluated</div></div>
     <div class="tier"><div class="tt">L1 · classifier</div><div class="td">calibrated success prob.</div></div>
@@ -302,5 +315,6 @@
   </div>
 </div>
 
+</details>
 {% endif %}
 {% endblock %}

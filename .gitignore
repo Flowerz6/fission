@@ -51,3 +51,11 @@ playwright-profile/
 *.swp
 .idea/
 .vscode/
+
+# ---- Productionisation cleanup (2026-09) ----
+# Regenerable font cache used by the PDF/report scripts
+scripts/.fontcache/
+# Office deliverables are regenerable from scripts/ (pdf already ignored above)
+*.docx
+# Local DB backups directory
+backups/

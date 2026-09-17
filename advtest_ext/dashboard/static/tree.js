@@ -4,13 +4,16 @@
    Replaces the old Mermaid `graph TD` live tree. A cell navigator (left)
    drives one Cytoscape canvas per (behaviour, technique) cell (right).
 
-   Design goals, per the approved mock:
-     * round-rectangle nodes, dagre TB layout, the exact status palette;
+   Design goals:
+     * nodes are real HTML cards (DM Sans, status dot, score, meta line) laid
+       over the canvas and kept in sync with Cytoscape's pan/zoom/positions, so
+       they share the dashboard's type and tokens. Cytoscape still owns layout,
+       hit-testing and the edges; its own node bodies are transparent;
      * lazy mount — a cell's graph is only built the first time its panel is
        shown (Cytoscape renders blank in a hidden / zero-size container);
      * NO full repaint on live runs. While the run is in flight the client
        polls `/runs/{id}/_tree.json` and INCREMENTALLY `cy.add()`s only new
-       nodes/edges (and re-classes nodes whose verdict changed), re-running
+       nodes/edges (and re-renders nodes whose verdict changed), re-running
        dagre with animation and re-fitting — so branches settle smoothly.
 
    Fully self-contained: the vendored libraries live under /static/vendor and
@@ -22,43 +25,40 @@
 
   var VENDOR = "/static/vendor/";
 
-  // ---- status palette (approved hexes; committed for both themes) --------
-  var COL = {
-    success: { bg: "#e8f3ee", br: "#57a880", tx: "#1f5a3c" },
-    partial: { bg: "#f8f0dd", br: "#cf9a4c", tx: "#7a5716" },
-    refused: { bg: "#f4f4f8", br: "#948f9f", tx: "#4a453d" },
-    pruned:  { bg: "#faebec", br: "#d5595b", tx: "#8a3030" },
-    // The synthetic playbook root — a warm neutral "container" look, distinct
-    // from the coloured verdict nodes it fans out into.
-    root:    { bg: "#f3efe7", br: "#c7b49f", tx: "#5a5045" },
+  // Card geometry. Must match .tn / .tn-root in tree.css: the (invisible)
+  // Cytoscape node is the hit target and the box dagre lays out.
+  var NODE_W = 232, NODE_H = 72, ROOT_W = 320, ROOT_H = 58;
+
+  var STATUS_LABEL = {
+    success: "Success", partial: "Partial", refused: "Refused", pruned: "Pruned",
   };
-  function col(s) { return COL[s] || COL.refused; }
+  function statusOf(d) { return STATUS_LABEL[d.status] ? d.status : (d.status === "root" ? "root" : "refused"); }
+
+  // Edge inks (paper palette from base.html; canvas can't read CSS variables).
+  var EDGE = "#d3cfc2", EDGE_TRAIL = "#1a1a18", EDGE_WIN = "#3e8e5b";
 
   var STY = [
     { selector: "node", style: {
-        "shape": "round-rectangle", "width": 134, "height": 50,
-        "label": "data(label)", "text-wrap": "wrap", "text-max-width": 120,
-        "text-valign": "center", "text-halign": "center",
-        "font-family": "ui-sans-serif, system-ui", "font-size": 10,
-        "font-weight": 600, "line-height": 1.25,
-        "background-color": function (e) { return col(e.data("status")).bg; },
-        "border-color": function (e) { return col(e.data("status")).br; },
-        "color": function (e) { return col(e.data("status")).tx; },
-        "border-width": 1.5,
-        "border-style": function (e) { return e.data("status") === "pruned" ? "dashed" : "solid"; },
+        "shape": "round-rectangle", "width": NODE_W, "height": NODE_H,
+        "background-opacity": 0, "border-width": 0, "label": "",
     } },
-    { selector: "node.sel", style: { "border-width": 3 } },
-    { selector: "node.focus", style: {
-        "border-width": 3.5, "border-color": "#c0472f",
-        "shadow-blur": 20, "shadow-color": "#ee7a6b", "shadow-opacity": 0.55,
-    } },
+    { selector: 'node[status = "root"]', style: { "width": ROOT_W, "height": ROOT_H } },
     { selector: "edge", style: {
-        "width": 2, "line-color": "#e2dfe9",
-        "curve-style": "bezier", "target-arrow-shape": "none",
+        "width": 1, "line-color": EDGE,
+        "curve-style": "round-taxi", "taxi-direction": "downward",
+        "taxi-turn": "50%", "taxi-radius": 8,
+        "target-arrow-shape": "none",
     } },
+    // Ancestry of every successful node: the path that actually worked.
+    { selector: "edge.win", style: { "width": 1.5, "line-color": EDGE_WIN, "z-index": 2 } },
+    // Branches the search gave up on: nothing below them succeeded. Only
+    // marked once the run is over; a live branch may still be deepened.
+    { selector: "edge.dead", style: { "line-style": "dashed", "line-dash-pattern": [4, 4] } },
+    // Ancestry of the selected node (click highlight; not in the legend).
+    { selector: "edge.trail", style: { "width": 1.5, "line-color": EDGE_TRAIL, "line-style": "solid", "z-index": 3 } },
   ];
 
-  var LAYOUT = { name: "dagre", rankDir: "TB", nodeSep: 24, rankSep: 48, fit: true, padding: 28 };
+  var LAYOUT = { name: "dagre", rankDir: "TB", nodeSep: 18, rankSep: 46, fit: false };  // fitView() owns the viewport
 
   // ---- vendored-library loader (inject once, then flush the boot queue) ---
   var _libState = "idle"; // idle | loading | ready
@@ -110,36 +110,109 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  function nodeTitle(d) {
+    var t = d.name || d.attempted || String(d.label || "").split("\n")[0];
+    return t.replace(/ · d\d+\/b\d+$/, "");  // position already shows depth/branch
+  }
+
+  function scoreText(d) {
+    return d.score == null ? "" : Number(d.score).toFixed(2);
+  }
+
+  // Meta line under a card name. Kept short so it never truncates: start
+  // time, turns, score. Method and the full time range live in the detail.
+  function metaParts(d) {
+    var parts = [];
+    if (d.time) parts.push(String(d.time).split("–")[0]);
+    if (d.turn_count > 1) parts.push(d.turn_count + " turns");
+    if (d.score != null) parts.push("score " + scoreText(d));
+    return parts;
+  }
+
+  // ---- HTML node cards ----------------------------------------------------
+  function renderCard(el, d) {
+    var st = statusOf(d);
+    var keep = (el.classList.contains("sel") ? " sel" : "") + (el.classList.contains("hover") ? " hover" : "");
+    if (st === "root") {
+      el.className = "tn tn-root" + keep;
+      el.innerHTML = '<span class="tn-k">Objective</span><span class="tn-title">' + esc(nodeTitle(d)) + "</span>";
+      return;
+    }
+    // Status is the card's colour alone (green success, amber partial, plain
+    // refused, dashed pruned): no dot, no label.
+    el.className = "tn tn-" + st + keep;
+    el.innerHTML =
+      '<span class="tn-title">' + esc(nodeTitle(d)) + "</span>" +
+      '<span class="tn-meta">' + esc(metaParts(d).join(" · ")) + "</span>";
+  }
+
+  function kv(k, v) {
+    return "<div><dt>" + k + "</dt><dd>" + esc(v) + "</dd></div>";
+  }
+
+  function turn(k, v) {
+    return v ? '<div class="td-turn"><div class="td-k">' + k + '</div><div class="td-v">' + esc(v) + "</div></div>" : "";
+  }
+
   function nodeDetail(panel, d) {
     var el = panel.querySelector(".tree-detail");
     if (!el) return;
-    var c = col(d.status);
-    var scoreLabel = (d.score == null) ? d.status : (Number(d.score).toFixed(2) + " · " + d.status);
-    var name = String(d.label || "").split("\n")[0];
+    var st = statusOf(d);
+    if (st === "root") {
+      el.innerHTML = '<div class="td-h"><span class="td-t">' + esc(nodeTitle(d)) + '</span><span class="pill grey">Objective</span></div>' +
+        '<p class="td-hint">' + esc(d.a || "The opening moves branch from here.") + "</p>";
+      return;
+    }
+    var score = scoreText(d);
+    var pillCls = st === "pruned" ? "grey" : st;
     var link = d.trace_id
-      ? '<a class="td-link" href="/traces/' + esc(d.trace_id) + '">open full trace &rarr;</a>'
+      ? '<a class="td-link" href="/traces/' + esc(d.trace_id) + '">Open full trace &rarr;</a>'
       : "";
+    var meta = "";
+    if (d.time) meta += kv("Time (UTC)", d.time);
+    if (d.method) meta += kv("Method", d.method);
+    if (d.turn_count > 1) meta += kv("Turns", d.turn_count);
     var body;
-    if (d.u || d.a) {
-      body = '<div class="td-transcript">' +
-        (d.u ? '<div><span class="u">prompt:</span> ' + esc(d.u) + "</div>" : "") +
-        (d.a ? '<div><span class="a">response:</span> ' + esc(d.a) + "</div>" : "") +
-        "</div>";
+    if (d.email || d.injection) {
+      body = turn("Delivered email", d.email) + turn("Hidden white-text injection", d.injection);
     } else {
-      body = '<p class="td-hint">No inline transcript captured for this node — open the full trace for detail.</p>';
+      body = turn("Prompt", d.u) + turn("Response", d.a);
     }
     el.innerHTML =
-      '<div class="td-h"><span class="td-t">' + esc(name) + "</span>" +
-      '<span class="td-pill" style="color:' + c.br + ";background:" + c.bg + '">' + esc(scoreLabel) + "</span>" +
-      link + "</div>" + body;
+      '<div class="td-h"><span class="td-t">' + esc(nodeTitle(d)) + "</span>" +
+      '<span class="pill ' + pillCls + '">' + STATUS_LABEL[st] + (score ? " · " + score : "") + "</span>" +
+      link + "</div>" +
+      (d.attempted && d.attempted !== nodeTitle(d) ? '<p class="td-approach">' + esc(d.attempted) + "</p>" : "") +
+      (meta ? '<dl class="td-meta">' + meta + "</dl>" : "") +
+      (body ? '<div class="td-transcript">' + body + "</div>"
+            : '<p class="td-hint">No inline transcript captured for this node. Open the full trace for detail.</p>');
   }
 
   function resetDetail(panel) {
     var el = panel.querySelector(".tree-detail");
     if (el) {
       el.innerHTML = '<div class="td-h"><span class="td-t">Select a node</span></div>' +
-        '<p class="td-hint">Each node is one conversation. Click a node to read its transcript.</p>';
+        '<p class="td-hint">Each node is an attempt or a grouped conversation. Select a node to inspect what was attempted, its time, method, and evidence.</p>';
     }
+  }
+
+  // Fit the whole tree, but never magnify past 1:1 — a three-node tree should
+  // show normal-size cards, not poster-size ones.
+  // Extra headroom at the top keeps the root clear of the zoom controls.
+  var FIT_PAD = 32, FIT_PAD_TOP = 64;
+  function fitView(cy, duration) {
+    var bb = cy.elements().boundingBox();
+    if (!bb.w || !bb.h) return;
+    var w = cy.width(), h = cy.height();
+    var availH = h - FIT_PAD_TOP - FIT_PAD;
+    var z = Math.min((w - 2 * FIT_PAD) / bb.w, availH / bb.h, 1);
+    z = Math.max(z, cy.minZoom());
+    var view = { zoom: z, pan: {
+      x: (w - z * (bb.x1 + bb.x2)) / 2,
+      y: FIT_PAD_TOP + (availH - z * bb.h) / 2 - z * bb.y1,
+    } };
+    if (duration) cy.animate(view, { duration: duration });
+    else cy.viewport(view);
   }
 
   // ---- per-explorer controller -------------------------------------------
@@ -149,6 +222,7 @@
 
     var runId = root.getAttribute("data-run-id");
     var live = root.getAttribute("data-live") === "1";
+    function isLive() { return live; }
     var panelsById = {};   // cellKey -> panel controller
     var order = [];        // cellKey in nav order
     var currentKey = null; // the cell the user is viewing
@@ -193,7 +267,11 @@
       // reflow, window resize) so the graph never appears shifted or clipped.
       if (window.ResizeObserver) {
         var ro = new ResizeObserver(function () {
-          if (ctrl.cy) ctrl.cy.resize();
+          if (!ctrl.cy) return;
+          ctrl.cy.resize();
+          // Late reflows (fonts, scrollbars) would leave the first fit
+          // off-centre; re-fit unless the user has taken over the viewport.
+          if (ctrl.shown && !ctrl.userZoomed) fitView(ctrl.cy);
         });
         ro.observe(mountEl);
         ctrl._ro = ro;
@@ -202,10 +280,67 @@
       // updates don't yank the viewport back to fit. The Fit button clears it.
       mountEl.addEventListener("wheel", function () { ctrl.userZoomed = true; }, { passive: true });
       ctrl.cy.on("dragpan", function () { ctrl.userZoomed = true; });
-      ctrl.cy.on("tap", "node", function (e) {
-        ctrl.cy.nodes().removeClass("sel focus");
-        e.target.addClass("sel");
-        nodeDetail(ctrl.el, e.target.data());
+      // HTML card layer. One transform follows the viewport; each card sits
+      // at its node's model position, so pan/zoom never touches the cards.
+      var layer = document.createElement("div");
+      layer.className = "cy-cards";
+      mountEl.appendChild(layer);
+      ctrl.cards = {};
+      function syncViewport() {
+        var p = ctrl.cy.pan();
+        layer.style.transform = "translate(" + p.x + "px," + p.y + "px) scale(" + ctrl.cy.zoom() + ")";
+      }
+      function place(n) {
+        var card = ctrl.cards[n.id()];
+        if (!card) return;
+        var pos = n.position();
+        card.style.transform = "translate(" + (pos.x - n.width() / 2) + "px," + (pos.y - n.height() / 2) + "px)";
+      }
+      function addCard(n, entering) {
+        var card = document.createElement("div");
+        renderCard(card, n.data());
+        if (entering) card.classList.add("enter");
+        ctrl.cards[n.id()] = card;
+        layer.appendChild(card);
+        place(n);
+      }
+      // Mark the ancestry of every successful node (the path that worked).
+      ctrl.markWins = function () {
+        var edges = ctrl.cy.edges().removeClass("win dead");
+        var wins = ctrl.cy.nodes('[status = "success"]').predecessors("edge").addClass("win");
+        if (!isLive()) edges.not(wins).addClass("dead");
+      };
+      ctrl.cy.nodes().forEach(function (n) { addCard(n, false); });
+      ctrl.markWins();
+      syncViewport();
+      ctrl.cy.on("viewport", syncViewport);
+      ctrl.cy.on("position", "node", function (e) { place(e.target); });
+      ctrl.cy.on("add", "node", function (e) { addCard(e.target, true); });
+      ctrl.cy.on("data", "node", function (e) {
+        var card = ctrl.cards[e.target.id()];
+        if (card) renderCard(card, e.target.data());
+      });
+      ctrl.cy.on("mouseover", "node", function (e) {
+        var card = ctrl.cards[e.target.id()];
+        if (card) card.classList.add("hover");
+        mountEl.style.cursor = "pointer";
+      });
+      ctrl.cy.on("mouseout", "node", function (e) {
+        var card = ctrl.cards[e.target.id()];
+        if (card) card.classList.remove("hover");
+        mountEl.style.cursor = "";
+      });
+      function select(n) {
+        Object.keys(ctrl.cards).forEach(function (id) { ctrl.cards[id].classList.remove("sel"); });
+        ctrl.cy.edges().removeClass("trail");
+        if (!n) { resetDetail(ctrl.el); return; }
+        ctrl.cards[n.id()].classList.add("sel");
+        n.predecessors("edge").addClass("trail");
+        nodeDetail(ctrl.el, n.data());
+      }
+      ctrl.cy.on("tap", function (e) {
+        if (e.target === ctrl.cy) select(null);           // background tap clears
+        else if (e.target.isNode && e.target.isNode()) select(e.target);
       });
     }
 
@@ -233,7 +368,7 @@
         // htmx:afterSettle every ~2s, re-runs this, and resets the user's zoom
         // ("shrinks back"). Don't override a zoom the user set, either.
         if (!ctrl.shown || (userAction && !ctrl.userZoomed)) {
-          ctrl.cy.fit(undefined, 28);
+          fitView(ctrl.cy);
         }
         ctrl.shown = true;
       });
@@ -252,7 +387,21 @@
         var ctrl = panel && panelsById[panel.getAttribute("data-cell-key")];
         if (ctrl && ctrl.cy) {
           ctrl.userZoomed = false;  // user asked to reset the view
-          ctrl.cy.animate({ fit: { padding: 28 } }, { duration: 260 });
+          fitView(ctrl.cy, 260);
+        }
+        return;
+      }
+      var zoomBtn = e.target.closest && e.target.closest("[data-tree-zoom]");
+      if (zoomBtn && root.contains(zoomBtn)) {
+        var zPanel = zoomBtn.closest(".tree-panel");
+        var zCtrl = zPanel && panelsById[zPanel.getAttribute("data-cell-key")];
+        if (zCtrl && zCtrl.cy) {
+          var cy = zCtrl.cy;
+          var factor = zoomBtn.getAttribute("data-tree-zoom") === "in" ? 1.25 : 0.8;
+          zCtrl.userZoomed = true;
+          cy.animate({
+            zoom: { level: cy.zoom() * factor, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } },
+          }, { duration: 160 });
         }
       }
     });
@@ -283,17 +432,19 @@
         if (bar) {
           var pct = cell.n_traces ? Math.round((cell.n_success / cell.n_traces) * 100) : 0;
           bar.style.width = pct + "%";
-          bar.style.background = pct >= 66 ? "#d5595b" : (pct >= 33 ? "#cf9a4c" : "#948f9f");
+          bar.style.background = pct >= 66 ? "var(--crit)" : (pct >= 33 ? "var(--high)" : "var(--muted)");
         }
       }
       var head = ctrl.el.querySelector(".tree-panel-head .th-count");
       if (head) head.textContent = cell.n_success + "/" + cell.n_traces + " success";
 
       var newNodes = [], newEdges = [], statusChanges = [];
+      var previous = {};
+      ctrl.nodes.forEach(function (node) { previous[node.data.id] = JSON.stringify(node.data); });
       cell.nodes.forEach(function (nd) {
         var id = nd.data.id;
         if (!(id in ctrl.nodeIds)) { newNodes.push(nd); ctrl.nodeIds[id] = nd.data.status; }
-        else if (ctrl.nodeIds[id] !== nd.data.status) { statusChanges.push(nd); ctrl.nodeIds[id] = nd.data.status; }
+        else if (previous[id] !== JSON.stringify(nd.data)) { statusChanges.push(nd); ctrl.nodeIds[id] = nd.data.status; }
       });
       cell.edges.forEach(function (ed) {
         var id = ed.data.id;
@@ -313,18 +464,20 @@
       // Re-class changed nodes in place (data() re-evaluates the style maps).
       statusChanges.forEach(function (nd) {
         var el = ctrl.cy.getElementById(nd.data.id);
-        if (el && el.length) { el.data("status", nd.data.status); el.data("label", nd.data.label); }
+        if (el && el.length) {
+          el.data(nd.data);
+          var card = ctrl.cards[nd.data.id];
+          if (card && card.classList.contains("sel")) nodeDetail(ctrl.el, nd.data);
+        }
       });
+      if (statusChanges.length && !(newNodes.length || newEdges.length)) ctrl.markWins();
       if (newNodes.length || newEdges.length) {
         ctrl.cy.add({ nodes: newNodes, edges: newEdges });
+        ctrl.markWins();
         var visible = ctrl.el.classList.contains("active") && ctrl.el.offsetParent !== null;
         if (visible) {
+          if (!ctrl.userZoomed) ctrl.cy.one("layoutstop", function () { fitView(ctrl.cy, 200); });
           ctrl.cy.layout(Object.assign({}, LAYOUT, { animate: true, animationDuration: 300 })).run();
-          if (!ctrl.userZoomed) ctrl.cy.animate({ fit: { padding: 28 } }, { duration: 300 });
-          newNodes.forEach(function (nd) {
-            var el = ctrl.cy.getElementById(nd.data.id);
-            if (el && el.length) { el.style("opacity", 0); el.animate({ style: { opacity: 1 } }, { duration: 300 }); }
-          });
         } else {
           ctrl.dirty = true;  // lay out when the panel is next shown
         }
@@ -364,7 +517,11 @@
             });
           });
           if (needsRebuild) { structuralRebuild(); return; }
-          if (data.finished) stop();
+          if (data.finished) {
+            stop();
+            live = false;  // search is over: unsuccessful branches are now pruned
+            order.forEach(function (k) { if (panelsById[k].cy) panelsById[k].markWins(); });
+          }
         })
         .catch(function () { /* transient network error; keep polling */ });
     }

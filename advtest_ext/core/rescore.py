@@ -41,9 +41,9 @@ Two invariants:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from advtest_ext.core.models import AttackTrace, Behavior, JudgeScore, Payload
+from advtest_ext.core.models import AttackTrace, Behavior, JudgeScore, Payload, Verdict
 from advtest_ext.core.orch_trace_meta import (
     _classify_verdict,
     upgrade_verdict_for_signals,
@@ -152,7 +152,7 @@ def trace_row_to_domain(row: TraceRow) -> AttackTrace:
         raw_request=row.raw_request or "",
         raw_response=row.raw_response or "",
         raw_response_data=dict(row.raw_response_data or {}),
-        verdict=row.verdict,
+        verdict=cast(Verdict | None, row.verdict),
         parent_id=row.parent_id,
         depth=row.depth or 0,
         metadata=dict(row.extra_metadata or {}),
@@ -365,7 +365,11 @@ def _promote(
         run_id=run_id,
         trace_id=trace.id,
         severity="med",
-        title=f"{trace.payload.id} → {trace.behavior_id}",
+        title=(
+            f"{trace.payload.generator_name} → {trace.behavior_id} via {trace.technique.id}"
+            if trace.technique is not None
+            else f"{trace.payload.generator_name} → {trace.behavior_id}"
+        ),
         description=(
             f"Promoted by rescore via "
             f"{'L2 judge' if score >= threshold else 'L0 signal'}"

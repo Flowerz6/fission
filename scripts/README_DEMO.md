@@ -14,29 +14,27 @@ One trigger drives, visibly in real browsers, with no manual steps at runtime:
 Claude (Anthropic API) = the content writer. Gemini (in Docs) = the system
 under test. Auth = pre-logged-in Chrome profiles (no OAuth).
 
-Run everything below from the **`advtest`** directory in **PowerShell**.
+Run everything below from the repository root.
 
 ---
 
 ## One-time setup
 
-**0. Environment** — already built for you: a Python venv at `advtest\.venv`
-with Playwright + the `advtest_ext` package installed, and Google Chrome is
-present (the automation uses `channel="chrome"`, your real Chrome — no separate
-browser download). **Run every command below from the `advtest` folder:**
-```powershell
-cd C:\Users\randomX\Desktop\rohith2026\googleDocs\advtest
+**0. Environment** — install the UI dependencies and ensure Google Chrome is
+present (the automation uses `channel="chrome"`, your real Chrome):
+```bash
+poetry install --extras ui_mode
 ```
 
 **1. Log into the two Chrome profiles** (sign in once each; close the window
 when done). The Gmail profile is reused for BOTH the Gmail replies AND the
 Docs/Gemini step:
-```powershell
+```bash
 # Gmail profile  -> sign in as f04438179@gmail.com  (the Gemini account)
-.venv\Scripts\python.exe scripts/setup_playwright_profile.py --service gmail
+poetry run python scripts/setup_playwright_profile.py --service gmail
 
 # Outlook profile -> sign in as testuser961206@outlook.com
-.venv\Scripts\python.exe scripts/setup_playwright_profile.py --service outlook
+poetry run python scripts/setup_playwright_profile.py --service outlook
 ```
 
 **2. Create one blank Google Doc** in the Gmail account. Open it, copy the id
@@ -46,8 +44,9 @@ it into `scripts/demo_scenario.json` → `"doc": { "document_id": "<HERE>" }`.
 **3. Confirm the Gemini side panel shows *inside* that Doc** (open the Doc →
 the Gemini panel on the right). If it's there, you're set.
 
-**4. API key** — `ANTHROPIC_API_KEY` is auto-loaded from `googleDocs/.env`
-(the script reads it). Nothing to do if that file is in place.
+**4. API key** — export `ANTHROPIC_API_KEY` before starting the dashboard, or
+place it in `.env` at the repository root. The child workflow inherits the
+dashboard process environment.
 
 ---
 
@@ -55,24 +54,30 @@ the Gemini panel on the right). If it's there, you're set.
 
 Validates the JSON, the step order, and the `{{step.field}}` templating without
 sending anything:
-```powershell
-.venv\Scripts\python.exe scripts/demo_flow.py --scenario scripts/demo_scenario.json --plan
+```bash
+poetry run python scripts/demo_flow.py --scenario scripts/demo_scenario.json --plan
 ```
-Expect to see all 10 steps print in order with resolved fields.
+Expect all 12 steps and a dashboard Run ID. If the runner prints
+`persistence off`, stop and fix the database configuration.
 
 ## Step B — the run / the recording (~3-5 min)
 
 > **Before running:** close any normal Chrome windows logged into those two
 > accounts — a profile can't be open in two browsers at once.
 
-```powershell
+```bash
 # Slow each Playwright action so the audience can follow (ms). 0 = full speed.
-$env:ADVTEST_PLAYWRIGHT_SLOWMO_MS = "700"
+export ADVTEST_PLAYWRIGHT_SLOWMO_MS=700
 # Hold Gemini's reply on screen a few seconds at the end.
-$env:ADVTEST_UI_MODE_HOLD_S = "6"
+export ADVTEST_UI_MODE_HOLD_S=6
 
-.venv\Scripts\python.exe scripts/demo_flow.py --scenario scripts/demo_scenario.json
+export ADVTEST_ENABLE_LIVE_TESTS=1
+poetry run uvicorn advtest_ext.dashboard.app:create_app --factory --host 127.0.0.1 --port 8000
 ```
+
+Open `http://127.0.0.1:8000/assessments/new`, choose **Outlook → Gmail → Docs**,
+confirm the prerequisites, and select **Launch assessment**. The page streams the runner
+console and the new traces appear under Runs.
 
 Two Chrome windows open (Outlook + Gmail), the emails fly, the Doc opens, the
 Gemini panel answers. At the end the runner prints either:
@@ -93,7 +98,7 @@ tells you which surface:
   a forensic screenshot lands under `out/demo/failures/`.
 - "profile ... already in use" → close the other Chrome on that account.
 
-## Knobs (PowerShell env vars)
+## Knobs
 - `ADVTEST_PLAYWRIGHT_SLOWMO_MS` — slow-mo per action (demo pacing).
 - `ADVTEST_PLAYWRIGHT_TIMEOUT` — per-step timeout ms (default 20000).
 - `ADVTEST_UI_MODE_HOLD_S` — seconds to hold Gemini's reply on screen.

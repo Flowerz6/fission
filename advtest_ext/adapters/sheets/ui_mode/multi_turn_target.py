@@ -17,6 +17,7 @@ with no API/OAuth, which is the simplest live path.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import re
 import uuid
 from pathlib import Path
@@ -78,6 +79,11 @@ class GeminiSheetsMultiTurnTarget(DocumentTarget):
         self._ctx: NativeContext | None = None
         self._owns_sheet = False
         self._turn = 0
+        # Monotonic conversation id keeps screenshots and intercepted traffic
+        # unique when reset() starts another tree node.
+        self._conversation = 1
+        # Set by reset() to swap in a clean tab for the next tree node.
+        self._needs_fresh_page = False
         self._created_sheets: list[str] = []
 
     @property
@@ -98,6 +104,12 @@ class GeminiSheetsMultiTurnTarget(DocumentTarget):
         whole escalation runs in one conversation on one sheet. ``doc`` is a
         blank control surface and is ignored."""
         del doc
+        # Fresh tab per node (set by reset()): close the previous node's page
+        # and open a clean one on the same warm context, so no stale side-panel
+        # / dialog state carries over. No-op on the first node (no session yet).
+        if self._needs_fresh_page and self._session is not None:
+            await self._session.new_page()
+        self._needs_fresh_page = False
         if self._ctx is not None:
             return self._ctx
         if self._sheet_ids:
@@ -134,7 +146,7 @@ class GeminiSheetsMultiTurnTarget(DocumentTarget):
             raise RuntimeError("render_document did not record a spreadsheet_id on the context")
 
         reset = self._turn == 0
-        trace_id = f"{self._trace_prefix}-t{self._turn + 1}"
+        trace_id = f"{self._trace_prefix}-c{self._conversation}-t{self._turn + 1}"
         invoke_fn = self._invoke_fn or self._default_invoke_fn()
         response: Response = await invoke_fn(
             spreadsheet_id=spreadsheet_id,
@@ -166,17 +178,34 @@ class GeminiSheetsMultiTurnTarget(DocumentTarget):
         self._ctx = None
 
     def reset(self) -> None:
-        """Fresh conversation + fresh scratch Sheet on the next invoke,
-        keeping the warm Chrome session. The turn counter goes back to 0 (next
-        invoke passes ``reset_conversation=True``)."""
+        """Fresh conversation + fresh scratch Sheet + fresh page (clean tab) on
+        the next invoke, keeping the warm Chrome session.
+
+        Each TAP tree node is an independent branch, so it must NOT inherit the
+        previous node's populated Sheet, left-over confirmation dialogs, or
+        side-panel conversation — that cross-contamination was surfacing as
+        ``SidePanelUnavailable`` on later nodes. The turn counter goes back to 0
+        (next invoke passes ``reset_conversation=True``)."""
         self._turn = 0
+        self._conversation += 1
+        self._needs_fresh_page = True
         if self._sheet_ids:
             self._sheet_cursor += 1
             self._ctx = None
             self._owns_sheet = False
-        elif self._sheet_id is None and not self._browser_mint:
+        elif self._browser_mint:
+            # Re-adopt the SAME minted Sheet on a fresh tab (cheap). The node
+            # isolation that matters is the fresh page + fresh conversation;
+            # re-minting a Sheet per node is unnecessary churn.
             self._ctx = None
             self._owns_sheet = False
+        elif self._sheet_id is None:
+            self._ctx = None
+            self._owns_sheet = False
+        else:
+            # Fixed target Sheet: keep the sheet, but re-adopt it (fresh ctx) so
+            # the conversation and page still reset around it.
+            self._ctx = None
 
     async def close(self) -> None:
         """Run-level teardown: delete every scratch Sheet we minted, and close
@@ -195,6 +224,25 @@ class GeminiSheetsMultiTurnTarget(DocumentTarget):
                 await self._session.close()
             finally:
                 self._session = None
+
+    def bind_carrier(self, **bindings: Any) -> None:
+        sheet_id = bindings.get("sheet_id")
+        if not isinstance(sheet_id, str) or not sheet_id:
+            raise ValueError("Sheets carrier binding requires sheet_id")
+        self._sheet_id = sheet_id
+        self._sheet_ids = None
+        self._ctx = None
+        self._owns_sheet = False
+        self.reset()
+
+    async def cleanup_bound_carrier(self, **bindings: Any) -> bool:
+        sheet_id = bindings.get("sheet_id")
+        if not isinstance(sheet_id, str) or not sheet_id or self._sheet_deleter is None:
+            return False
+        result = self._sheet_deleter(sheet_id)
+        if inspect.isawaitable(result):
+            await result
+        return True
 
     def capabilities(self) -> DocumentCapabilities:
         return DocumentCapabilities(multi_turn=True)

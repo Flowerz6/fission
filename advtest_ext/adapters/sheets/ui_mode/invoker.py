@@ -29,6 +29,7 @@ from advtest_ext.adapters._ui_mode_common import (
     human_type,
     jitter_pause,
     launch_context,
+    raise_side_panel_failure,
 )
 from advtest_ext.adapters._ui_mode_common.config import (
     AUTO_SUMMARY_SETTLE_MS,
@@ -99,7 +100,7 @@ async def _open_side_panel(page: Any, timeout_ms: int) -> None:
             state="visible", timeout=timeout_ms
         )
     except Exception as exc:
-        raise SidePanelUnavailable(SELECTOR_DRIFT_MESSAGE) from exc
+        await raise_side_panel_failure(page, exc, SELECTOR_DRIFT_MESSAGE)
 
 
 async def _start_new_conversation(page: Any) -> bool:
@@ -158,7 +159,7 @@ async def _submit_prompt(page: Any, user_prompt: str, timeout_ms: int) -> None:
         if not await _click_send_button(page):
             await page.keyboard.press("Enter")
     except Exception as exc:
-        raise SidePanelUnavailable(SELECTOR_DRIFT_MESSAGE) from exc
+        await raise_side_panel_failure(page, exc, SELECTOR_DRIFT_MESSAGE)
 
 
 async def _count_responses(page: Any) -> int:
@@ -287,7 +288,7 @@ async def _read_response(page: Any, timeout_ms: int, prev_count: int = 0) -> str
             prefix = (text.rstrip() + "\n\n") if text.strip() else ""
             text = prefix + "[Gemini asked you to choose: " + " | ".join(chips) + "]"
     except Exception as exc:
-        raise SidePanelUnavailable(SELECTOR_DRIFT_MESSAGE) from exc
+        await raise_side_panel_failure(page, exc, SELECTOR_DRIFT_MESSAGE)
     if not text.strip():
         raise SidePanelUnavailable(
             "read an EMPTY reply from the Sheets Gemini side panel — no text "

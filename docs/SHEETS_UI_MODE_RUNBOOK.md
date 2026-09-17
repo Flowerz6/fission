@@ -5,7 +5,7 @@ tested, but its **side-panel selectors are seeded from Docs and need one
 live validation pass** before a real run — the Gemini side panel is the same
 component across Workspace apps, so most carry over, but the toolbar entry
 button is the likely divergence. This runbook takes you from a fresh checkout
-to a live run of `guides/sheets_skill_leak.json` (source: human:bikash) whose
+to a live run of `guides/sheets_skill_leak.yaml` (source: human:bikash) whose
 traces, review queue, and calibrated ASR ± CI show up in the dashboard.
 
 > ⚠️ This drives a **real headed browser + real Gemini** against a Google

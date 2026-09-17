@@ -1,86 +1,50 @@
 {% extends "base.html" %}
-{% block title %}finding {{ finding.id }} · advtest{% endblock %}
+{% block title %}{{ finding.title or 'Finding' }} · Fission{% endblock %}
+{% block topbar_leading %}{% if return_to_run %}<a class="back-link" href="/runs/{{ finding.run_id }}?finding={{ finding.id }}#run-findings">← Back to run</a>{% else %}<a class="back-link" href="/findings">← Back to findings</a>{% endif %}{% endblock %}
 {% block content %}
-<h1>
-  <span class="pill severity-{{ finding.severity }}">{{ finding.severity }}</span>
-  {{ finding.title or '(untitled)' }}
-</h1>
-<p class="muted">
-  Finding <code>{{ finding.id }}</code> in run
-  <a href="/runs/{{ finding.run_id }}">{{ finding.run_id }}</a>
-  · Trace <code>{{ finding.trace_id }}</code>
-  · Promoted {{ finding.promoted_at.strftime('%Y-%m-%d %H:%M') }}
-</p>
-
-{% if finding.replay_bundle_path %}
-<p><a href="/findings/{{ finding.id }}/replay">⤓ Download replay bundle (ZIP)</a></p>
-{% endif %}
-<p>
-  <a href="/findings/{{ finding.id }}/report.docx">⤓ Download report (DOCX)</a>
-  <span class="muted">— mirrors the Google Red Team Report shape; operator-editable.</span>
-</p>
-
-{% if finding.description %}
-<h2>Description</h2>
-<p>{{ finding.description }}</p>
-{% endif %}
-
-<h2>Trace summary</h2>
-<table>
-  <tr><th>Behaviour</th><td>{{ trace.behavior_id }}</td></tr>
-  <tr><th>Attack</th><td>{{ trace.attack_name }}</td></tr>
-  <tr><th>Technique</th><td>{{ trace.technique_id or '-' }}</td></tr>
-  <tr><th>Target</th><td>{{ trace.target_name }}</td></tr>
-  <tr><th>Verdict</th><td><span class="pill {{ trace.verdict or 'refused' }}">{{ trace.verdict or '-' }}</span></td></tr>
-  <tr><th>Depth</th><td>{{ trace.depth }}</td></tr>
-  <tr><th>Parent</th><td>{% if trace.parent_id %}<a href="/traces/{{ trace.parent_id }}"><code>{{ trace.parent_id }}</code></a>{% else %}—{% endif %}</td></tr>
-  <tr><th>Full trace</th><td><a href="/traces/{{ trace.id }}"><code>{{ trace.id }}</code></a></td></tr>
-</table>
-
-{% from "_doc_content_panel.html" import doc_content_panel, attacker_reasoning_block %}
-{{ doc_content_panel(trace) }}
-{{ attacker_reasoning_block(trace) }}
-
-<h2>User prompt typed in the Gemini side panel</h2>
-<pre>{{ trace.raw_request }}</pre>
-
-<h2>Gemini's response</h2>
-{# raw_response is now the complete assembled response; full_response is the
-   same text re-extracted from the intercepted stream. No truncation. #}
-<pre class="full-response" style="white-space: pre-wrap;">{{ full_response or trace.raw_response }}</pre>
-{% if not full_response and not (trace.raw_response_data or {}).get('intercepted_traffic_path') %}
-<p class="muted" style="font-size: 0.85em;">
-  Rendered side-panel text (api_mode / interception disabled — no intercepted
-  stream captured for this trace).
-</p>
-{% endif %}
-
-<h2>Judge scores</h2>
-<div class="judge-blurb">
-  <strong>Score direction:</strong> these are <em>compliance</em> scores, not <em>refusal</em> scores.
-  <strong>0.00</strong> means the model refused the attack (good for the model, bad for the attacker).
-  <strong>1.00</strong> means the model fully complied (attack landed). The judge name <code>strong_reject</code>
-  refers to the <a href="https://arxiv.org/abs/2402.10260" target="_blank" rel="noopener">StrongREJECT rubric</a>
-  used to compute the score — it does <em>not</em> mean the attack was rejected.
+{% set sev = finding_severity(finding) %}
+<div class="head-bar finding-detail-head"><div class="ht"><h1>{{ finding_title(finding) }} <span class="sevdot {{ sev }}"><span class="d"></span>{{ sev|capitalize }}</span></h1><p><a href="/runs/{{ finding.run_id }}">{{ run_display_name(finding.run) if finding.run else finding.run_id }}</a>{% if finding_seq_n %} · Finding {{ finding_seq_n }}{% endif %}{% set m = finding_method(finding) %}{% if m %} · {{ m }}{% endif %}</p></div><div class="ha">{% if prev_finding %}<a class="btn-outline" href="/findings/{{ prev_finding }}" title="Previous finding in this run" aria-label="Previous finding">←</a>{% endif %}{% if next_finding %}<a class="btn-outline" href="/findings/{{ next_finding }}" title="Next finding in this run" aria-label="Next finding">→</a>{% endif %}<a class="btn-outline" href="/findings/{{ finding.id }}/report.docx">↓ Export DOCX</a>{% if finding.replay_bundle_path %}<a class="btn-outline" href="/findings/{{ finding.id }}/replay">↓ Replay bundle</a>{% endif %}</div></div>
+<div data-tab-group>
+<div class="tabs" role="tablist" aria-label="Finding details">
+<button class="on" role="tab" id="tab-overview" aria-controls="finding-overview" aria-selected="true" data-tab="finding-overview">Overview</button>
+<button role="tab" id="tab-reproduction" aria-controls="finding-reproduction" aria-selected="false" data-tab="finding-reproduction">Reproduction</button>
+<button role="tab" id="tab-behaviour" aria-controls="finding-behaviour" aria-selected="false" data-tab="finding-behaviour">Model behaviour</button>
+<button role="tab" id="tab-activity" aria-controls="finding-activity" aria-selected="false" data-tab="finding-activity">Activity</button>
 </div>
-{% if trace.judge_scores %}
-<table>
-  <thead><tr><th>Judge (rubric)</th><th>Compliance</th><th>Flagged</th><th>Reasoning</th></tr></thead>
-  <tbody>
-    {% for js in trace.judge_scores %}
-    {% if js.score >= 0.6 %}{% set tone = 'hot' %}{% elif js.score >= 0.2 %}{% set tone = 'warm' %}{% else %}{% set tone = 'cool' %}{% endif %}
-    <tr>
-      <td>
-        {% if js.judge_name == 'strong_reject' %}StrongREJECT rubric{% else %}{{ js.judge_name }}{% endif %}
-      </td>
-      <td><span class="score-cell score-{{ tone }}">{{ '%.3f'|format(js.score) }}</span></td>
-      <td>{{ 'yes' if js.flagged else 'no' }}</td>
-      <td class="muted">{{ js.reasoning }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p class="muted">No judge scores recorded for this trace.</p>
+<div id="finding-overview" role="tabpanel" aria-labelledby="tab-overview" data-tab-panel>
+<div class="detail-grid"><section><h2>Details</h2>
+<dl class="detail-meta"><dt>Target</dt><dd>{{ trace.target_name }}</dd><dt>Category</dt><dd title="{{ trace.attack_name }}">{{ attack_label(trace.attack_name) }}</dd><dt>Technique</dt><dd>{{ trace.technique_id or '—' }}</dd><dt>Scenario</dt><dd title="{{ trace.behavior_id }}">{{ objective_label(trace.behavior_id) }}</dd><dt>Detected</dt><dd>{{ finding.promoted_at.strftime('%d %b %Y, %H:%M') }}</dd><dt>Verdict</dt><dd><span class="pill {{ trace.verdict or 'refused' }}">{{ trace.verdict or 'Unscored' }}</span></dd><dt>Severity</dt><dd><span class="sevdot {{ sev }}"><span class="d"></span>{{ sev|capitalize }}</span></dd></dl>
+<h3>Description</h3><p>{{ finding.description or 'No description recorded for this finding.' }}</p>
+<h3>Run</h3><a href="/runs/{{ finding.run_id }}">{{ finding.run_id }} →</a>
+{% if authenticity %}
+{% set corroborated = authenticity.verdict == 'real' %}
+{% set multi = authenticity.n_runs and authenticity.n_runs >= 2 %}
+<h3>Authenticity</h3>
+<div class="authn {{ 'authn-real' if corroborated else 'authn-neutral' }}">
+  <div class="authn-head">
+    <span class="authn-verdict">{{ 'Corroborated' if corroborated else ('Not yet corroborated' if not multi else 'Not corroborated') }}</span>
+    <span class="authn-meta">{% if corroborated %}reproduced across {{ authenticity.n_runs }} runs · consistency {{ '%.2f'|format(authenticity.consistency) }}{% elif multi %}across {{ authenticity.n_runs }} runs · consistency {{ '%.2f'|format(authenticity.consistency) }}{% else %}seen in {{ authenticity.n_runs or 1 }} run{% endif %}</span>
+  </div>
+  <p class="authn-why">{{ authenticity.reasoning }}</p>
+  {% if not multi %}<p class="authn-hint">Needs a second independent run of this guide to corroborate — a genuine internal leak recurs, a hallucination varies.</p>{% endif %}
+  {% if authenticity.stable_artifacts %}<div class="authn-tags"><span class="authn-tags-lbl">Stable across runs</span>{% for a in authenticity.stable_artifacts %}<code>{{ a }}</code>{% endfor %}</div>{% endif %}
+</div>
 {% endif %}
+</section><section><h2>Reproduction</h2><div data-tab-group><div class="tabs" role="tablist" aria-label="Reproduction preview"><button class="on" id="preview-input-tab" role="tab" aria-controls="preview-input" aria-selected="true" data-tab="preview-input">Input</button><button id="preview-output-tab" role="tab" aria-controls="preview-output" aria-selected="false" data-tab="preview-output">Output</button></div>
+<div id="preview-input" data-tab-panel role="tabpanel" aria-labelledby="preview-input-tab" class="evidence-box"><strong>User prompt</strong><pre>{{ trace.raw_request }}</pre></div>
+<div id="preview-output" data-tab-panel role="tabpanel" aria-labelledby="preview-output-tab" class="evidence-box" hidden><strong>Model response</strong><pre>{{ full_response or trace.raw_response }}</pre></div></div>
+<p class="preference-note">Open Reproduction for document content and attacker reasoning, or Model behaviour for the full response and judge scores.</p>
+</section></div></div>
+<div id="finding-reproduction" role="tabpanel" aria-labelledby="tab-reproduction" data-tab-panel hidden class="detail-section">
+{% from "_doc_content_panel.html" import doc_content_panel, attacker_reasoning_block %}
+{{ doc_content_panel(trace) }}{{ attacker_reasoning_block(trace) }}
+<h2>User prompt typed in the Gemini side panel</h2><pre>{{ trace.raw_request }}</pre>
+<p><a class="btn-outline" href="/traces/{{ trace.id }}">Open full trace →</a></p>
+</div>
+<div id="finding-behaviour" role="tabpanel" aria-labelledby="tab-behaviour" data-tab-panel hidden class="detail-section"><h2>Gemini's response</h2><pre class="full-response">{{ full_response or trace.raw_response }}</pre>
+{% if not full_response and not (trace.raw_response_data or {}).get('intercepted_traffic_path') %}<p class="muted">Rendered side-panel text. No intercepted stream captured for this trace.</p>{% endif %}
+
+</div>
+<div id="finding-activity" role="tabpanel" aria-labelledby="tab-activity" data-tab-panel hidden class="detail-section"><h2>Recorded activity</h2><dl class="detail-meta"><dt>Promoted</dt><dd>{{ finding.promoted_at.strftime('%Y-%m-%d %H:%M') }}</dd><dt>Finding</dt><dd>{{ finding.id }}</dd><dt>Trace</dt><dd><a href="/traces/{{ trace.id }}">{{ trace.id }}</a></dd><dt>Depth</dt><dd>{{ trace.depth }}</dd><dt>Parent</dt><dd>{% if trace.parent_id %}<a href="/traces/{{ trace.parent_id }}">{{ trace.parent_id }}</a>{% else %}Root attempt{% endif %}</dd></dl></div>
+</div>
 {% endblock %}

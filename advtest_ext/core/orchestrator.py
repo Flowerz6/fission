@@ -60,10 +60,10 @@ from advtest_ext.core.sampling import stratified_sample
 from advtest_ext.core.uncertainty import Uncertainty, score_uncertainty
 from advtest_ext.document import AbstractDocument
 from advtest_ext.judges.base import JudgeBase
+from advtest_ext.providers.cost import CostLedger
 
 if TYPE_CHECKING:  # pragma: no cover
     from advtest_ext.document.target import DocumentTarget
-    from advtest_ext.providers.cost import CostLedger
 
 
 logger = get_logger(__name__)
@@ -90,6 +90,7 @@ EventType = Literal[
     "mcts_select",
     "signals_evaluated",
     "review_sample_enqueued",
+    "seeds_harvested",
 ]
 
 
@@ -143,6 +144,118 @@ def _build_signal_stack(specs: Sequence[dict[str, Any]]) -> list[Any]:
     from advtest_ext.judges.signals import build_signal
 
     return [build_signal(spec) for spec in specs]
+
+
+def variant_id_for(behavior_id: str, turns: list[dict[str, Any]]) -> str:
+    """Deterministic id for a proven variant: a content hash of the behaviour and
+    the attacker turns. The per-node path and the whole-run backfill mint the SAME
+    id for the same trajectory, which is what makes harvesting idempotent."""
+    import hashlib
+
+    joined = behavior_id + " " + " ".join(str(t.get("attacker", "")) for t in turns)
+    return "var-" + hashlib.sha1(joined.encode("utf-8", "ignore")).hexdigest()[:12]
+
+
+def turns_from_chain(chain: list[Any], *, max_turn_chars: int = 4000) -> list[dict[str, Any]]:
+    """Winning turns ``[{n, attacker, target}]`` from a root->leaf trace chain.
+    Works for both DB ``Trace`` rows (``payload_text``) and in-memory
+    ``AttackTrace`` (``payload.text``)."""
+    turns: list[dict[str, Any]] = []
+    for i, t in enumerate(chain):
+        attacker = getattr(t, "payload_text", None)
+        if attacker is None:
+            payload = getattr(t, "payload", None)
+            attacker = getattr(payload, "text", "") if payload is not None else ""
+        turns.append(
+            {
+                "n": i + 1,
+                "attacker": (attacker or "")[:max_turn_chars],
+                "target": (getattr(t, "raw_response", "") or "")[:max_turn_chars],
+            }
+        )
+    return turns
+
+
+def harvest_verified_variants(
+    session_factory: Any,
+    guide_id: str,
+    run_id: str,
+    *,
+    max_per_run: int = 20,
+    max_turn_chars: int = 4000,
+) -> int:
+    """Harvest signal-verified winning trajectories from a run as proven VARIANTS
+    of ``guide_id``, returning the count of NEW variants written.
+
+    A proven variant is parented to the guide it came from (not a seed, not a new
+    top-level guide) and carries the winning turns as its replayable seed chain.
+    Gated so it sharpens rather than clutters:
+
+    - **Validity gate** — only ``verdict == 'success'`` traces where a
+      *deterministic* (non-``llm_judge_verdict``) signal fired: the same
+      SIGNAL-VERIFIED bar the run UI shows, so the over-calling LLM oracle can't
+      mint variants on its own.
+    - **Novelty gate** — the variant id is a content hash of the trajectory, so a
+      duplicate (this run or a prior one) is skipped.
+    - **Provenance** — ``status='candidate'`` + the run/trace/signals it came from,
+      kept distinct from the canonical guide until re-verified.
+    """
+    from advtest_ext.storage import (
+        get_guide_variant,
+        list_signals_for_trace,
+        list_traces_for_run,
+        session_scope,
+        upsert_guide_variant,
+    )
+
+    written = 0
+    with session_scope(session_factory) as s:
+        rows = list_traces_for_run(s, run_id)
+        by_id = {r.id: r for r in rows}
+        for row in rows:
+            if written >= max_per_run:
+                break
+            if (row.verdict or "").lower() != "success":
+                continue
+            sigs = list_signals_for_trace(s, row.id)
+            verified = [
+                f"{sig.kind}:{sig.name}"
+                for sig in sigs
+                if sig.fired and sig.kind != "llm_judge_verdict"
+            ]
+            if not verified:
+                continue  # oracle-only success — not a verified variant
+            chain: list[Any] = []
+            cursor: Any = row
+            seen: set[str] = set()
+            while cursor is not None and cursor.id not in seen:
+                seen.add(cursor.id)
+                chain.append(cursor)
+                cursor = by_id.get(cursor.parent_id) if cursor.parent_id else None
+            chain.reverse()
+            turns = turns_from_chain(chain, max_turn_chars=max_turn_chars)
+            vid = variant_id_for(row.behavior_id, turns)
+            if get_guide_variant(s, vid) is not None:
+                continue  # novelty gate
+            upsert_guide_variant(
+                s,
+                variant_id=vid,
+                guide_id=guide_id,
+                behavior_id=row.behavior_id,
+                seed_chain=turns,
+                provenance={
+                    "run_id": run_id,
+                    "trace_id": row.id,
+                    "attack": row.attack_name,
+                    "technique_id": row.technique_id,
+                    "worked_on": row.target_name,
+                    "verified_signals": verified,
+                    "harvested_by": "signal",
+                },
+                status="candidate",
+            )
+            written += 1
+    return written
 
 
 # ----------------------------------------------------------------------
@@ -247,6 +360,12 @@ def _error_trace(
         )
     )
     parent_id, depth = _hoist_parent_and_depth(attempt) if attempt is not None else (None, 0)
+    # ``error_kind`` is carried on ui_mode exceptions (SidePanelUnavailable /
+    # AntiAutomationDetected). Reading it via getattr keeps core free of an
+    # adapters import; anything without it is an unexpected attack-time error.
+    metadata: dict[str, Any] = {"error_kind": getattr(exc, "error_kind", "attack_error")}
+    if attempt is not None:
+        metadata.update(attempt.metadata)
     return AttackTrace(
         id=f"trace-err-{uuid.uuid4().hex[:8]}",
         run_id=run_id,
@@ -259,6 +378,7 @@ def _error_trace(
         verdict="error",
         parent_id=parent_id,
         depth=depth,
+        metadata=metadata,
     )
 
 
@@ -355,10 +475,24 @@ class Orchestrator:
         self.judge = judge
         self.budget = budget or Budget()
         self.run_id = run_id or f"run-{uuid.uuid4().hex[:12]}"
-        self.cost_ledger = cost_ledger
+        # The guide this run came from, when any. Set by the guide runner after
+        # construction; enables harvesting a winning node as a proven VARIANT of
+        # that guide. None for ad-hoc config runs (nothing is harvested then).
+        self._guide_id: str | None = None
+        # Always keep a live ledger. Integrated attacks (PAIR/TAP/Crescendo)
+        # make provider calls inside ``generate``; attaching the same ledger to
+        # them makes ``max_cost_usd`` observe those calls.
+        self.cost_ledger = cost_ledger or CostLedger()
+        for attack in self.attacks:
+            attack_with_ledger: Any = attack
+            if (
+                hasattr(attack_with_ledger, "_cost_ledger")
+                and attack_with_ledger._cost_ledger is None
+            ):
+                attack_with_ledger._cost_ledger = self.cost_ledger
         self._concurrency = max_concurrency
         self._events = _EventBus(events)
-        self._budget = _BudgetTracker(budget=self.budget, cost_ledger=cost_ledger)
+        self._budget = _BudgetTracker(budget=self.budget, cost_ledger=self.cost_ledger)
         self._persister = _TracePersister(output_dir, self.run_id)
         self._traces: list[AttackTrace] = []
         self._traces_lock = asyncio.Lock()
@@ -451,6 +585,7 @@ class Orchestrator:
         )
         self._persister.write_run_result(result)
         self._db_finalize_run(result.summary_stats)
+        self._recompute_authenticity()
         await self._enqueue_review_sample()
         await self._events.emit(
             "run_completed",
@@ -485,7 +620,11 @@ class Orchestrator:
         ``parent_id`` chains rewritten from in-memory node ids to
         persisted trace ids.
         """
-        await self._budget.reserve_one_query()
+        # Integrated multi-turn attacks reserve immediately before invoking
+        # the live target. Pop the private marker so it is never persisted.
+        pre_reserved = bool(attempt.metadata.pop("_query_pre_reserved", False))
+        if not pre_reserved:
+            await self._budget.reserve_one_query()
         await self._events.emit(
             "attempt_started",
             attack=attack.name,
@@ -569,6 +708,7 @@ class Orchestrator:
         # keeps a single shared judge (StrongREJECT) riding on top of the
         # signals without a loose regex silently over-claiming a full win.
         # No-op for configs without signals → verdict stays judge-only.
+        assert trace.verdict is not None
         upgraded = upgrade_verdict_for_signals(trace.verdict, fired_kinds)
         if upgraded != trace.verdict:
             trace.verdict = upgraded
@@ -580,6 +720,14 @@ class Orchestrator:
         # (stable, not the upgraded verdict) so it is order-independent.
         self._score_and_persist_uncertainty(trace, n_fired)
         self._maybe_promote_finding(trace)
+        # Harvest a proven variant the moment a node's run ends — a signal-verified
+        # win is banked immediately (parented to its guide), so a later crash in the
+        # run can't lose it.
+        variant_id = self._harvest_trace_if_verified(trace, fired_kinds)
+        if variant_id is not None:
+            await self._events.emit(
+                "seeds_harvested", run_id=self.run_id, count=1, variant_id=variant_id
+            )
 
     def _score_and_persist_uncertainty(self, trace: AttackTrace, n_fired: int) -> None:
         """Compute the trace's review-priority score and stash it on the
@@ -756,6 +904,20 @@ class Orchestrator:
         with session_scope(self._session_factory) as s:
             finalize_run(s, run_id=self.run_id, summary=summary)
 
+    def _recompute_authenticity(self) -> None:
+        """Cross-run authenticity for self-extraction guides: now that this run
+        is finalized, re-score whether the leak reproduces across the guide's
+        runs and stamp the verdict onto its findings. Best-effort — a scoring
+        error must never fail an otherwise-complete run."""
+        if self._session_factory is None or not self._guide_id:
+            return
+        try:
+            from advtest_ext.core.authenticity_pipeline import recompute_guide_authenticity
+
+            recompute_guide_authenticity(self._session_factory, self._guide_id)
+        except Exception:  # pragma: no cover - defensive; never break run teardown
+            logger.warning("authenticity.recompute_failed", run_id=self.run_id, exc_info=True)
+
     async def _enqueue_review_sample(self) -> None:
         """Measurement-spine activation: stratified-sample this run's
         traces (uniform + disagreement) and enqueue them for expert
@@ -798,6 +960,58 @@ class Orchestrator:
             n_uniform=len(plan.uniform),
             n_disagreement=len(plan.disagreement),
         )
+
+    def _harvest_trace_if_verified(self, trace: AttackTrace, fired_kinds: Any) -> str | None:
+        """Bank a signal-verified winning trace as a proven variant of the guide it
+        came from, the moment the node ends. Gated: needs a DB sink, a parent guide
+        (``self._guide_id``, set by the guide runner — ad-hoc config runs harvest
+        nothing), a ``success`` verdict, and a deterministic (non-LLM) signal fired.
+        Deduped by trajectory hash. Off with ``ADVTEST_HARVEST_SEEDS=0``. Returns
+        the variant id when a NEW one was written, else None."""
+        import os
+
+        if self._session_factory is None or not self._guide_id:
+            return None
+        if os.environ.get("ADVTEST_HARVEST_SEEDS", "1").lower() in {"0", "false", "no"}:
+            return None
+        if (trace.verdict or "").lower() != "success":
+            return None
+        verified = [k for k in (fired_kinds or []) if k != "llm_judge_verdict"]
+        if not verified:
+            return None  # oracle-only success — not a verified variant
+
+        by_id = {t.id: t for t in self._traces}
+        chain: list[Any] = []
+        cursor: Any = trace
+        seen: set[str] = set()
+        while cursor is not None and cursor.id not in seen:
+            seen.add(cursor.id)
+            chain.append(cursor)
+            cursor = by_id.get(cursor.parent_id) if cursor.parent_id else None
+        chain.reverse()
+        turns = turns_from_chain(chain)
+        vid = variant_id_for(trace.behavior_id, turns)
+
+        from advtest_ext.storage import get_guide_variant, session_scope, upsert_guide_variant
+
+        with session_scope(self._session_factory) as s:
+            if get_guide_variant(s, vid) is not None:
+                return None  # already harvested this trajectory
+            upsert_guide_variant(
+                s,
+                variant_id=vid,
+                guide_id=self._guide_id,
+                behavior_id=trace.behavior_id,
+                seed_chain=turns,
+                provenance={
+                    "run_id": self.run_id,
+                    "trace_id": trace.id,
+                    "verified_signals": verified,
+                    "harvested_by": "signal",
+                },
+                status="candidate",
+            )
+        return vid
 
     def _maybe_promote_finding(self, trace: AttackTrace) -> None:
         """Auto-promote a successful trace to a Finding. The DB sink
@@ -922,7 +1136,12 @@ class GridOrchestrator(Orchestrator):
 
     async def _iterate_pair(self, *, attack: AttackPlugin, behavior: Behavior) -> None:
         await self._events.emit("attack_started", attack=attack.name, behavior=behavior.id)
-        attempts_iter = attack.generate(behavior=behavior, target=self.target, budget=self.budget)
+        attempts_iter = attack.generate(
+            behavior=behavior,
+            target=self.target,
+            budget=self.budget,
+            context={"reserve_query": self._budget.reserve_one_query},
+        )
         # Per-(attack, behaviour) ``node_id → trace_id`` map. Scoped
         # to this iteration so TAP runs against different behaviours
         # don't accidentally cross-link via the shared synthetic
@@ -1078,7 +1297,12 @@ class MctsOrchestrator(Orchestrator):
             _Arm(
                 attack=a,
                 behavior=b,
-                iterator=a.generate(behavior=b, target=self.target, budget=self.budget),
+                iterator=a.generate(
+                    behavior=b,
+                    target=self.target,
+                    budget=self.budget,
+                    context={"reserve_query": self._budget.reserve_one_query},
+                ),
             )
             for a in self.attacks
             for b in self.behaviors

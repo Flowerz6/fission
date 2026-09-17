@@ -114,6 +114,90 @@ def build_report_context(
     }
 
 
+def build_findings_report_context(
+    session: Session,
+    *,
+    title: str | None = None,
+    severities: list[str] | None = None,
+    behavior_ids: list[str] | None = None,
+    workspace: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    run_id: str | None = None,
+) -> dict[str, Any]:
+    """Assemble the context for a findings-selection report: the findings that
+    match the chosen severities / scenarios / workspace / date range / run,
+    sorted by severity, with per-severity counts and a human filter summary.
+    Pure over the session; the template formats via the shared display globals."""
+    from datetime import date, datetime
+
+    from advtest_ext.dashboard.presentation import (
+        finding_severity,
+        objective_label,
+        severity_rank,
+        surface_key,
+        surface_label,
+    )
+
+    sev_set = {s for s in (severities or []) if s}
+    beh_set = {b for b in (behavior_ids or []) if b}
+    workspace = workspace or None
+
+    def _parse(value: str | None) -> date | None:
+        try:
+            return date.fromisoformat(value) if value else None
+        except ValueError:
+            return None
+
+    d_from, d_to = _parse(date_from), _parse(date_to)
+
+    selected: list[tuple[str, Any]] = []
+    for f in list_findings(session, run_id=run_id or None):
+        sev = finding_severity(f)
+        if sev_set and sev not in sev_set:
+            continue
+        bid = getattr(f.trace, "behavior_id", None) if f.trace else None
+        if beh_set and bid not in beh_set:
+            continue
+        if workspace and (not f.trace or surface_key(f.trace.target_name) != workspace):
+            continue
+        if f.promoted_at:
+            pd = f.promoted_at.date()
+            if (d_from and pd < d_from) or (d_to and pd > d_to):
+                continue
+        selected.append((sev, f))
+
+    selected.sort(
+        key=lambda sf: (
+            severity_rank(sf[0]),
+            -(
+                max((s.score for s in sf[1].trace.judge_scores), default=0.0)
+                if sf[1].trace
+                else 0.0
+            ),
+        )
+    )
+    counts = {k: 0 for k in ("critical", "high", "med", "low")}
+    for sev, _ in selected:
+        counts[sev] = counts.get(sev, 0) + 1
+
+    return {
+        "report_title": (title or "").strip() or "Findings report",
+        "findings": [f for _, f in selected],
+        "counts": counts,
+        "total": len(selected),
+        "generated_at": datetime.now(),
+        "filters": {
+            "severities": [s for s in ("critical", "high", "med", "low") if s in sev_set] or None,
+            "scenarios": [objective_label(b) for b in sorted(beh_set)] or None,
+            "workspace": surface_label(workspace) if workspace else None,
+            "date_from": d_from,
+            "date_to": d_to,
+            "run_id": run_id or None,
+        },
+    }
+
+
 def render_pdf(html: str, *, base_url: str | None = None) -> bytes:
     """Render an HTML string into a PDF via WeasyPrint.
 
@@ -130,6 +214,7 @@ def render_pdf(html: str, *, base_url: str | None = None) -> bytes:
 
 __all__ = [
     "WEASYPRINT_INSTALLED",
+    "build_findings_report_context",
     "build_report_context",
     "render_pdf",
 ]

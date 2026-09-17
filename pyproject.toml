@@ -151,4 +151,12 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"
+# The test suite leans on lightweight duck-typed fakes and un-annotated
+# helper/fixture functions by design. Annotation-completeness checks (typed
+# defs / calls / incomplete defs) are pure strictness noise there and don't
+# catch bugs, so they're relaxed for tests only. Correctness checks
+# (arg-type, union-attr, return types, …) stay ON — real type mismatches in
+# tests are still errors.
 disallow_untyped_defs = false
+disallow_untyped_calls = false
+disallow_incomplete_defs = false

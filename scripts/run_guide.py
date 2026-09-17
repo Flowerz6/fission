@@ -45,6 +45,7 @@ import asyncio
 from pathlib import Path
 
 from advtest_ext.guides import Guide, load_guide, load_guides
+from advtest_ext.guides.corpus import resolve_guide_path
 from advtest_ext.guides.models import display_title
 from advtest_ext.guides.run import run_guide
 
@@ -53,10 +54,10 @@ _GUIDES_DIR = _REPO_ROOT / "guides"
 
 
 def _find_guide(guide_id: str) -> Guide:
-    """Load a guide by id: prefer ``guides/<id>.json``, else match on the
+    """Load a guide by id: prefer ``guides/<id>.{yaml,json}``, else match on the
     ``id`` field across the corpus."""
-    direct = _GUIDES_DIR / f"{guide_id}.json"
-    if direct.exists():
+    direct = resolve_guide_path(_GUIDES_DIR, guide_id)
+    if direct is not None:
         return load_guide(direct)
     for guide in load_guides(_GUIDES_DIR):
         if guide.id == guide_id:
@@ -97,6 +98,7 @@ def _parse_args() -> argparse.Namespace:
         "This is what the dashboard reads; pass --no-db to skip persistence.",
     )
     p.add_argument("--no-db", action="store_true", help="don't persist to a database")
+    p.add_argument("--run-id", help="use a caller-provided run id")
     p.add_argument(
         "--review-sample-budget",
         type=int,
@@ -104,8 +106,27 @@ def _parse_args() -> argparse.Namespace:
         help="enqueue up to N traces for expert review (feeds the gold set → PPI). "
         "0 (default) = off. Requires DB persistence.",
     )
-    p.add_argument("--max-depth", type=int, help="tap_crescendo tree depth override")
-    p.add_argument("--branching-factor", type=int, help="tap_crescendo branching override")
+    p.add_argument("--max-depth", type=int, help="tap_crescendo tree depth override (default 3)")
+    p.add_argument("--branching-factor", type=int, help="tap_crescendo branching override (default 2)")
+    p.add_argument(
+        "--max-nodes-per-seed",
+        type=int,
+        help="hard cap on nodes explored per seed (default 4). Raise this to search "
+        "wide/deep — depth and branching are moot while this stays low.",
+    )
+    p.add_argument("--keep-top", type=int, help="survivors kept per tree level (default 2)")
+    p.add_argument(
+        "--invariant-gate",
+        action="store_true",
+        help="re-enable the hard-invariant validation gate (default: OFF). With it off the tree "
+        "branches freely and the oracle alone decides success (max exploration breadth). Turn it "
+        "on to restrict mutations to on-mechanism variants (needs a capable CHECKER_MODEL).",
+    )
+    p.add_argument(
+        "--stop-on-success",
+        action="store_true",
+        help="stop the tree at the first winning node (default: keep exploring for more successes)",
+    )
     p.add_argument("--node-max-turns", type=int, help="max turns per Crescendo node")
     p.add_argument(
         "--no-confirm",
@@ -121,6 +142,24 @@ def _parse_args() -> argparse.Namespace:
         help="mint the host doc through the logged-in browser (no Docs API / OAuth)",
     )
     p.add_argument("--doc-id", help="ground on an existing Doc/Sheet id (no API create)")
+    p.add_argument(
+        "--setup-var",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="template variable for setup_steps; repeat as needed",
+    )
+    p.add_argument(
+        "--skip-setup",
+        action="store_true",
+        help="do not execute the guide's setup_steps before the TAP run",
+    )
+    p.add_argument(
+        "--setup-settle-seconds",
+        type=float,
+        default=5.0,
+        help="wait after setup for Workspace indexing (default: 5)",
+    )
     return p.parse_args()
 
 
@@ -187,10 +226,20 @@ def main() -> None:
         for k, v in {
             "max_depth": args.max_depth,
             "branching_factor": args.branching_factor,
+            "max_nodes_per_seed": args.max_nodes_per_seed,
+            "keep_top": args.keep_top,
             "node_max_turns": args.node_max_turns,
         }.items()
         if v is not None
     }
+    # Guide runs default to exploring past the first success (keep finding more).
+    # Pass --stop-on-success to restore early-exit on the first winning node.
+    if args.stop_on_success:
+        overrides["stop_on_success"] = True
+    # G1 hard-invariant gate is OFF by default (free-form exploration); re-enable on request.
+    if args.invariant_gate:
+        overrides["hard_invariant_validation"] = True
+        overrides["semantic_validation_required"] = True
 
     # Target adapter options (multi-turn UI targets). Only set what the operator
     # asked for so the factory defaults hold.
@@ -206,6 +255,13 @@ def main() -> None:
         _print_dry_run(guide, args.target_name, overrides, target_options)
         return
 
+    setup_variables: dict[str, str] = {}
+    for item in args.setup_var:
+        key, sep, value = item.partition("=")
+        if not sep or not key:
+            raise SystemExit(f"invalid --setup-var {item!r}; expected KEY=VALUE")
+        setup_variables[key] = value
+
     # DB persistence — what the dashboard reads and what the review queue /
     # PPI need. On by default; the review sampler is a no-op without it.
     session_factory = None
@@ -218,6 +274,37 @@ def main() -> None:
     if args.review_sample_budget and session_factory is None:
         raise SystemExit("--review-sample-budget requires DB persistence (drop --no-db)")
 
+    # Multi-account setup. When a guide's setup steps drive a second account
+    # (e.g. an attacker mailbox that plants the bait email), build the account
+    # pool + session pool so those steps act AS that account: gmail.send_email
+    # picks the attacker's OAuth token from its slot; UI setup steps open the
+    # attacker's browser profile lazily. Roles resolve from the operator
+    # conventions in advtest_ext.guides.stage (ADVTEST_PROFILE_ATTACKER_SENDER /
+    # ADVTEST_OAUTH_TOKEN_ATTACKER_SENDER, etc.). run_guide() owns closing the
+    # session pool inside its event loop.
+    setup_account_pool = None
+    setup_session_pool = None
+    setup_operations = None
+    if not args.skip_setup and guide.setup_steps:
+        from advtest_ext.guides.stage import build_setup_account_pool, preflight_setup_accounts
+
+        setup_account_pool = build_setup_account_pool(guide)
+        # Fail loudly now if a second account is unprovisioned, rather than
+        # silently planting as the default identity and testing nothing.
+        preflight_setup_accounts(setup_account_pool)
+        if setup_account_pool is not None:
+            from advtest_ext.adapters._ui_mode_common import UiModeSessionPool
+            from advtest_ext.adapters.google_docs.ui_mode import UiModeSession
+            from advtest_ext.core.builtin_operations import default_operations
+
+            def _setup_session_factory(profile_dir: Path) -> object:
+                return UiModeSession(profile_dir=profile_dir)
+
+            setup_operations = default_operations()
+            setup_session_pool = UiModeSessionPool(setup_account_pool, _setup_session_factory)
+            roles = ", ".join(sorted(slot.role for slot in setup_account_pool))
+            print(f"  setup will drive extra accounts: {roles}")
+
     print(f"running guide {guide.id!r} against {args.target_name or guide.target.app} …")
     result = asyncio.run(
         run_guide(
@@ -229,6 +316,13 @@ def main() -> None:
             output_dir=args.output_dir,
             session_factory=session_factory,
             review_sample_budget=args.review_sample_budget,
+            run_id=args.run_id,
+            execute_setup=not args.skip_setup,
+            setup_variables=setup_variables,
+            setup_settle_s=args.setup_settle_seconds,
+            setup_operations=setup_operations,
+            setup_account_pool=setup_account_pool,
+            setup_session_pool=setup_session_pool,
             **overrides,
         )
     )
@@ -236,6 +330,8 @@ def main() -> None:
     stats = result.summary_stats
     print(f"\nrun {result.run_id}: {len(result.traces)} traces")
     print(f"summary: {stats.model_dump() if hasattr(stats, 'model_dump') else stats}")
+    if not result.traces:
+        raise SystemExit("assessment stopped before producing evidence")
     if args.output_dir:
         print(f"traces + replay bundles under {args.output_dir}")
     if session_factory is not None:
