@@ -16,7 +16,7 @@
       </td>
       <td><span class="sevdot {{ f.severity }}"><span class="d"></span>{{ f.severity|capitalize }}</span></td>
       <td>{{ surface_label(f.trace.target_name) if f.trace else "Unknown" }}</td>
-      <td class="muted"><a class="frun" href="/runs/{{ f.run_id }}">{{ run_display_name(f.run) if f.run else f.run_id }}</a>{% if finding_seq.get(f.id) %} <span class="frun-n">· #{{ finding_seq[f.id] }}</span>{% endif %}</td>
+      <td class="muted"><a class="frun mono" href="/runs/{{ f.run_id }}" title="{{ run_display_name(f.run) if f.run else '' }}">{{ f.run_id }}</a>{% if finding_seq.get(f.id) %} <span class="frun-n">· #{{ finding_seq[f.id] }}</span>{% endif %}</td>
       <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') if f.promoted_at else '—' }}</td>
       <td><a class="rowmenu" href="/findings/{{ f.id }}" aria-label="Open finding">&#8943;</a></td>
     </tr>
