@@ -1086,8 +1086,22 @@ def create_app(
                 sentence = sentence[:120].rsplit(" ", 1)[0] + "…"
             return sentence
 
+        from advtest_ext.guides.run import default_target_name
+
+        def _runnable_live(guide: Any) -> bool:
+            """Only offer guides the guided runner can launch against a live
+            Gemini-in-Workspace UI target (Docs / Sheets / Slides / Calendar /
+            Gmail). The remaining tool_use_agent guides target a standalone
+            code-assistant agent, not a Workspace surface, so they are kept in
+            the corpus but not offered here."""
+            try:
+                default_target_name(guide)
+                return True
+            except Exception:
+                return False
+
         guides_dir = Path(__file__).resolve().parents[2] / "guides"
-        guides = load_guides(guides_dir) if guides_dir.exists() else []
+        guides = [g for g in (load_guides(guides_dir) if guides_dir.exists() else []) if _runnable_live(g)]
         guide_opts: list[dict[str, Any]] = []
         for g in guides:
             target = canon_surface(g.target.app)
