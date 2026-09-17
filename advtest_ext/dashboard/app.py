@@ -33,7 +33,7 @@ import os
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import (
@@ -721,7 +721,7 @@ def create_app(
     def service_context(request: Request) -> dict[str, Any]:
         cached = getattr(request.state, "service_context", None)
         if cached is not None:
-            return cached
+            return cast("dict[str, Any]", cached)
         with factory() as catalog_session:
             choices, assignments = service_catalog(catalog_session)
         valid = {choice["key"] for choice in choices}
@@ -1088,11 +1088,11 @@ def create_app(
 
         guides_dir = Path(__file__).resolve().parents[2] / "guides"
         guides = load_guides(guides_dir) if guides_dir.exists() else []
-        guide_opts = []
+        guide_opts: list[dict[str, Any]] = []
         for g in guides:
             target = canon_surface(g.target.app)
             apps = {target} | {
-                canon_surface(getattr(st, "region", None) or getattr(st, "app", None))
+                canon_surface(str(getattr(st, "region", None) or getattr(st, "app", None) or ""))
                 for st in g.setup_steps
             }
             apps.discard("other")
@@ -1320,7 +1320,11 @@ def create_app(
         }
         technique_heatmap = {
             **heatmap,
-            "families": [family for family in heatmap["families"] if family in comparison_families],
+            "families": [
+                family
+                for family in cast("list[Any]", heatmap["families"])
+                if family in comparison_families
+            ],
             "rows": [
                 {
                     **row,
