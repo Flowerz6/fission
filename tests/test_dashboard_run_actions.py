@@ -191,3 +191,19 @@ def test_report_export_supports_print_without_optional_renderer(run_store, monke
     assert "Print / Save as PDF" not in client.get("/runs/run-seed/report").text
     monkeypatch.setattr(report, "WEASYPRINT_INSTALLED", True)
     assert "Download PDF" in client.get("/runs/run-seed/report?export=1").text
+
+
+def test_delete_allows_interrupted_run(run_store):
+    """An unfinished run with no recent attempt is interrupted, not active:
+    it must be deletable (it would otherwise be stuck in the list forever)."""
+    from datetime import UTC, datetime, timedelta
+
+    client, factory, _, _ = run_store
+    with factory() as session:
+        keep = session.get(Run, "keep")
+        assert keep.finished_at is None
+        keep.started_at = datetime.now(UTC) - timedelta(days=2)
+        session.commit()
+    assert client.request("DELETE", "/runs/keep", json={"confirmation": "keep"}).status_code == 204
+    with factory() as session:
+        assert session.get(Run, "keep") is None

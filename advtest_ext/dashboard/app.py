@@ -926,11 +926,13 @@ def create_app(
         if run is None:
             raise HTTPException(404, "Run not found")
         live = live_tests.snapshot()
-        if run.finished_at is None or (
+        # An interrupted run (unfinished, no heartbeat) is dead and deletable;
+        # only a run that is actually in flight is protected.
+        if run_is_active(run) or (
             live.get("run_id") == run_id
             and live.get("status") in {"starting", "running", "stopping"}
         ):
-            raise HTTPException(409, "Active or unfinished runs cannot be deleted")
+            raise HTTPException(409, "Active runs cannot be deleted")
         delete_run_results(session, run_id)
         session.commit()
         return Response(status_code=204)

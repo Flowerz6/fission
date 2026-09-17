@@ -34,8 +34,8 @@
       var base = '/runs/' + encodeURIComponent(selected.id);
       view.href = base;
       exportLink.href = base + '/report?export=1';
-      deleteButton.disabled = button.dataset.runFinished !== 'true';
-      deleteButton.title = deleteButton.disabled ? 'Active or unfinished runs cannot be deleted' : '';
+      deleteButton.disabled = button.dataset.runDeletable !== 'true';
+      deleteButton.title = deleteButton.disabled ? 'Active runs cannot be deleted' : '';
       menu.showPopover();
       positionMenu();
       button.setAttribute('aria-expanded', 'true');

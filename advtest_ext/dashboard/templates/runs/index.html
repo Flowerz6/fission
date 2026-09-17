@@ -49,7 +49,7 @@
         </div>
       </td>
       <td class="muted">{{ run.started_at.strftime('%b %d') if run.started_at else '—' }}</td>
-      <td><button type="button" class="rowmenu run-actions-trigger" aria-label="Actions for {{ run_display_name(run) }}" aria-haspopup="menu" aria-expanded="false" aria-controls="run-actions-menu" data-run-id="{{ run.id }}" data-run-name="{{ run_display_name(run) }}" data-run-finished="{{ 'true' if done else 'false' }}">&#8943;</button></td>
+      <td><button type="button" class="rowmenu run-actions-trigger" aria-label="Actions for {{ run_display_name(run) }}" aria-haspopup="menu" aria-expanded="false" aria-controls="run-actions-menu" data-run-id="{{ run.id }}" data-run-name="{{ run_display_name(run) }}" data-run-deletable="{{ 'false' if state == 'running' else 'true' }}">&#8943;</button></td>
     </tr>
     {% endfor %}
   </tbody>
