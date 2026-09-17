@@ -32,7 +32,7 @@
 
 <div class="pager"><span class="info" id="surf-count">{{ totals.surfaces }} surfaces</span></div>
 <section class="testing-coverage" aria-labelledby="coverage-title">
-  <div class="coverage-heading"><div><h2 id="coverage-title">Testing coverage</h2><p>{{ 'Across all services.' if selected_service.key == 'all' else 'Across all ' ~ selected_service.label ~ ' surfaces.' }}</p></div><a href="/judge?service={{ selected_service.key }}">Oracle trust <span aria-hidden="true">→</span></a></div>
+  <div class="coverage-heading"><div><h2 id="coverage-title">Testing coverage</h2><p>{{ 'Across all services.' if selected_service.key == 'all' else 'Across all ' ~ selected_service.label ~ ' surfaces.' }}</p></div></div>
   <dl class="coverage-metrics">
     <div><dt>Surfaces</dt><dd>{{ totals.surfaces }}</dd></div>
     <div><dt>Tested</dt><dd>{{ tested_count }}</dd></div>

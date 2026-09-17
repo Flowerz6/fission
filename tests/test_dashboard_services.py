@@ -11,7 +11,6 @@ from advtest_ext.dashboard.app import build_surfaces_context
 from advtest_ext.dashboard.services import group_surfaces, scope_campaign_reads, target_identity
 from advtest_ext.storage import (
     finalize_run,
-    insert_gold_label,
     insert_trace,
     make_engine,
     make_session_factory,
@@ -159,26 +158,3 @@ def test_service_filter_applies_before_query_limit(service_engine):
     with make_session_factory(service_engine)() as session:
         scope_campaign_reads(session, ["gemini-one"])
         assert [run.id for run in list_runs(session, limit=1)] == ["gemini-one"]
-
-
-def test_oracle_trust_keeps_human_review_scoped_to_service(service_engine):
-    with session_scope(make_session_factory(service_engine)) as session:
-        insert_gold_label(
-            session,
-            trace_id="gemini-one-0",
-            run_id="gemini-one",
-            behavior_id="scenario-gemini-one",
-            oracle_verdict="success",
-            expert_verdict="success",
-            sample_reason="uniform",
-        )
-    with TestClient(create_app(engine=service_engine)) as client:
-        gemini = client.get("/judge?service=gemini")
-        assert gemini.status_code == 200
-        assert gemini.context["agreement"].n == 1
-        assert "Preliminary estimate" in gemini.text
-        openai = client.get("/judge?service=openai")
-        assert openai.status_code == 200
-        assert openai.context["agreement"].n == 0
-        assert "Not measured" in openai.text
-        assert "No human review data yet" in openai.text

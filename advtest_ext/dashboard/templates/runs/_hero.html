@@ -15,7 +15,7 @@
   {% if ppi and ppi.method == 'ppi' %}
   <details class="run-estimate-details"><summary>Human-calibrated estimate</summary><p>95% CI {{ '%.1f'|format(ppi.ci_low * 100) }}–{{ '%.1f'|format(ppi.ci_high * 100) }}% · {{ ppi.n_labeled }} human review labels. Automated estimate: {{ '%.1f'|format(ppi.oracle_asr * 100) }}%.</p></details>
   {% elif ppi and ppi.n_total %}
-  <a class="run-assessment-label" href="/judge" title="Success is assessed automatically. This estimate has not been calibrated using a uniform sample of human reviews.">Automated assessment · Not human-calibrated</a>
+  <span class="run-assessment-label" title="Success is assessed automatically. This estimate has not been calibrated using a uniform sample of human reviews.">Automated assessment · Not human-calibrated</span>
   {% else %}<p class="run-assessment-label">No scored attempts yet</p>{% endif %}
   {% if ppi and ppi.n_total and ppi.n_total != run_metrics.attempts %}<p class="run-assessment-label">Success rate uses {{ ppi.n_total }} scored attempts; errors and unscored attempts are excluded.</p>{% endif %}
 </header>

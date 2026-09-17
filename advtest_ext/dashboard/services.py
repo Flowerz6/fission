@@ -31,7 +31,7 @@ GEMINI_SURFACES = {
     "drive": "Drive",
     "calendar": "Calendar",
 }
-COLLECTION_PATHS = {"/", "/runs", "/findings", "/reports", "/surfaces", "/judge"}
+COLLECTION_PATHS = {"/", "/runs", "/findings", "/reports", "/surfaces"}
 
 
 def target_identity(target_name: str) -> tuple[str, str, str]:

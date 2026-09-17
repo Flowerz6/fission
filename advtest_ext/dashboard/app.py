@@ -13,8 +13,6 @@ Pages:
   any node on the attack-tree page.
 * ``/findings`` — flagged traces (severity-filterable via HTMX).
 * ``/findings/{id}`` — full trace + replay-bundle download link.
-* ``/attacks`` — registered AttackPlugins with citations.
-* ``/adapters`` — registered DocumentTargets with capabilities.
 * ``/hitl`` — judge-disagreement queue with resolution form.
 * ``/references`` — references.bib rendered.
 
@@ -61,7 +59,6 @@ from advtest_ext.dashboard.presentation import (
     run_surface_label,
     surface_label,
 )
-from advtest_ext.dashboard.registry import list_adapters, list_attacks
 from advtest_ext.dashboard.run_actions import (
     DeleteRun,
     RenameRun,
@@ -92,7 +89,6 @@ from advtest_ext.storage import (
     count_hitl,
     get_finding,
     get_hitl,
-    get_recipe,
     get_run,
     get_seed,
     get_trace,
@@ -101,7 +97,6 @@ from advtest_ext.storage import (
     list_finding_run_ids,
     list_findings,
     list_hitl,
-    list_recipes,
     list_runs,
     list_seeds,
     list_signals_for_trace,
@@ -1820,38 +1815,6 @@ def create_app(
             },
         )
 
-    @app.get("/attacks", response_class=HTMLResponse)
-    async def attacks_index(request: Request) -> Response:
-        return templates.TemplateResponse(request, "attacks.html", {"attacks": list_attacks()})
-
-    @app.get("/adapters", response_class=HTMLResponse)
-    async def adapters_index(request: Request) -> Response:
-        return templates.TemplateResponse(request, "adapters.html", {"adapters": list_adapters()})
-
-    @app.get("/calibration", response_class=HTMLResponse)
-    async def calibration_index(
-        request: Request,
-        session: Session = Depends(get_session),  # noqa: B008
-        batch: str | None = None,
-    ) -> Response:
-        from advtest_ext.core.calibration_report import build_calibration_report_from_db
-        from advtest_ext.storage import (
-            count_calibration_examples,
-            list_calibration_batches,
-        )
-
-        report = build_calibration_report_from_db(session, batch=batch)
-        return templates.TemplateResponse(
-            request,
-            "calibration.html",
-            {
-                "report": report,
-                "batches": list_calibration_batches(session),
-                "batch": batch,
-                "n_examples": count_calibration_examples(session),
-            },
-        )
-
     @app.get("/ledger", response_class=HTMLResponse)
     async def seed_ledger_index(
         request: Request,
@@ -2031,11 +1994,10 @@ def create_app(
         seed = get_seed(session, seed_id)
         if seed is None:
             raise HTTPException(404, f"seed {seed_id!r} not found")
-        recipes = list_recipes(session, seed_id=seed_id)
         return templates.TemplateResponse(
             request,
             "seeds/show.html",
-            {"seed": seed, "recipes": recipes},
+            {"seed": seed},
         )
 
     @app.get("/variants", response_class=HTMLResponse)
@@ -2146,39 +2108,6 @@ def create_app(
                 "report": report,
                 "snippets": snippets,
             },
-        )
-
-    @app.get("/recipes", response_class=HTMLResponse)
-    async def recipes_index(
-        request: Request,
-        session: Session = Depends(get_session),  # noqa: B008
-        draft_state: str | None = None,
-    ) -> Response:
-        """Browse the Recipe catalogue. Optional ``draft_state``
-        filter (``draft`` / ``approved`` / ``rejected``) for the
-        operator-review queue surface — Phase 6 will populate the
-        ``draft`` bucket from Extractor output."""
-        draft_state = draft_state or None
-        items = list_recipes(session, draft_state=draft_state)
-        return templates.TemplateResponse(
-            request,
-            "recipes/index.html",
-            {"recipes": items, "draft_state": draft_state},
-        )
-
-    @app.get("/recipes/{recipe_id}", response_class=HTMLResponse)
-    async def recipes_show(
-        request: Request,
-        recipe_id: str,
-        session: Session = Depends(get_session),  # noqa: B008
-    ) -> Response:
-        recipe = get_recipe(session, recipe_id)
-        if recipe is None:
-            raise HTTPException(404, f"recipe {recipe_id!r} not found")
-        return templates.TemplateResponse(
-            request,
-            "recipes/show.html",
-            {"recipe": recipe},
         )
 
     @app.get("/playbooks", response_class=HTMLResponse)
@@ -2358,17 +2287,6 @@ def create_app(
         if not ctx:
             raise HTTPException(404, f"surface {target_name!r} has no traces")
         return templates.TemplateResponse(request, "surfaces/_panel.html", ctx)
-
-    @app.get("/judge", response_class=HTMLResponse)
-    async def judge_quality(
-        request: Request,
-        session: Session = Depends(get_session),  # noqa: B008
-    ) -> Response:
-        """The oracle's specification sheet: the in-house gold-set
-        agreement report headline, plus the JailbreakBench held-out
-        benchmark (when present) with published-judge baselines."""
-        ctx = build_judge_context(session, output_dir)
-        return templates.TemplateResponse(request, "judge_quality.html", ctx)
 
     @app.get("/references", response_class=HTMLResponse)
     async def references_index(request: Request) -> Response:

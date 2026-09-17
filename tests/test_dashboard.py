@@ -617,22 +617,6 @@ def test_findings_show_404_for_unknown(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
-def test_attacks_page_lists_registered_plugins(client: TestClient) -> None:
-    resp = client.get("/attacks")
-    assert resp.status_code == 200
-    body = resp.text
-    # No-arg constructible attacks from the registry.
-    assert "static_payload" in body
-    assert "indirect_injection" in body
-    assert "pap" in body
-
-
-def test_adapters_page_lists_registered_targets(client: TestClient) -> None:
-    resp = client.get("/adapters")
-    assert resp.status_code == 200
-    assert "StubDocumentTarget" in resp.text
-
-
 def test_hitl_page_renders_pending_items(client: TestClient) -> None:
     resp = client.get("/hitl")
     assert resp.status_code == 200
@@ -874,49 +858,6 @@ def test_run_page_shows_calibrated_ci_with_uniform_labels() -> None:
     assert "labels" in body
 
 
-def test_calibration_empty_state(empty_client: TestClient) -> None:
-    resp = empty_client.get("/calibration")
-    assert resp.status_code == 200
-    assert "No calibration predictions yet" in resp.text
-
-
-def test_calibration_page_renders_metrics() -> None:
-    from advtest_ext.storage import insert_calibration_example, insert_calibration_result
-
-    engine = make_engine("sqlite:///:memory:")
-    factory = make_session_factory(engine)
-    with session_scope(factory) as s:
-        specs = [("e0", "success"), ("e1", "success"), ("e2", "refused")]
-        for eid, v in specs:
-            insert_calibration_example(
-                s,
-                id=eid,
-                dataset="jbb",
-                attack_type="jailbreak",
-                input_text="x",
-                expected_verdict=v,
-            )
-        for eid, pv, sc in [("e0", "success", 0.9), ("e1", "success", 0.8), ("e2", "refused", 0.1)]:
-            expected = dict(specs)[eid]
-            insert_calibration_result(
-                s,
-                id=f"r-{eid}",
-                example_id=eid,
-                judge_name="ipi_verdict",
-                predicted_verdict=pv,
-                score=sc,
-                correct=(pv == expected),
-                batch="b1",
-            )
-    app = create_app(engine=engine)
-    with TestClient(app) as c:
-        body = c.get("/calibration").text
-    assert "Judge agreement vs public benchmarks" in body
-    assert "Confusion matrix" in body
-    assert "ECE" in body
-    assert "jbb" in body  # per-dataset breakdown
-
-
 def test_references_page_renders(client: TestClient) -> None:
     resp = client.get("/references")
     assert resp.status_code == 200
@@ -1126,9 +1067,9 @@ def test_surfaces_index_renders_real_surface(client: TestClient) -> None:
     assert "Stub Document" in r.text
     # One finding was promoted -> the surface is exposed.
     assert 'data-exposure="exposed"' in r.text
-    # Coverage stays on Targets; judge reliability has its own page.
+    # Coverage stays on Targets; the judge-reliability page has been removed.
     assert "Oracle agreement vs expert consensus" not in r.text
-    assert 'href="/judge?service=all"' in r.text
+    assert "/judge" not in r.text
     assert "under test" not in r.text
 
 
@@ -1180,68 +1121,6 @@ def test_surfaces_route_is_reachable(empty_client: TestClient) -> None:
 
 
 # ----------------------------------------------------------------------
-# Judge quality (agreement report + optional benchmark)
-# ----------------------------------------------------------------------
-
-
-def test_judge_quality_renders_gold_set_headline(client: TestClient) -> None:
-    """Judge quality headlines the in-house gold-set agreement report.
-    The seeded run has no gold labels, so n=0 renders without fabricating
-    a number."""
-    r = client.get("/judge")
-    assert r.status_code == 200
-    assert "Judge quality" in r.text
-    assert "in-house gold set" in r.text
-    # No gold labels -> observed agreement / kappa slots still render.
-    assert "Oracle agreement vs expert consensus" in r.text
-
-
-def test_judge_quality_scores_seeded_gold_labels() -> None:
-    """With real gold labels present, the agreement headline reflects
-    them (n matches the labelled trace count)."""
-    from advtest_ext.storage import insert_gold_label
-
-    engine = make_engine("sqlite:///:memory:")
-    factory = make_session_factory(engine)
-    _seed_run(factory)
-    with session_scope(factory) as s:
-        insert_gold_label(
-            s,
-            trace_id="t0",
-            run_id="run-seed",
-            behavior_id="exfil_test_0",
-            oracle_verdict="success",
-            expert_verdict="success",
-            sample_reason="uniform",
-        )
-    app = create_app(engine=engine)
-    with TestClient(app) as c:
-        r = c.get("/judge")
-    assert r.status_code == 200
-    # One labelled trace -> "n = 1 gold label" (singular).
-    assert "n = 1 gold label" in r.text
-    assert "Preliminary estimate" in r.text
-
-
-def test_judge_quality_route_is_reachable(empty_client: TestClient) -> None:
-    # Judge quality is no longer a headline nav tab, but the route stays live.
-    assert empty_client.get("/judge").status_code == 200
-
-
-def test_playbooks_index_lists_the_guides_with_author() -> None:
-    """The Playbooks page lists the file-based guide corpus (not DB Recipes),
-    shows Bikash as author, and preserves navigation to the existing tools."""
-    engine = make_engine("sqlite:///:memory:")
-    app = create_app(engine=engine)
-    with TestClient(app) as c:
-        r = c.get("/playbooks")
-    assert r.status_code == 200
-    assert "Sheets skill-manifest disclosure" in r.text  # a playbook title
-    assert "Bikash Sabat" in r.text  # author surfaced, not in the title
-    assert 'href="/playbooks"' in r.text  # nav item present
-    assert 'href="/recipes"' in r.text  # All existing tools remain accessible
-
-
 def test_playbook_show_renders_seed_chain_signals_and_404s() -> None:
     engine = make_engine("sqlite:///:memory:")
     app = create_app(engine=engine)

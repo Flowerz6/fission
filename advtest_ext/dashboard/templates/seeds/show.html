@@ -107,21 +107,4 @@
 <p><a href="/playbooks/{{ p.compiles_to_playbook }}"><strong>{{ p.compiles_to_playbook }}</strong></a> <span class="muted">· the canonical Playbook this seed produces</span></p>
 {% endif %}
 
-{% if recipes %}
-<div class="section-head"><h2>Recipes derived from this seed</h2></div>
-<table class="tbl">
-  <thead><tr><th>Id</th><th>Name</th><th>Version</th><th>State</th><th class="num">Steps</th></tr></thead>
-  <tbody>
-    {% for r in recipes %}
-    <tr>
-      <td><a href="/recipes/{{ r.id }}"><code>{{ r.id }}</code></a></td>
-      <td>{{ r.name }}</td>
-      <td>v{{ r.version }}</td>
-      <td><span class="pill">{{ r.draft_state }}</span></td>
-      <td class="num">{{ r.steps | length }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% endif %}
 {% endblock %}
