@@ -1,82 +1,21 @@
-{# Run header + hero stats. Self-polls every 3 s while the run is
-   still in flight; once ``run.finished_at`` is set, the rendered
-   partial omits the hx-trigger so HTMX stops polling on this id. #}
-<header class="run-header"
-        id="run-hero"
-        {% if not run.finished_at %}
-        hx-get="/runs/{{ run.id }}/_hero"
-        hx-trigger="every 3s"
-        hx-swap="outerHTML"
-        {% endif %}>
+<header class="run-header run-summary" id="run-hero"
+  {% if run_is_active(run) %}hx-get="/runs/{{ run.id }}/_hero" hx-trigger="every 3s [!document.querySelector('#run-hero').matches(':focus-within, :hover')]" hx-swap="outerHTML"{% endif %}>
   <div class="run-header-row">
-    <div>
-      <div class="muted" style="font-size: 0.78rem; font-weight: 600;">{{ surface_name }} · Assessment run</div>
-      <h1 style="margin: 0.15rem 0 0.25rem 0;">{{ run_name }}
-        {% if not run.finished_at %}<span class="pill error" style="font-size: 0.6em; vertical-align: middle;">LIVE</span>{% endif %}
-      </h1>
-      <p class="muted" style="margin: 0;"><span class="technical-id">{{ run.id }} &middot; </span>
-        {{ run_metrics.scenarios }} scenarios &middot; {{ run_metrics.techniques }} techniques &middot;
-        {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else ', ' }}
-        {% if run.finished_at %}&rarr; {{ run.finished_at.strftime('%H:%M') }}{% endif %}
-      </p>
+    <div><h1>{{ run_name }} {% set state = run_state(run) %}<span class="pill {{ 'inactive' if state == 'interrupted' else state }}">{{ state|capitalize }}</span></h1>
+      <p class="muted">{{ surface_name }} · {{ run_metrics.conversations }} conversation{{ '' if run_metrics.conversations == 1 else 's' }} · {{ run.started_at.strftime('%d %b %Y, %H:%M') if run.started_at else 'Start time not recorded' }}</p>
     </div>
-    <div class="run-actions">
-      <a class="btn" href="/runs/{{ run.id }}/tree">Attack tree</a>
-      <a class="btn" href="/runs/{{ run.id }}/report">Report</a>
-      <a class="btn" href="/runs/{{ run.id }}/report.pdf">PDF</a>
-      <a class="btn" href="/runs/{{ run.id }}/transcript-report.pdf">Transcript PDF</a>
-    </div>
+    <a class="btn-outline" href="/runs/{{ run.id }}/report?export=1">Export report</a>
   </div>
-
-  <div class="hero-stats">
-    {# Headline ASR: the PPI-calibrated estimate when a uniform gold-label
-       slice exists, else the raw oracle ASR. The CI is what makes this a
-       defensible number rather than "the oracle said X". #}
-    {% set asr_pct = (ppi.asr if ppi else run.summary.get('overall_asr', 0.0)) * 100 %}
-    <div class="hero-stat hero-asr">
-      <div class="label">Attack Success Rate
-        {% if ppi and ppi.method == 'ppi' %}<span class="pill success" style="font-size:0.6em; vertical-align:middle;">± CI · calibrated</span>
-        {% elif ppi %}<span class="pill" style="font-size:0.6em; vertical-align:middle;">oracle · uncalibrated</span>{% endif %}
-      </div>
-      <div class="value-xl">{{ '%.1f'|format(asr_pct) }}<span class="unit">%</span>
-        {% if ppi and ppi.method == 'ppi' %}<span class="unit" style="font-size:0.4em;"> ± {{ '%.1f'|format(ppi.ci_half_width * 100) }}</span>{% endif %}
-      </div>
-      {% if ppi and ppi.method == 'ppi' %}
-      {% set x = (ppi.asr * 520)|round(1) %}{% set lo = (ppi.ci_low * 520)|round(1) %}
-      {% set hi = (ppi.ci_high * 520)|round(1) %}{% set orc = (ppi.oracle_asr * 520)|round(1) %}
-      <div class="calscale">
-        <svg viewBox="0 0 520 52" preserveAspectRatio="none" role="img"
-             aria-label="ASR {{ '%.1f'|format(asr_pct) }} percent, 95 percent CI">
-          {% for gx in [0, 52, 104, 156, 208, 260, 312, 364, 416, 468, 519] %}
-          <line class="{{ 'tkm' if loop.index0 % 2 == 0 else 'tk' }}" x1="{{ gx }}" y1="{{ 30 if loop.index0 % 2 == 0 else 32 }}" x2="{{ gx }}" y2="38"/>
-          {% endfor %}
-          <text x="0" y="50">0</text><text x="240" y="50">50</text><text x="500" y="50">100</text>
-          <line class="fl" x1="0" y1="22" x2="{{ x }}" y2="22"/>
-          <line class="or" x1="{{ orc }}" y1="6" x2="{{ orc }}" y2="28"/>
-          <text x="{{ (orc + 4)|round(1) }}" y="12">oracle {{ '%.0f'|format(ppi.oracle_asr*100) }}</text>
-          <line class="cp" x1="{{ lo }}" y1="12" x2="{{ lo }}" y2="32"/>
-          <line class="cp" x1="{{ hi }}" y1="12" x2="{{ hi }}" y2="32"/>
-          <line class="cp" x1="{{ lo }}" y1="22" x2="{{ hi }}" y2="22" stroke-dasharray="1 2"/>
-          <line class="cp" x1="{{ x }}" y1="2" x2="{{ x }}" y2="28" stroke-width="2"/>
-        </svg>
-      </div>
-      <div class="muted" style="font-size:0.72rem; margin-top:0.35rem;">
-        95% CI {{ '%.1f'|format(ppi.ci_low*100) }}–{{ '%.1f'|format(ppi.ci_high*100) }}% ·
-        {{ ppi.n_labeled }} labels · oracle said {{ '%.1f'|format(ppi.oracle_asr*100) }}%
-      </div>
-      {% else %}
-      <div class="bar-wrap"><div class="bar-fill" style="width: {{ asr_pct }}%;"></div></div>
-      {% if ppi %}<div class="muted" style="font-size:0.72rem; margin-top:0.35rem;">
-        Uncalibrated, <a href="/hitl">label the review queue</a> for a rectified CI.
-      </div>{% endif %}
-      {% endif %}
-    </div>
-    <div class="hero-stat">
-      <div class="label">Successful</div>
-      <div class="value">{{ run.summary.get('successful_traces', 0) }}<span class="unit"> / {{ run.summary.get('total_traces', 0) }}</span></div>
-    </div>
-    <div class="hero-stat"><div class="label">Conversations</div><div class="value">{{ run_metrics.conversations }}</div></div>
-    <div class="hero-stat"><div class="label">Techniques</div><div class="value">{{ run_metrics.techniques }}</div></div>
-    <div class="hero-stat"><div class="label">Findings</div><div class="value">{{ findings|length }}</div></div>
-  </div>
+  <dl class="run-summary-metrics">
+    <div><dt>Attempts</dt><dd>{{ run_metrics.attempts }}</dd></div>
+    <div><dt>Successful</dt><dd>{{ run_metrics.successful }}</dd></div>
+    <div><dt>Findings</dt><dd>{{ findings|length }}</dd></div>
+    <div><dt>Attack Success Rate</dt><dd>{% if ppi and ppi.n_total %}{{ '%.1f'|format(ppi.asr * 100) }}<span>%</span>{% else %}—{% endif %}</dd></div>
+  </dl>
+  {% if ppi and ppi.method == 'ppi' %}
+  <details class="run-estimate-details"><summary>Human-calibrated estimate</summary><p>95% CI {{ '%.1f'|format(ppi.ci_low * 100) }}–{{ '%.1f'|format(ppi.ci_high * 100) }}% · {{ ppi.n_labeled }} human review labels. Automated estimate: {{ '%.1f'|format(ppi.oracle_asr * 100) }}%.</p></details>
+  {% elif ppi and ppi.n_total %}
+  <a class="run-assessment-label" href="/judge" title="Success is assessed automatically. This estimate has not been calibrated using a uniform sample of human reviews.">Automated assessment · Not human-calibrated</a>
+  {% else %}<p class="run-assessment-label">No scored attempts yet</p>{% endif %}
+  {% if ppi and ppi.n_total and ppi.n_total != run_metrics.attempts %}<p class="run-assessment-label">Success rate uses {{ ppi.n_total }} scored attempts; errors and unscored attempts are excluded.</p>{% endif %}
 </header>

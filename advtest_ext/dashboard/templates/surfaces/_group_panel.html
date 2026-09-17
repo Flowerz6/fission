@@ -1,0 +1,9 @@
+{% from "surfaces/_status.html" import target_status %}
+<div class="surface-panel-summary"><span class="pill">{{ surface.service_label }}</span>{{ target_status(surface) }}</div>
+<div class="surface-panel-metrics"><div><strong>{{ surface.attempts }}</strong><span>Attempts</span></div><div><strong>{{ surface.runs }}</strong><span>Runs</span></div><div><strong>{{ surface.findings }}</strong><span>Findings</span></div></div>
+{% if not surface.attempts %}
+<p class="detail-text">{% if surface.configured %}No tests have been recorded for {{ surface.label }} yet. Configure a run to start testing this surface.{% else %}{{ surface.label }} is part of this workspace. A runnable testing adapter has not been configured yet.{% endif %}</p>
+{% if surface.configured %}<p><a class="btn-primary" href="/runs/new">Configure run →</a></p>{% endif %}
+{% endif %}
+{% if surface.adapters %}<h3>Testing configurations</h3><p class="muted">Open a configuration for its evidence, findings, and verdict signals.</p><div class="surface-configurations">{% for adapter in surface.adapters %}<button class="surface-configuration" type="button" onclick='loadSurfacePanel({{ adapter.target_name|tojson }},{{ adapter.label|tojson }})'><span>{{ adapter.label }}</span><small>{{ adapter.attempts }} attempts · {{ adapter.findings }} findings</small><span aria-hidden="true">→</span></button>{% endfor %}</div>{% endif %}
+{% if campaigns %}<h3>Runs</h3><div class="surface-campaigns">{% for run in campaigns %}<a href="/runs/{{ run.id }}"><span>{{ run_display_name(run) }}</span><small>{{ run.started_at.strftime('%d %b %Y') if run.started_at else '—' }} · {{ 'Completed' if run.finished_at else 'Running' }}</small></a>{% endfor %}</div>{% endif %}

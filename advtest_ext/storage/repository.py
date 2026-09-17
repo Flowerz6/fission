@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import case, desc, func, select
@@ -73,7 +73,12 @@ def upsert_run(
     run.target_name = target_name
     run.strategy = strategy
     if config is not None:
-        run.config = config.model_dump(mode="json")
+        saved_names = {
+            key: run.config[key]
+            for key in ("display_name", "run_name")
+            if (run.config or {}).get(key)
+        }
+        run.config = {**config.model_dump(mode="json"), **saved_names}
     if output_dir is not None:
         run.output_dir = output_dir
     return run
@@ -322,6 +327,81 @@ def list_runs(session: Session, *, limit: int = 100, guide_id: str | None = None
     return list(session.scalars(stmt.limit(limit)))
 
 
+# A run with no finish time and no new attempt for this long is not running:
+# its process died or was stopped. UI-mode turns take a few minutes at most.
+RUN_STALE_AFTER = timedelta(minutes=15)
+
+
+def run_is_active(run: Run, *, now: datetime | None = None) -> bool:
+    """Whether a run is running RIGHT NOW, not merely unfinished.
+
+    ``finished_at`` is only written on a clean finish, so an interrupted run
+    stays "unfinished" forever. Treat a run as active only while it still has
+    a heartbeat: its latest attempt (or its start, before the first attempt)
+    is within ``RUN_STALE_AFTER``."""
+    from sqlalchemy.orm import object_session
+
+    if run.finished_at is not None:
+        return False
+    last = run.started_at
+    session = object_session(run)
+    if session is not None:
+        latest = session.scalar(select(func.max(Trace.timestamp)).where(Trace.run_id == run.id))
+        last = latest or last
+    if last is None:
+        return False
+    if last.tzinfo is None:  # SQLite hands back naive UTC
+        last = last.replace(tzinfo=UTC)
+    return (now or datetime.now(UTC)) - last <= RUN_STALE_AFTER
+
+
+def run_state(run: Run) -> str:
+    """``completed`` | ``running`` | ``interrupted`` for status pills."""
+    if run.finished_at is not None:
+        return "completed"
+    return "running" if run_is_active(run) else "interrupted"
+
+
+def hydrate_missing_summaries(session: Session, runs: list[Run]) -> list[Run]:
+    """Give runs with no cached summary one computed from their traces.
+
+    The orchestrator only writes ``Run.summary`` when a run finishes, so an
+    interrupted run reads as 0 attempts / 0% ASR and the presentation views
+    (which hide zero-ASR runs) drop it even when it found successes. Same
+    formula as ``orch_summary``: successes over non-error attempts. The value
+    is set as already-committed state: display only, never written back."""
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    missing = [run for run in runs if "overall_asr" not in (run.summary or {})]
+    if not missing:
+        return runs
+    counts = session.execute(
+        select(
+            Trace.run_id,
+            func.count(Trace.id),
+            func.sum(case((Trace.verdict == "success", 1), else_=0)),
+            func.sum(case((Trace.verdict == "error", 1), else_=0)),
+        )
+        .where(Trace.run_id.in_([run.id for run in missing]))
+        .group_by(Trace.run_id)
+    ).all()
+    by_run = {run_id: (total, int(ok or 0), int(err or 0)) for run_id, total, ok, err in counts}
+    for run in missing:
+        total, ok, err = by_run.get(run.id, (0, 0, 0))
+        counted = total - err
+        set_committed_value(
+            run,
+            "summary",
+            {
+                **(run.summary or {}),
+                "total_traces": total,
+                "successful_traces": ok,
+                "overall_asr": (ok / counted) if counted else 0.0,
+            },
+        )
+    return runs
+
+
 def upsert_guide_variant(
     session: Session,
     *,
@@ -410,7 +490,7 @@ def list_findings(
     run_id: str | None = None,
     severity: str | None = None,
     behavior_id: str | None = None,
-    limit: int = 200,
+    limit: int | None = 200,
 ) -> list[Finding]:
     stmt = select(Finding).order_by(desc(Finding.promoted_at))
     if run_id is not None:

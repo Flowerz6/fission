@@ -1,0 +1,3 @@
+{% macro target_status(surface) -%}
+{% if surface.attempts %}<span class="target-status tested"><span class="status-dot" aria-hidden="true"></span>Tested</span>{% elif surface.configured %}<span class="target-status untested"><span class="status-dot" aria-hidden="true"></span>Not tested</span>{% else %}<span class="target-status unconfigured"><span class="status-dot" aria-hidden="true"></span>Not configured</span>{% endif %}
+{%- endmacro %}

@@ -1,46 +1,26 @@
 {% if findings %}
-<table>
+<div class="table-scroll"><table>
   <thead>
     <tr>
-      <th>Severity</th><th>Finding</th><th>Surface · assessment</th>
-      <th>Scenario</th><th>Score</th><th>Promoted</th><th></th>
+      <th class="cell-check"><input type="checkbox" aria-label="Select all" data-select-all></th>
+      <th>Finding</th><th>Severity</th><th>Target</th><th>Status</th><th>Detected</th><th></th>
     </tr>
   </thead>
   <tbody>
     {% for f in findings %}
-    {%- set scores = f.trace.judge_scores if f.trace else [] -%}
-    {%- set top_score = (scores | map(attribute='score') | max) if scores else None -%}
-    {%- if top_score is not none and top_score >= 0.7 -%}
-      {%- set score_class = 'score-hot' -%}
-    {%- elif top_score is not none and top_score >= 0.3 -%}
-      {%- set score_class = 'score-warm' -%}
-    {%- else -%}
-      {%- set score_class = 'score-cool' -%}
-    {%- endif -%}
     <tr>
-      <td><span class="pill severity-{{ f.severity }}">{{ f.severity }}</span></td>
-      <td><a href="/findings/{{ f.id }}">{{ f.title or '(untitled)' }}</a></td>
-      <td><strong>{{ surface_label(f.trace.target_name) if f.trace else "Unknown" }}</strong><br><a class="muted" href="/runs/{{ f.run_id }}">{{ run_display_name(f.run) }}</a></td>
-      <td>{{ f.trace.behavior_id }}</td>
-      <td>
-        {% if top_score is not none %}
-        <span class="score-cell {{ score_class }}">{{ '%.2f'|format(top_score) }}</span>
-        {% else %}
-        <span class="muted"> </span>
-        {% endif %}
-      </td>
-      <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') }}</td>
-      <td>
-        {% if f.replay_bundle_path %}
-        <a href="/findings/{{ f.id }}/replay">Evidence</a>
-        {% else %}
-        <span class="muted"> </span>
-        {% endif %}
-      </td>
+      <td class="cell-check"><input class="rowcheck" type="checkbox" aria-label="Select finding"></td>
+      <td><a class="fname" href="/findings/{{ f.id }}">{{ f.title or '(untitled)' }}</a></td>
+      <td><span class="sevdot {{ f.severity }}"><span class="d"></span>{{ f.severity|capitalize }}</span></td>
+      <td>{{ surface_label(f.trace.target_name) if f.trace else "Unknown" }}</td>
+      <td><span class="st open">Open</span></td>
+      <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') if f.promoted_at else '—' }}</td>
+      <td><a class="rowmenu" href="/findings/{{ f.id }}" aria-label="Open finding">&#8943;</a></td>
     </tr>
     {% endfor %}
   </tbody>
-</table>
+</table></div>
+<div class="pager"><span class="info">Showing {{ findings|length }} finding{{ 's' if findings|length != 1 else '' }}</span></div>
 {% else %}
-<p>No findings match this filter.</p>
+<div class="empty-state">No findings match this filter.</div>
 {% endif %}

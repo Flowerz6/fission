@@ -1,56 +1,21 @@
-{# Top-findings grid. Self-polls every 3 s while the run is in
-   flight. The wrapper element is always rendered (even when there
-   are no findings yet) so HTMX has a stable target to swap into. #}
-<section id="run-findings"
-         {% if not run.finished_at %}
-         hx-get="/runs/{{ run.id }}/_findings"
-         hx-trigger="every 3s"
-         hx-swap="outerHTML"
-         {% endif %}>
-  {% if top_findings %}
-  <div class="section-head">
-    <h2>Top findings</h2>
-    <a class="muted" href="/findings?run_id={{ run.id }}">View all {{ findings|length }} →</a>
-  </div>
-  <div class="finding-grid">
-    {% for f in top_findings %}
-    {% set t = f.trace %}
-    {% set score = t.judge_scores[0].score if t and t.judge_scores else 0.0 %}
-    {% set reasoning = t.judge_scores[0].reasoning if t and t.judge_scores else '' %}
-    <a class="finding-card" href="/traces/{{ t.id }}">
-      <div class="finding-card-head">
-        <div>
-          <div class="finding-card-tech">{{ t.technique_id or 'no technique' }}</div>
-          <div class="finding-card-behavior">{{ t.behavior_id }}</div>
-        </div>
-        <div class="finding-score">
-          <div class="finding-score-num">{{ '%.2f'|format(score) }}</div>
-          <span class="pill {{ t.verdict or 'refused' }}">{{ t.verdict or '-' }}</span>
-        </div>
-      </div>
-      <div class="finding-flow">
-        <div class="finding-flow-row">
-          <div class="finding-flow-label">PROMPT</div>
-          <div class="finding-flow-text">{{ (t.raw_request or '')[:240] }}{% if t.raw_request and t.raw_request|length > 240 %}…{% endif %}</div>
-        </div>
-        <div class="finding-flow-row">
-          <div class="finding-flow-label finding-flow-label-out">RESPONSE</div>
-          {% set full = full_responses.get(t.id) if full_responses else None %}
-          <div class="finding-flow-text" style="white-space: pre-wrap; max-height: 24em; overflow-y: auto;">{{ full or t.raw_response or '' }}</div>
-        </div>
-      </div>
-      {% if reasoning %}
-      <div class="finding-judge">
-        <span class="finding-judge-label">JUDGE</span> {{ reasoning[:200] }}{% if reasoning|length > 200 %}…{% endif %}
-      </div>
-      {% endif %}
-    </a>
+<section id="run-findings" class="run-findings-review" data-run-id="{{ run.id }}" data-selected-finding="{{ selected_finding.id if selected_finding else '' }}"
+  {% if run_is_active(run) %}hx-get="/runs/{{ run.id }}/_findings" hx-trigger="every 3s [!document.querySelector('#run-findings').matches(':focus-within, :hover')]" hx-swap="outerHTML"{% endif %}>
+  <div class="section-head"><div><h2>Findings <span class="muted">({{ findings|length }})</span></h2><p class="muted">Select a finding to review its evidence without leaving this run.</p></div></div>
+  {% if review_findings %}
+  <div class="run-review-layout">
+    <nav class="run-finding-list" aria-label="Findings in this run">
+    {% for f in review_findings %}
+      <a href="/runs/{{ run.id }}?finding={{ f.id }}#run-findings" data-run-finding="{{ f.id }}" data-evidence-url="/runs/{{ run.id }}/findings/{{ f.id }}/_evidence" {% if selected_finding and f.id == selected_finding.id %}aria-current="true"{% endif %}>
+        <span class="sevdot {{ f.severity }}"><span class="d"></span>{{ f.severity|capitalize }}</span>
+        <strong>{{ f.title or f.trace.behavior_id }}</strong>
+        <small>{{ f.trace.technique_id or f.trace.attack_name }} · {{ f.promoted_at.strftime('%d %b, %H:%M') if f.promoted_at else '' }}</small>
+      </a>
     {% endfor %}
+    </nav>
+    <div class="run-evidence-column"><div class="run-review-pagination"><button type="button" class="btn-outline" data-finding-step="-1" disabled>← Previous</button><span class="muted" data-finding-position></span><button type="button" class="btn-outline" data-finding-step="1">Next →</button></div><p class="run-evidence-status muted" role="status" hidden></p><div class="run-evidence" aria-label="Selected finding evidence" tabindex="-1">
+      {% with finding=selected_finding, trace=selected_finding.trace, full_response=full_responses.get(selected_finding.trace_id, ''), conversation=selected_conversation %}{% include "runs/_finding_evidence.html" %}{% endwith %}
+    </div></div>
   </div>
-  {% elif not run.finished_at %}
-  <div class="section-head">
-    <h2>Top findings</h2>
-    <span class="muted">Waiting for a successful attack…</span>
-  </div>
-  {% endif %}
+  {% elif run_is_active(run) %}<p class="muted">No findings yet. Results will appear as this run progresses.</p>
+  {% else %}<p class="muted">No finding evidence is available for this run.</p>{% endif %}
 </section>

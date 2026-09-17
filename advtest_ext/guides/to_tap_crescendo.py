@@ -251,7 +251,11 @@ def map_guide(guide: Guide) -> GuidePlan:
     seed_chain = _seed_chain(guide.exemplar_turns)
     if seed_chain:
         attack_kwargs["seed_chain"] = seed_chain
-        attack_kwargs["replay_mode"] = "both"
+        # Reproduce the seed ONCE, verbatim: that single node is both the
+        # "does the known-good chain still work" check and the strict_seed
+        # baseline the mutations are measured against. ("both" would replay it
+        # a second time adaptively, costing a full extra conversation.)
+        attack_kwargs["replay_mode"] = "strict"
 
     # Seed the branch strategist with the guide's own approach so variant
     # proposals stay on-goal (a system-prompt-leak guide must not inherit the

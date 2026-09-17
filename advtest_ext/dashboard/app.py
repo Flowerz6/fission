@@ -53,12 +53,30 @@ from sqlalchemy.orm import Session
 
 from advtest_ext.dashboard.live_tests import LiveTestController
 from advtest_ext.dashboard.presentation import (
+    attack_label,
+    objective_label,
     run_display_name,
+    run_method_label,
     run_surface_key,
     run_surface_label,
     surface_label,
 )
 from advtest_ext.dashboard.registry import list_adapters, list_attacks
+from advtest_ext.dashboard.run_actions import (
+    DeleteRun,
+    RenameRun,
+    delete_run_results,
+    require_same_origin,
+)
+from advtest_ext.dashboard.services import (
+    COLLECTION_PATHS,
+    SERVICE_LABELS,
+    group_surfaces,
+    scope_campaign_reads,
+    service_catalog,
+    target_identity,
+)
+from advtest_ext.dashboard.transcript import build_transcript_groups
 from advtest_ext.dashboard.tree import (
     build_phase_forests as _build_phase_forests,
 )
@@ -94,6 +112,7 @@ from advtest_ext.storage import (
     resolve_hitl,
     run_partial_count,
 )
+from advtest_ext.storage.repository import run_is_active, run_state
 
 if TYPE_CHECKING:  # pragma: no cover
     from sqlalchemy.engine import Engine
@@ -158,7 +177,10 @@ def _tree_state_hash(phases: list[dict[str, Any]], *, finished: bool) -> str:
                 score = t.judge_scores[0].score if getattr(t, "judge_scores", None) else None
                 parts.append(
                     f"{getattr(t, 'id', '')}|{getattr(t, 'verdict', '')}|"
-                    f"{getattr(t, 'depth', '')}|{getattr(t, 'parent_id', '')}|{score}"
+                    f"{getattr(t, 'depth', '')}|{getattr(t, 'parent_id', '')}|{score}|"
+                    f"{getattr(t, 'timestamp', '')}|{getattr(t, 'ended_at', '')}|"
+                    f"{getattr(t, 'turn_count', 1)}|{getattr(t, 'attack_name', '')}|"
+                    f"{getattr(t, 'raw_request', '')}|{getattr(t, 'extra_metadata', '')}"
                 )
     # Sort so the fingerprint is independent of trace/query ordering — an
     # unstable order would change the hash every poll and defeat the
@@ -356,16 +378,12 @@ def build_surfaces_context(session: Session) -> dict[str, Any]:
     ran against that surface), plus the severity mix. Exposure is a
     derived-from-data flag: a surface with ≥1 finding is *exposed*.
 
-    The headline signature is the in-house gold-set agreement report
-    (``core.agreement``) — the oracle-trust number that qualifies every
-    coverage count below it. Nothing here is sampled or invented; a
-    surface with no findings shows an empty severity cell, not a zero.
+    Judge agreement and benchmarks are supplied separately on Oracle trust.
     """
     from collections import defaultdict
 
     from sqlalchemy import func
 
-    from advtest_ext.core.agreement import agreement_for_gold_set
     from advtest_ext.storage import Finding, Trace
 
     attempt_rows = (
@@ -430,8 +448,6 @@ def build_surfaces_context(session: Session) -> dict[str, Any]:
         )
     surfaces.sort(key=lambda s: (-s["findings"], -s["attempts"]))
 
-    agreement = agreement_for_gold_set(session)
-    benchmark = _load_judge_benchmark()
     totals = {
         "surfaces": len(surfaces),
         "exposed": sum(1 for s in surfaces if s["exposure"] == "exposed"),
@@ -439,12 +455,9 @@ def build_surfaces_context(session: Session) -> dict[str, Any]:
         "attempts": sum(s["attempts"] for s in surfaces),
         # Real distinct run count across all surfaces.
         "runs": int(session.query(func.count(func.distinct(Trace.run_id))).scalar() or 0),
-        "gold": agreement.n,
     }
     return {
         "surfaces": surfaces,
-        "agreement": agreement,
-        "benchmark": benchmark,
         "totals": totals,
     }
 
@@ -706,7 +719,52 @@ def create_app(
                 return JSONResponse({"detail": "unauthorized"}, status_code=401)
             return await call_next(request)
 
-    templates = Jinja2Templates(directory=_TEMPLATE_DIR)
+    def service_context(request: Request) -> dict[str, Any]:
+        cached = getattr(request.state, "service_context", None)
+        if cached is not None:
+            return cached
+        with factory() as catalog_session:
+            choices, assignments = service_catalog(catalog_session)
+        valid = {choice["key"] for choice in choices}
+        default = "gemini" if not assignments or "gemini" in assignments.values() else "all"
+        explicit = request.query_params.get("service")
+        if explicit is not None and explicit not in valid:
+            raise HTTPException(400, "Unknown service selection")
+        selected = explicit or request.cookies.get("fission-service", default)
+        if selected not in valid:
+            selected = default
+        context = {
+            "service_options": choices,
+            "selected_service": {"key": selected, "label": SERVICE_LABELS[selected]},
+            "service_switch_path": request.url.path
+            if request.url.path in COLLECTION_PATHS
+            else "/surfaces",
+        }
+        request.state.service_context = context
+        request.state.service_run_ids = [
+            key for key, value in assignments.items() if value == selected
+        ]
+        return context
+
+    @app.middleware("http")
+    async def remember_service(request: Request, call_next: Any) -> Any:
+        response = await call_next(request)
+        context = getattr(request.state, "service_context", None)
+        if context and response.status_code < 400 and request.query_params.get("service"):
+            response.set_cookie(
+                "fission-service",
+                context["selected_service"]["key"],
+                max_age=31536000,
+                httponly=True,
+                samesite="lax",
+                secure=request.url.scheme == "https",
+            )
+        return response
+
+    templates = Jinja2Templates(directory=_TEMPLATE_DIR, context_processors=[service_context])
+    templates.env.globals["attack_label"] = attack_label
+    templates.env.globals["objective_label"] = objective_label
+    templates.env.globals["target_surface_label"] = lambda name: target_identity(name)[2]
 
     # Cache-busting version for the tree component's static assets. tree.js/
     # tree.css change without their URL changing, so browsers keep serving the
@@ -718,7 +776,14 @@ def create_app(
             return str(
                 max(
                     int((_STATIC_DIR / _name).stat().st_mtime)
-                    for _name in ("tree.js", "tree.css")
+                    for _name in (
+                        "tree.js",
+                        "tree.css",
+                        "dashboard.css",
+                        "dashboard.js",
+                        "run-actions.js",
+                        "run-findings.js",
+                    )
                     if (_STATIC_DIR / _name).exists()
                 )
             )
@@ -726,6 +791,9 @@ def create_app(
             return "0"
 
     templates.env.globals["static_v"] = _static_version
+    # "Running" means a live heartbeat, not just a missing finish time.
+    templates.env.globals["run_is_active"] = run_is_active
+    templates.env.globals["run_state"] = run_state
 
     if _STATIC_DIR.exists():
         app.mount(
@@ -734,7 +802,7 @@ def create_app(
             name="static",
         )
 
-    def get_session() -> Iterator[Session]:
+    def get_session(request: Request) -> Iterator[Session]:
         # Generator-style FastAPI dependency: yield the session and
         # then close it in the finally so the connection lands back
         # in the pool the moment the request returns. The previous
@@ -743,6 +811,12 @@ def create_app(
         # poll every 2-3 s.
         session = factory()
         try:
+            context = service_context(request)
+            if (
+                request.url.path in COLLECTION_PATHS
+                or request.url.path.startswith(("/surface-groups/", "/surfaces/"))
+            ) and context["selected_service"]["key"] != "all":
+                scope_campaign_reads(session, request.state.service_run_ids)
             yield session
         finally:
             session.close()
@@ -786,8 +860,10 @@ def create_app(
         session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
         from advtest_ext.dashboard.overview import run_has_success
+        from advtest_ext.storage.repository import hydrate_missing_summaries
 
-        runs = [run for run in list_runs(session) if run_has_success(run)]
+        all_runs = hydrate_missing_summaries(session, list_runs(session))
+        runs = [run for run in all_runs if run_has_success(run)]
         group_order = ("sheets", "docs", "cross-surface", "other")
         groups = []
         for key in group_order:
@@ -815,8 +891,49 @@ def create_app(
                 "runs": runs,
                 "groups": groups,
                 "run_display_name": run_display_name,
+                "run_method_label": run_method_label,
             },
         )
+
+    @app.patch("/runs/{run_id}")
+    def rename_run(
+        request: Request,
+        run_id: str,
+        submission: RenameRun,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> dict[str, str]:
+        require_same_origin(request)
+        run = get_run(session, run_id)
+        if run is None:
+            raise HTTPException(404, "Run not found")
+        run.config = {**(run.config or {}), "display_name": submission.name}
+        session.commit()
+        return {"id": run_id, "name": run_display_name(run)}
+
+    @app.delete("/runs/{run_id}", status_code=204)
+    def delete_run(
+        request: Request,
+        run_id: str,
+        submission: DeleteRun,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        require_same_origin(request)
+        if submission.confirmation != run_id:
+            raise HTTPException(422, "Confirm the run selected for deletion")
+        from advtest_ext.storage.models import Run
+
+        run = session.query(Run).filter(Run.id == run_id).with_for_update().one_or_none()
+        if run is None:
+            raise HTTPException(404, "Run not found")
+        live = live_tests.snapshot()
+        if run.finished_at is None or (
+            live.get("run_id") == run_id
+            and live.get("status") in {"starting", "running", "stopping"}
+        ):
+            raise HTTPException(409, "Active or unfinished runs cannot be deleted")
+        delete_run_results(session, run_id)
+        session.commit()
+        return Response(status_code=204)
 
     @app.get("/live-tests", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/assessments/new", response_class=HTMLResponse)
@@ -970,7 +1087,7 @@ def create_app(
         run_id: str,
         session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
-        ctx = _build_run_context(session, run_id)
+        ctx = _build_run_context(session, run_id, request.query_params.get("finding"))
         return templates.TemplateResponse(request, "runs/show.html", ctx)
 
     # --- HTMX polling endpoints for the live-run dashboard. -----------
@@ -993,8 +1110,40 @@ def create_app(
         run_id: str,
         session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
-        ctx = _build_run_context(session, run_id)
+        ctx = _build_run_context(session, run_id, request.query_params.get("finding"))
         return templates.TemplateResponse(request, "runs/_findings.html", ctx)
+
+    @app.get("/runs/{run_id}/findings/{finding_id}/_evidence", response_class=HTMLResponse)
+    async def run_finding_evidence(
+        request: Request,
+        run_id: str,
+        finding_id: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        finding = get_finding(session, finding_id)
+        if finding is None or finding.run_id != run_id or finding.trace is None:
+            raise HTTPException(404, "Finding not found in this run")
+        # Respect shared capture filenames in legacy runs, as the full run page does.
+        traces = list_traces_for_run(session, run_id)
+        responses = _full_responses_for_traces(traces)
+        conversation = next(
+            (
+                group
+                for group in build_transcript_groups(traces, responses)
+                if any(turn.trace_id == finding.trace_id for turn in group.turns)
+            ),
+            None,
+        )
+        return templates.TemplateResponse(
+            request,
+            "runs/_finding_evidence.html",
+            {
+                "finding": finding,
+                "trace": finding.trace,
+                "conversation": conversation,
+                "full_response": responses.get(finding.trace_id, ""),
+            },
+        )
 
     @app.get("/runs/{run_id}/_techniques", response_class=HTMLResponse)
     async def runs_techniques_partial(
@@ -1023,7 +1172,9 @@ def create_app(
         ctx = _build_run_context(session, run_id)
         return templates.TemplateResponse(request, "runs/_timeline.html", ctx)
 
-    def _build_run_context(session: Session, run_id: str) -> dict[str, Any]:
+    def _build_run_context(
+        session: Session, run_id: str, selected_finding_id: str | None = None
+    ) -> dict[str, Any]:
         """Shared context builder for the full /runs/{id} page and the
         five HTMX polling partials below. Single source of truth so
         the partial's slice of the dashboard always matches what the
@@ -1038,11 +1189,10 @@ def create_app(
         # ``trace.raw_response`` in that case.
         full_responses = _full_responses_for_traces(traces)
         heatmap = asr_heatmap_formatted(session, run_id)
-        findings = list_findings(session, run_id=run_id)
+        findings = list_findings(session, run_id=run_id, limit=None)
 
-        # Top findings for the demo-grade cards section: sort by the
-        # primary judge score (StrongREJECT lands on judge_scores[0])
-        # and surface the highest-scoring 6. Falls back to the
+        # Order the findings reviewer by primary judge score, selecting
+        # the highest-scoring finding initially. Falls back to the
         # promotion order when no judge score exists. Findings whose
         # trace was deleted (shouldn't happen, but FK could be loose
         # in legacy DBs) get filtered.
@@ -1052,11 +1202,33 @@ def create_app(
                 return 0.0
             return float(t.judge_scores[0].score)
 
-        top_findings = sorted(
+        review_findings = sorted(
             (f for f in findings if getattr(f, "trace", None) is not None),
             key=_score_of,
             reverse=True,
-        )[:6]
+        )
+        selected_finding = next(
+            (f for f in review_findings if f.id == selected_finding_id),
+            review_findings[0] if review_findings else None,
+        )
+        top_findings = review_findings[:6]
+        conversations = build_transcript_groups(traces, full_responses)
+        selected_conversation = next(
+            (
+                group
+                for group in conversations
+                if selected_finding
+                and any(turn.trace_id == selected_finding.trace_id for turn in group.turns)
+            ),
+            None,
+        )
+        valid_techniques = {
+            trace.technique_id
+            for trace in traces
+            if trace.technique_id
+            and trace.technique_id.strip().lower()
+            not in {"", "-", "—", ",", "none", "unknown", "n/a", "null"}
+        }
         # Per-technique aggregate for the bar-chart strip: across all
         # behaviours in the run, what's the mean ASR per hiding
         # technique? Rolls up the heatmap rows. The heatmap dict is
@@ -1064,6 +1236,8 @@ def create_app(
         technique_chart: list[dict[str, Any]] = []
         rows: list[dict[str, Any]] = heatmap["rows"]  # type: ignore[assignment]
         for row in rows:
+            if row["technique"] not in valid_techniques:
+                continue
             attempts = sum(int(c["attempts"]) for c in row["cells"])
             successes = sum(int(c["successes"]) for c in row["cells"])
             asr = (successes / attempts) if attempts else 0.0
@@ -1081,6 +1255,23 @@ def create_app(
         # uses, so the embedded tree matches it — without this the include
         # gets no ``phases`` and renders nothing on the run page.
         phases = _build_phase_forests(_collapse_conversations(list(traces)))
+        comparison_rows = [row for row in rows if row["technique"] in valid_techniques]
+        comparison_families = {
+            cell["family"] for row in comparison_rows for cell in row["cells"] if cell["attempts"]
+        }
+        technique_heatmap = {
+            **heatmap,
+            "families": [family for family in heatmap["families"] if family in comparison_families],
+            "rows": [
+                {
+                    **row,
+                    "cells": [
+                        cell for cell in row["cells"] if cell["family"] in comparison_families
+                    ],
+                }
+                for row in comparison_rows
+            ],
+        }
         # Measurement-spine headline: the calibrated ASR ± CI. Rectifies
         # the oracle's ASR by the oracle↔expert disagreement on this run's
         # uniform gold-label slice (PPI). Degrades to an oracle-only
@@ -1088,35 +1279,41 @@ def create_app(
         from advtest_ext.core.ppi import ppi_asr_for_run
 
         ppi = ppi_asr_for_run(session, run_id)
-        tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
-        root_count = sum(1 for trace in traces if trace.parent_id is None)
+        tree_hash = _tree_state_hash(phases, finished=not run_is_active(run))
         duration_seconds = None
         if run.started_at and run.finished_at:
             duration_seconds = max(0, int((run.finished_at - run.started_at).total_seconds()))
         run_metrics = {
             "attempts": len(traces),
-            "conversations": root_count,
-            "techniques": len({trace.technique_id for trace in traces if trace.technique_id}),
+            "conversations": len(conversations),
+            "successful": sum(trace.verdict == "success" for trace in traces),
+            "techniques": len(valid_techniques),
             "scenarios": len({trace.behavior_id for trace in traces if trace.behavior_id}),
             "duration_seconds": duration_seconds,
         }
         return {
             "run": run,
             "run_name": run_display_name(run),
-            "surface_name": surface_label(run.target_name),
+            "surface_name": target_identity(run.target_name)[2],
             "run_metrics": run_metrics,
             "traces": traces,
             "heatmap": heatmap,
             "findings": findings,
             "top_findings": top_findings,
+            "review_findings": review_findings,
+            "selected_finding": selected_finding,
+            "selected_conversation": selected_conversation,
             "technique_chart": technique_chart,
+            "show_technique_chart": len(technique_chart) > 1,
+            "show_technique_heatmap": bool(technique_chart) and len(comparison_families) > 1,
+            "technique_heatmap": technique_heatmap,
             "full_responses": full_responses,
             "phases": phases,
             "ppi": ppi,
             "search_report": _load_search_report(run),
             "tree_hash": tree_hash,
             "tree_graph": _tree_graph_payload(
-                phases, finished=bool(run.finished_at), tree_hash=tree_hash
+                phases, finished=not run_is_active(run), tree_hash=tree_hash
             ),
         }
 
@@ -1136,7 +1333,7 @@ def create_app(
             raise HTTPException(404, f"run {run_id!r} not found")
         traces = list_traces_for_run(session, run_id)
         phases = _build_phase_forests(_collapse_conversations(list(traces)))
-        tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
+        tree_hash = _tree_state_hash(phases, finished=not run_is_active(run))
         return templates.TemplateResponse(
             request,
             "runs/tree.html",
@@ -1145,7 +1342,7 @@ def create_app(
                 "phases": phases,
                 "tree_hash": tree_hash,
                 "tree_graph": _tree_graph_payload(
-                    phases, finished=bool(run.finished_at), tree_hash=tree_hash
+                    phases, finished=not run_is_active(run), tree_hash=tree_hash
                 ),
             },
         )
@@ -1171,7 +1368,7 @@ def create_app(
             raise HTTPException(404, f"run {run_id!r} not found")
         traces = list_traces_for_run(session, run_id)
         phases = _build_phase_forests(_collapse_conversations(list(traces)))
-        tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
+        tree_hash = _tree_state_hash(phases, finished=not run_is_active(run))
         if v and v == tree_hash:
             return Response(status_code=204)
         return templates.TemplateResponse(
@@ -1182,7 +1379,7 @@ def create_app(
                 "phases": phases,
                 "tree_hash": tree_hash,
                 "tree_graph": _tree_graph_payload(
-                    phases, finished=bool(run.finished_at), tree_hash=tree_hash
+                    phases, finished=not run_is_active(run), tree_hash=tree_hash
                 ),
             },
         )
@@ -1209,7 +1406,7 @@ def create_app(
                         int(cell.get("n_success", 0)) == 0 if isinstance(cell, dict) else True
                     )
                 )
-        tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
+        tree_hash = _tree_state_hash(phases, finished=not run_is_active(run))
         return templates.TemplateResponse(
             request,
             "runs/_panel.html",
@@ -1218,7 +1415,7 @@ def create_app(
                 "phases": phases,
                 "tree_hash": tree_hash,
                 "tree_graph": _tree_graph_payload(
-                    phases, finished=bool(run.finished_at), tree_hash=tree_hash
+                    phases, finished=not run_is_active(run), tree_hash=tree_hash
                 ),
             },
         )
@@ -1240,8 +1437,8 @@ def create_app(
             raise HTTPException(404, f"run {run_id!r} not found")
         traces = list_traces_for_run(session, run_id)
         phases = _build_phase_forests(_collapse_conversations(list(traces)))
-        tree_hash = _tree_state_hash(phases, finished=bool(run.finished_at))
-        payload = _tree_graph_payload(phases, finished=bool(run.finished_at), tree_hash=tree_hash)
+        tree_hash = _tree_state_hash(phases, finished=not run_is_active(run))
+        payload = _tree_graph_payload(phases, finished=not run_is_active(run), tree_hash=tree_hash)
         return JSONResponse(payload)
 
     @app.get("/runs/{run_id}/transcript", response_class=HTMLResponse)
@@ -1275,12 +1472,14 @@ def create_app(
         run_id: str,
         session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
-        from advtest_ext.dashboard.report import build_report_context
+        from advtest_ext.dashboard.report import WEASYPRINT_INSTALLED, build_report_context
 
         run = get_run(session, run_id)
         if run is None:
             raise HTTPException(404, f"run {run_id!r} not found")
         ctx = build_report_context(session=session, run=run)
+        ctx["export_view"] = request.query_params.get("export") == "1"
+        ctx["pdf_available"] = WEASYPRINT_INSTALLED
         return templates.TemplateResponse(request, "report.html", ctx)
 
     @app.get("/runs/{run_id}/report.pdf")
@@ -1506,7 +1705,12 @@ def create_app(
         return templates.TemplateResponse(
             request,
             "findings/show.html",
-            {"finding": finding, "trace": trace, "full_response": full_response},
+            {
+                "finding": finding,
+                "trace": trace,
+                "full_response": full_response,
+                "return_to_run": request.query_params.get("from_run") == finding.run_id,
+            },
         )
 
     @app.get("/findings/{finding_id}/replay")
@@ -2074,7 +2278,46 @@ def create_app(
         signature headlining the page. Rows open a slide-over with the
         surface's real detail."""
         ctx = build_surfaces_context(session)
+        selected = service_context(request)["selected_service"]["key"]
+        ctx["surface_groups"] = group_surfaces(session, ctx["surfaces"], selected)
+        ctx["totals"]["surfaces"] = len(ctx["surface_groups"])
+        ctx["totals"]["exposed"] = sum(
+            group["exposure"] == "exposed" for group in ctx["surface_groups"]
+        )
         return templates.TemplateResponse(request, "surfaces.html", ctx)
+
+    @app.get("/surface-groups/{service}/{surface}/_panel", response_class=HTMLResponse)
+    async def surface_group_panel(
+        request: Request,
+        service: str,
+        surface: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        ctx = build_surfaces_context(session)
+        selected = service_context(request)["selected_service"]["key"]
+        groups = group_surfaces(session, ctx["surfaces"], selected)
+        group = next(
+            (item for item in groups if item["service"] == service and item["key"] == surface), None
+        )
+        if group is None:
+            raise HTTPException(404, "Unknown workspace surface")
+        from advtest_ext.storage.models import Run
+
+        campaigns = (
+            session.query(Run)
+            .filter(Run.id.in_(group["campaign_ids"]))
+            .order_by(Run.started_at.desc())
+            .all()
+        )
+        return templates.TemplateResponse(
+            request,
+            "surfaces/_group_panel.html",
+            {
+                "surface": group,
+                "campaigns": campaigns,
+                "run_display_name": run_display_name,
+            },
+        )
 
     @app.get("/surfaces/{target_name}/_panel", response_class=HTMLResponse)
     async def surfaces_panel(
@@ -2105,6 +2348,24 @@ def create_app(
         from advtest_ext.dashboard.references import parse_bibfile
 
         return templates.TemplateResponse(request, "references.html", {"entries": parse_bibfile()})
+
+    @app.get("/reports", response_class=HTMLResponse)
+    async def reports_index(
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
+        runs = [run for run in list_runs(session, limit=200) if run.finished_at is not None]
+        return templates.TemplateResponse(
+            request, "reports.html", {"runs": runs, "run_display_name": run_display_name}
+        )
+
+    @app.get("/settings", response_class=HTMLResponse)
+    async def settings_index(request: Request) -> Response:
+        return templates.TemplateResponse(request, "settings.html", {})
+
+    @app.get("/account", response_class=HTMLResponse)
+    async def account_index(request: Request) -> Response:
+        return templates.TemplateResponse(request, "account.html", {})
 
     return app
 

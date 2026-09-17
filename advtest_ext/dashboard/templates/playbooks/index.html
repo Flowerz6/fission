@@ -1,33 +1,52 @@
 {% extends "base.html" %}
-{% block title %}playbooks · advtest{% endblock %}
+{% block title %}Attack Library · Fission{% endblock %}
 {% block content %}
-<div class="page-head">
-  <p class="eyebrow">Catalogue</p>
-  <h1>Playbooks</h1>
-  <p>Attack playbooks the LLM attacker runs against the live Workspace side panel, grounded in real seeder sessions. Each maps to a tap_crescendo run.</p>
+<div class="head-bar">
+  <div class="ht">
+    <p class="eyebrow" style="margin:0">Catalogue</p>
+    <h1>Attack Library</h1>
+    <p>A collection of adversarial attacks and evaluation methods.</p>
+  </div>
+  <div class="ha">
+    <a class="btn-outline" href="/seeds"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>Seed library</a>
+  </div>
+</div>
+
+<div class="ptoolbar">
+  <div class="searchbox">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+    <input type="text" id="attack-search" aria-label="Search attacks" placeholder="Search attacks…" oninput="filterAttacks()">
+  </div>
+  <select class="selectbox" id="attack-surface" aria-label="Target surface" onchange="filterAttacks()"><option value="">All surfaces</option>{% for surface in playbooks|map(attribute='surface')|unique|sort %}<option>{{ surface }}</option>{% endfor %}</select>
+  <select class="selectbox" id="attack-author" aria-label="Seed author" onchange="filterAttacks()"><option value="">All authors</option>{% for author in playbooks|selectattr('author')|map(attribute='author')|unique|sort %}<option>{{ author }}</option>{% endfor %}</select>
 </div>
 
 {% if playbooks %}
-<div class="tbl-wrap"><table class="tbl">
+<div class="table-scroll"><table class="attack-table">
   <thead>
-    <tr><th>Playbook</th><th>Target surface</th><th>Seed author</th><th class="num">Signals</th><th class="num">Steps</th></tr>
+    <tr><th>Name</th><th>Target surface</th><th>Signals</th><th>Description</th><th></th></tr>
   </thead>
   <tbody>
     {% for p in playbooks %}
-    <tr>
-      <td>
-        <a href="/playbooks/{{ p.id }}"><strong>{{ p.title }}</strong></a>
-        <div class="muted" style="font-size: 0.78rem; margin-top: 0.15rem; max-width: 60ch;">{{ p.objective[:120] }}{% if p.objective|length > 120 %}…{% endif %}</div>
-      </td>
-      <td class="mono">{{ p.surface }}</td>
-      <td>{{ p.author }}</td>
-      <td class="num">{{ p.n_signals }}</td>
-      <td class="num">{{ p.n_steps or ', ' }}</td>
+    <tr data-surface="{{ p.surface }}" data-author="{{ p.author }}">
+      <td><a class="fname attack-name" href="/playbooks/{{ p.id }}" title="{{ p.title }} · {{ p.author }} · {{ p.n_steps or 0 }} steps"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="m10 2 6 3v5c0 4-6 7-6 7s-6-3-6-7V5z"/><path d="m7 9 2 2 4-4"/></svg><span>{{ p.title }}</span></a></td>
+      <td title="{{ p.surface }}">{{ p.surface }}</td>
+      <td>{{ p.n_signals }}</td>
+      <td class="attack-description" title="{{ p.objective }}">{{ p.objective }}</td>
+      <td><a class="rowmenu" href="/playbooks/{{ p.id }}" aria-label="Open playbook">&#8943;</a></td>
     </tr>
     {% endfor %}
   </tbody>
 </table></div>
+<div class="pager"><span class="info">Showing {{ playbooks|length }} attack{{ 's' if playbooks|length != 1 else '' }}</span></div>
 {% else %}
 <div class="empty-state">No playbooks in the corpus (<code>guides/*.json</code>).</div>
 {% endif %}
+
+<script>
+  function filterAttacks(){
+    var q=document.getElementById('attack-search').value.toLowerCase(),surface=document.getElementById('attack-surface').value,author=document.getElementById('attack-author').value;
+    document.querySelectorAll('tr[data-surface]').forEach(function(tr){tr.hidden=!((tr.textContent+' '+tr.dataset.author).toLowerCase().includes(q)&&(!surface||tr.dataset.surface===surface)&&(!author||tr.dataset.author===author));});
+  }
+</script>
 {% endblock %}

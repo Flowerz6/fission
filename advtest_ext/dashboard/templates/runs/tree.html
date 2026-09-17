@@ -32,9 +32,7 @@
   .tree-pre .draw  { color: #888; }
 </style>
 
-<h1>Attack tree · run <code>{{ run.id }}</code>
-  {% if not run.finished_at %}<span class="pill" style="font-size: 0.55em; vertical-align: middle; background: #ffedd5; color: #9a3412;">LIVE</span>{% endif %}
-</h1>
+<h1>Attack tree · run <code>{{ run.id }}</code></h1>
 <p class="muted">
   <a href="/runs/{{ run.id }}">&larr; back to run</a>
 </p>
@@ -43,7 +41,7 @@
   <span class="pill success">success</span>
   <span class="pill partial">partial</span>
   <span class="pill refused">refused</span>. Select a node to open its detail.
-  {% if not run.finished_at %}Updates live as branches land.{% endif %}
+  {% if run_is_active(run) %}Updates live as branches land.{% endif %}
 </p>
 
 {# Live Cytoscape explorer, mounts client-side and updates incrementally

@@ -1,49 +1,61 @@
 {% extends "base.html" %}
-{% block title %}findings · advtest{% endblock %}
+{% block title %}Findings · Fission{% endblock %}
 {% block content %}
-<div class="page-head">
-  <p class="eyebrow">Assessment</p>
-  <h1>Findings</h1>
-  <p>Flagged traces, promoted from successful or HITL-confirmed attempts.</p>
+<div class="head-bar">
+  <div class="ht">
+    <p class="eyebrow" style="margin:0">Assessment</p>
+    <h1>Findings</h1>
+    <p>Explore, triage and manage all findings.</p>
+  </div>
+  <div class="ha">
+    <a id="findings-export" class="btn-outline" href="{{ '/runs/' ~ run_id ~ '/report.pdf' if run_id else '/reports' }}">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M8 10l-3-3M8 10l3-3M3 13h10"/></svg>Export
+    </a>
+  </div>
 </div>
 
-<form class="filter-bar" hx-get="/findings" hx-target="#findings-table" hx-swap="innerHTML" hx-trigger="change">
-  <label>severity:
-    <select name="severity">
-      <option value="">all</option>
-      {% for s in ('low', 'med', 'high', 'critical') %}
-      <option value="{{ s }}" {% if severity == s %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>run:
-    {# Picking a run scopes the behaviour dropdown, re-render the
-       whole index (not just the table) so the behaviour options
-       update. Behaviour selection stays a partial swap since its
-       options don't change when behaviour changes. #}
-    <select name="run_id"
-            hx-get="/findings"
-            hx-target="body"
-            hx-push-url="true"
-            hx-include="closest form"
-            hx-trigger="change">
-      <option value="">all</option>
-      {% for r in run_options %}
-      <option value="{{ r }}" {% if run_id == r %}selected{% endif %}>{{ r }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>behaviour:
-    <select name="behavior_id">
-      <option value="">all</option>
-      {% for b in behavior_options %}
-      <option value="{{ b }}" {% if behavior_id == b %}selected{% endif %}>{{ b }}</option>
-      {% endfor %}
-    </select>
-  </label>
-</form>
+<form method="get" class="ptoolbar filter-bar" hx-get="/findings" hx-target="#findings-table" hx-swap="innerHTML" hx-trigger="change" hx-push-url="true">
+  <input type="hidden" name="service" value="{{ selected_service.key }}">
+  <div class="searchbox">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+    <input type="text" aria-label="Search findings" id="finding-search" placeholder="Search findings…" oninput="filterFindings(this.value)">
+  </div>
+  <select class="selectbox" name="severity" aria-label="Severity">
+    <option value="">All severities</option>
+    {% for s in ('low', 'med', 'high', 'critical') %}
+    <option value="{{ s }}" {% if severity == s %}selected{% endif %}>{{ s|capitalize }}</option>
+    {% endfor %}
+  </select>
+  <select class="selectbox" name="run_id" aria-label="Run"
+>
+    <option value="">All runs</option>
+    {% for r in run_options %}
+    <option value="{{ r }}" {% if run_id == r %}selected{% endif %}>{{ r }}</option>
+    {% endfor %}
+  </select>
+  <select class="selectbox" name="behavior_id" aria-label="Scenario">
+    <option value="">All scenarios</option>
+    {% for b in behavior_options %}
+    <option value="{{ b }}" {% if behavior_id == b %}selected{% endif %}>{{ b }}</option>
+    {% endfor %}
+  </select>
+<noscript><button class="btn-outline" type="submit">Apply filters</button></noscript></form>
 
 <div id="findings-table">
   {% include "findings/_table.html" %}
 </div>
+
+<script>
+  document.addEventListener('htmx:afterSwap', function(){
+    filterFindings(document.getElementById('finding-search').value);
+    var run = document.querySelector('[name="run_id"]').value;
+    document.getElementById('findings-export').href = run ? '/runs/' + encodeURIComponent(run) + '/report.pdf' : '/reports';
+  });
+  function filterFindings(q) {
+    q = (q || "").toLowerCase();
+    document.querySelectorAll('#findings-table tbody tr').forEach(function (tr) {
+      tr.hidden = q && tr.textContent.toLowerCase().indexOf(q) === -1;
+    });
+  }
+</script>
 {% endblock %}

@@ -91,6 +91,39 @@ class GuideMutationMaterializer:
         variant.setup_steps = [
             step for step in variant.setup_steps if step.operation not in {"type_prompt"}
         ]
+        # Assemble the planted carrier in code from a benign cover and the payload
+        # so the attacker never has to (and never can) drop the injection. Per the
+        # operator's carrier_role, its free-text proposal supplies ONE part; the
+        # other is taken from the guide and the full document is stitched here.
+        role = getattr(operator, "carrier_role", "full") if operator else "full"
+        payload = (self.guide.carrier_payload or "").strip()
+        if role in {"cover", "payload"} and payload and transform is None:
+            for path, value in list(patch.items()):
+                if not isinstance(value, str):
+                    continue
+                seed_body = _get_guide_path(self.guide, path)
+                seed_body = seed_body if isinstance(seed_body, str) else ""
+                cover = (
+                    seed_body.replace(payload, "").strip()
+                    if payload in seed_body
+                    else seed_body.strip()
+                )
+                if role == "cover":
+                    # Proposal is a NEW benign document; keep the seed payload.
+                    patch[path] = f"{value.strip()}\n\n{payload}".strip()
+                else:
+                    # Proposal is a NEW payload; keep the seed's benign cover and
+                    # re-sync carrier_payload so the control and signals track it.
+                    new_payload = value.strip()
+                    patch[path] = f"{cover}\n\n{new_payload}".strip()
+                    variant.carrier_payload = new_payload
+        elif payload and transform is None:
+            # role == "full": the proposal is the whole document. Guarantee the
+            # payload survived a wholesale rewrite; re-append it if the model
+            # silently produced a payload-free document.
+            for path, value in list(patch.items()):
+                if isinstance(value, str) and payload not in value:
+                    patch[path] = f"{value.rstrip()}\n\n{payload}".strip()
         for path, value in patch.items():
             _set_guide_path(variant, path, value)
         result = await stage_guide(
@@ -137,7 +170,27 @@ class GuideMutationMaterializer:
         variant.setup_steps = [
             step for step in variant.setup_steps if step.operation not in {"type_prompt"}
         ]
-        patch = {field: "[neutral control content]" for field in fields}
+        # A causal control must be the SAME document with the attack removed, so
+        # the target behaves as it would on the genuine doc. The only payload-free
+        # text we can use without fabricating one is the guide's own benign cover:
+        # when carrier_payload is recorded verbatim and is a clean substring of the
+        # field, strip just the payload and keep what remains. If we cannot derive
+        # a payload-free version from the guide's own content, we do NOT invent a
+        # document and we do NOT reuse the poisoned one — we skip the control
+        # (return None) so a run never silently pairs against the real payload.
+        payload = (self.guide.carrier_payload or "").strip()
+        patch: dict[str, str] = {}
+        for field_path in fields:
+            try:
+                current = _get_guide_path(self.guide, field_path)
+            except Exception:
+                current = None
+            if not (isinstance(current, str) and payload and payload in current):
+                return None
+            neutral = current.replace(payload, "").strip()
+            if not neutral:
+                return None
+            patch[field_path] = neutral
         for path, value in patch.items():
             _set_guide_path(variant, path, value)
         result = await stage_guide(

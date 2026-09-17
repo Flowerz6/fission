@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Reports · Fission{% endblock %}
+{% block content %}
+<div class="head-bar">
+  <div class="ht">
+    <p class="eyebrow" style="margin:0">Assessment</p>
+    <h1>Reports</h1>
+    <p>Generate and share evaluation reports from your completed runs.</p>
+  </div>
+  <div class="ha">
+    <a class="btn-primary" href="{{ '/runs/' ~ runs[0].id ~ '/report' if runs else '/runs/new' }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 2h8v12H4z"/><path d="M6 6h4M6 9h4"/></svg>Generate report</a>
+  </div>
+</div>
+
+<div class="list-controls"><div class="tabs"><a class="on" href="/reports">All <span class="c">{{ runs|length }}</span></a></div><div class="searchbox"><input aria-label="Search reports" placeholder="Search reports…" data-table-search="reports-table"></div></div>
+
+{% if runs %}
+<div class="table-scroll"><table id="reports-table">
+  <thead><tr><th>Name</th><th>Run</th><th>Target</th><th>Created</th><th>Format</th><th></th></tr></thead>
+  <tbody>
+    {% for run in runs %}
+    <tr>
+      <td><a class="fname" href="/runs/{{ run.id }}/report">{{ run_display_name(run) }} — report</a></td>
+      <td class="muted mono" style="font-size:0.74rem">{{ run.id }}</td>
+      <td class="muted">{{ target_surface_label(run.target_name) }}</td><td class="muted">{{ run.started_at.strftime('%b %d, %Y') if run.started_at else '—' }}</td>
+      <td><a href="/runs/{{ run.id }}/report">HTML</a> · <a href="/runs/{{ run.id }}/report.pdf">PDF</a></td>
+      <td><a class="rowmenu" href="/runs/{{ run.id }}/report.pdf" aria-label="Download report">&#8943;</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></div>
+<div class="pager"><span class="info">Showing {{ runs|length }} report{{ 's' if runs|length != 1 else '' }}</span></div>
+{% else %}
+<div class="empty-state"><div class="big">No reports yet</div>Reports are generated from completed runs.</div>
+{% endif %}
+{% endblock %}

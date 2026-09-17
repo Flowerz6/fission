@@ -64,9 +64,22 @@
     .tree-pre .verdict.error   { background: #ddd;    color: #444; }
     .tree-pre .score { color: #555; margin-left: 3px; }
     .tree-pre .draw  { color: #888; }
+    .report-export { padding: 16px; margin-bottom: 24px; border: 1px solid #e5e3de; background: #faf9f6; font-size: 13px; }
+    .report-export a, .report-export button { display: inline-block; margin-right: 12px; color: #202321; }
+    .report-export button { padding: 8px 12px; background: #202321; color: white; border: 0; border-radius: 3px; cursor: pointer; }
+    .report-export p { margin-bottom: 0; color: #666; }
+    @media print { .report-export { display: none !important; } }
   </style>
 </head>
 <body>
+{% if export_view %}
+<nav class="report-export" aria-label="Export report">
+  <a href="/runs/{{ run.id }}">Back to run</a>
+  {% if pdf_available %}<a href="/runs/{{ run.id }}/report.pdf" download>Download PDF</a>{% endif %}
+  <button type="button" onclick="window.print()">Print / Save as PDF</button>
+  <p>Choose “Save as PDF” in the print dialog to download this report.</p>
+</nav>
+{% endif %}
 
 <section class="cover">
   <h1>advtest run report</h1>

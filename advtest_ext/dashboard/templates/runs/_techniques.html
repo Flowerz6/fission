@@ -2,12 +2,13 @@
    Heatmap is a separate partial below, the two refresh independently
    so a slow heatmap render doesn't gate the cheaper technique chart. #}
 <section id="run-techniques"
-         {% if not run.finished_at %}
+         {% if run_is_active(run) %}
          hx-get="/runs/{{ run.id }}/_techniques"
          hx-trigger="every 5s"
          hx-swap="outerHTML"
          {% endif %}>
-  {% if technique_chart %}
+  {% if show_technique_chart %}
+  <details class="run-analysis"><summary>Technique comparison</summary>
   <div class="section-head">
     <h2>Technique effectiveness</h2>
     <span class="muted">Mean ASR per hiding technique, across all behaviours in this run.</span>
@@ -26,5 +27,6 @@
     </div>
     {% endfor %}
   </div>
+  </details>
   {% endif %}
 </section>

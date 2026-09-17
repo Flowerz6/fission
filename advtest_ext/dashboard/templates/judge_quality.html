@@ -5,12 +5,18 @@
 <div class="page-head">
   <p class="eyebrow">Oracle</p>
   <h1>Judge quality</h1>
-  <p>Oracle agreement against the in-house gold set, with a held-out public benchmark alongside published judges.</p>
+  <p>Judge reliability for {{ selected_service.label }}: agreement with human review and a separate public benchmark.</p>
 </div>
 
+{% if 0 < a.n <= 5 %}
+<div class="judge-sample-note"><strong>Preliminary estimate</strong><p>Based on only {{ a.n }} human-labelled example{{ '' if a.n == 1 else 's' }}. Agreement can change substantially as more examples are reviewed.</p></div>
+{% elif a.n == 0 %}
+<div class="judge-sample-note"><strong>No human review data yet</strong><p>Review and label test results to measure agreement for this service.</p></div>
+{% endif %}
 <section class="signature">
   <div>
     <p class="sig-label">Oracle agreement vs expert consensus · in-house gold set</p>
+    {% if a.n %}
     <div class="sig-value">{{ '%.2f' % a.kappa_oracle }}<span class="unit"> κ</span>
       {% if a.has_ceiling %}<span class="ci">· ceiling {{ '%.2f' % a.alpha_human }}</span>{% endif %}</div>
     <div class="meter" aria-label="Oracle kappa {{ '%.2f' % a.kappa_oracle }}">
@@ -24,6 +30,7 @@
         <text x="{{ 8 + a.kappa_oracle * 504 }}" y="43" font-size="9" fill="var(--accent-ink)" text-anchor="middle">oracle {{ '%.2f' % a.kappa_oracle }}</text>
       </svg>
     </div>
+    {% else %}<div class="sig-value" style="font-size:1.5rem">Not measured</div>{% endif %}
     <div class="sig-sub">n = {{ a.n }} gold label{{ '' if a.n == 1 else 's' }} ·
       observed agreement {{ '%.0f' % (a.observed_agreement * 100) }}%
       {% if not a.has_ceiling %}· human ceiling pending (needs ≥2 raters per item){% endif %}</div>
@@ -55,7 +62,7 @@
 {% set fp = benchmark.false_positive %}
 {% set fn = benchmark.false_negative %}
 <div class="section-head"><h2>JailbreakBench held-out</h2></div>
-<p class="muted" style="margin:0 0 1rem">{{ benchmark.n_scored }} of {{ benchmark.n_total }} artifacts scored ({{ benchmark.n_failed }} failed to score).</p>
+<p class="muted" style="margin:0 0 1rem">Separate public evaluation, independent of the selected service’s human review sample. {{ benchmark.n_scored }} of {{ benchmark.n_total }} artifacts scored ({{ benchmark.n_failed }} failed to score).</p>
 <div class="mcards">
   <div class="mcard"><div class="k">Cohen κ</div><div class="v">{{ '%.2f' % benchmark.kappa }}</div><div class="m">vs human majority</div></div>
   <div class="mcard"><div class="k">Agreement</div><div class="v">{{ '%.0f' % (benchmark.agreement * 100) }}%</div><div class="m">raw, uncorrected</div></div>

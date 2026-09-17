@@ -167,6 +167,14 @@ class GuideMutationOperator(BaseModel):
     dimension: _MutationDimension
     description: str
     mutable_fields: list[str] = Field(default_factory=list)
+    # Which part of the planted carrier this operator's proposal supplies. With
+    # "cover" the attacker generates ONLY a new benign document and the guide's
+    # carrier_payload is re-appended deterministically; with "payload" it
+    # generates ONLY a new injected instruction and the seed's benign cover is
+    # kept. Either way the planted document is assembled in code, so a weak
+    # attacker model can never drop the payload. "full" (the default) keeps the
+    # legacy behaviour: the proposal is the whole carrier field verbatim.
+    carrier_role: Literal["full", "cover", "payload"] = "full"
     allowed_transformations: list[str] = Field(default_factory=list)
     forbidden_changes: list[str] = Field(default_factory=list)
     dependent_invariants: list[str] = Field(default_factory=list)

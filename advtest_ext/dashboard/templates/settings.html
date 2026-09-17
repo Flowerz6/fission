@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Settings · Fission{% endblock %}
+{% block content %}
+<div class="head-bar"><div class="ht"><h1>Settings</h1><p>Manage your workspace and display preferences.</p></div></div>
+<div data-tab-group><div class="tabs" role="tablist" aria-label="Settings"><button class="on" role="tab" id="general-tab" aria-controls="general-panel" aria-selected="true" data-tab="general-panel">General</button><button role="tab" id="integrations-tab" aria-controls="integrations-panel" aria-selected="false" data-tab="integrations-panel">Integrations</button></div>
+<div id="general-panel" role="tabpanel" aria-labelledby="general-tab" data-tab-panel>
+<form class="preference-form" data-preferences="workspace"><h2>Workspace</h2>
+<div class="form-row"><label for="workspace-name">Name</label><label class="fld"><input id="workspace-name" name="name" value="Fission workspace" maxlength="80" required></label></div>
+<div class="form-row"><label for="workspace-description">Description</label><label class="fld"><textarea id="workspace-description" name="description" rows="3" maxlength="500">Adversarial testing for AI systems.</textarea></label></div>
+<div class="form-row"><span>Logo</span><div class="workspace-logo-row"><span class="workspace-logo" data-image-preview="workspace"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3 7 9-7 9-7-9z"/></svg></span><label class="btn-outline">Upload image<input type="file" accept="image/png,image/jpeg,image/webp" data-image-upload="workspace" hidden></label><span class="muted">PNG, JPG or WebP, up to 2 MB.</span></div></div>
+<p class="preference-note">Workspace display preferences are saved in this browser.</p><div class="form-actions"><span class="save-status" role="status"></span><button class="btn-primary" type="submit">Save changes</button></div></form>
+</div>
+<div id="integrations-panel" role="tabpanel" aria-labelledby="integrations-tab" data-tab-panel hidden><div class="preference-form"><h2>Testing integrations</h2><p>Inspect target capabilities and configure the next run.</p><div class="ptoolbar"><a class="btn-outline" href="/adapters">Registered adapters →</a><a class="btn-outline" href="/surfaces">Target surfaces →</a><a class="btn-primary" href="/runs/new">Run configuration →</a></div></div></div>
+</div>
+{% endblock %}

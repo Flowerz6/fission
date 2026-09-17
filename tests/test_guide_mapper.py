@@ -273,4 +273,4 @@ def test_mapper_enables_typed_gates_and_dual_replay() -> None:
     assert kwargs["invariants"] == ["keep the probe unchanged"]
     assert kwargs["hard_invariant_validation"] is True
     assert kwargs["semantic_validation_required"] is True
-    assert kwargs["replay_mode"] == "both"
+    assert kwargs["replay_mode"] == "strict"  # the seed is reproduced once

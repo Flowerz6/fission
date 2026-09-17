@@ -1,0 +1,27 @@
+<article class="run-finding-evidence" data-finding-id="{{ finding.id }}">
+  <header><span class="sevdot {{ finding.severity }}"><span class="d"></span>{{ finding.severity|capitalize }}</span><h3>{{ finding.title or trace.behavior_id }}</h3><p>{{ finding.description or 'No description recorded for this finding.' }}</p></header>
+  <div class="run-evidence-links"><a href="/findings/{{ finding.id }}?from_run={{ finding.run_id }}">Full finding details ↗</a><a href="/findings/{{ finding.id }}/report.docx">Export DOCX ↓</a>{% if finding.replay_bundle_path %}<a href="/findings/{{ finding.id }}/replay">Replay bundle ↓</a>{% endif %}</div>
+  <dl class="run-evidence-meta"><dt>Scenario</dt><dd>{{ objective_label(trace.behavior_id) }}</dd><dt>Method</dt><dd>{{ attack_label(trace.attack_name) }}</dd><dt>Verdict</dt><dd>{{ trace.verdict or 'Unscored' }}</dd></dl>
+  <div class="run-transcript-heading"><div><h4>Full transcript</h4><p class="muted">{{ conversation.turns|length if conversation else 1 }} turn{{ 's' if conversation and conversation.turns|length != 1 else '' }} · Conversation containing this finding</p></div><button type="button" class="btn-outline" data-transcript-jump>Jump to finding ↓</button></div>
+  <div class="run-transcript" role="region" aria-label="Full conversation transcript" tabindex="0">
+    {% if conversation %}
+    {% for turn in conversation.turns %}
+    <section class="transcript-turn{% if turn.trace_id == finding.trace_id %} finding-turn{% endif %}" {% if turn.trace_id == finding.trace_id %}data-finding-turn{% endif %}>
+      <div class="transcript-turn-heading"><strong>Turn {{ loop.index }}</strong><span class="pill {{ turn.verdict or 'unscored' }}">{{ 'Successful' if turn.verdict == 'success' else (turn.verdict or 'Unscored')|capitalize }}</span>{% if turn.trace_id == finding.trace_id %}<span class="transcript-finding-label">Finding recorded here</span>{% endif %}</div>
+      <h5>User prompt</h5><pre>{{ turn.prompt or 'No prompt recorded.' }}</pre>
+      <h5>Model response</h5><pre>{{ turn.response or 'No response recorded.' }}</pre>
+    </section>
+    {% endfor %}
+    {% else %}
+    <section class="transcript-turn finding-turn" data-finding-turn><strong>Turn 1 · Finding recorded here</strong><h5>User prompt</h5><pre>{{ trace.raw_request or 'No prompt recorded.' }}</pre><h5>Model response</h5><pre>{{ full_response or trace.raw_response or 'No response recorded.' }}</pre></section>
+    {% endif %}
+  </div>
+  <details class="run-evidence-extra"><summary>Reproduction and document content</summary>
+    {% from "_doc_content_panel.html" import doc_content_panel, attacker_reasoning_block %}
+    {{ doc_content_panel(trace) }}{{ attacker_reasoning_block(trace) }}
+    <p><a href="/traces/{{ trace.id }}">Open full trace ↗</a></p>
+  </details>
+  <details class="run-evidence-extra"><summary>Evaluation{% if trace.judge_scores %} ({{ trace.judge_scores|length }}){% endif %}</summary>
+    {% for score in trace.judge_scores %}<h4>{{ score.judge_name }} · {{ '%.2f'|format(score.score) }}</h4><p>{{ score.reasoning or 'No reasoning recorded.' }}</p>{% else %}<p>No judge scores recorded.</p>{% endfor %}
+  </details>
+</article>

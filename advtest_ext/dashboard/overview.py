@@ -13,7 +13,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from advtest_ext.storage.repository import list_findings, list_runs
+from advtest_ext.storage.repository import (
+    hydrate_missing_summaries,
+    list_findings,
+    list_runs,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from sqlalchemy.orm import Session
@@ -86,7 +90,8 @@ def _drift_counts(traces: list[Any]) -> tuple[int, int]:
 
 def build_overview(session: Session, *, run_limit: int = 200) -> OverviewStats:
     """Aggregate cross-run metrics for the landing page."""
-    runs = [run for run in list_runs(session, limit=run_limit) if run_has_success(run)]
+    all_runs = hydrate_missing_summaries(session, list_runs(session, limit=run_limit))
+    runs = [run for run in all_runs if run_has_success(run)]
     findings = list_findings(session, limit=10_000)
 
     stats = OverviewStats()

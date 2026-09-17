@@ -1,54 +1,17 @@
-{# Attempt timeline. Fastest poll (2 s) since this is the section
-   that grows visibly as the run progresses, new trace rows appear
-   here first. While the run is in flight the section is OPEN by
-   default so the audience sees rows arriving; once finished it
-   collapses back to a click-to-expand details element. #}
-<section id="run-timeline"
-         {% if not run.finished_at %}
-         hx-get="/runs/{{ run.id }}/_timeline"
-         hx-trigger="every 2s"
-         hx-swap="outerHTML"
-         {% endif %}>
-  <details class="timeline-details" {% if not run.finished_at %}open{% endif %}>
-    <summary><h2 style="display: inline; margin: 0;">Attempt timeline</h2> <span class="muted">({{ traces|length }} traces{% if not run.finished_at %}, live{% endif %})</span></summary>
-    <table style="margin-top: 1rem;">
-      <thead>
-        <tr>
-          <th>#</th><th>Time</th><th>Attack</th><th>Technique</th>
-          <th>Behaviour</th><th>Depth</th><th>Verdict</th><th>Response</th>
+<section id="run-timeline" class="run-attempts"
+  {% if run_is_active(run) %}hx-get="/runs/{{ run.id }}/_timeline" hx-trigger="every 2s [!document.querySelector('#run-timeline').matches(':focus-within, :hover')]" hx-swap="outerHTML"{% endif %}>
+  <details class="timeline-details" {% if run_is_active(run) %}open{% endif %}>
+    <summary><h2 style="display:inline;margin:0">Attempts</h2> <span class="muted">({{ traces|length }})</span></summary>
+    <div class="table-scroll"><table class="run-attempts-table">
+      <thead><tr><th>#</th><th>Time</th><th>Method</th><th>Result</th><th>Evidence</th></tr></thead>
+      <tbody>{% for t in traces %}
+        <tr><td>{{ loop.index }}</td><td class="muted">{{ t.timestamp.strftime('%H:%M:%S') }}</td><td>{{ attack_label(t.attack_name) }}</td><td><span class="pill {{ t.verdict or 'unscored' }}">{{ 'Successful' if t.verdict == 'success' else (t.verdict or 'Unscored')|capitalize }}</span></td>
+          <td><details class="attempt-evidence"><summary>View attempt</summary>
+            <dl class="run-evidence-meta"><dt>Objective</dt><dd>{{ objective_label(t.behavior_id) }}</dd><dt>Technique</dt><dd>{{ t.technique_id if t.technique_id and t.technique_id|trim not in ['-', '—', ','] else 'Not recorded' }}</dd><dt>Depth</dt><dd>{{ t.depth }}</dd></dl>
+            <h4>User prompt</h4><pre>{{ t.raw_request or 'No prompt recorded.' }}</pre><h4>Model response</h4><pre>{{ full_responses.get(t.id) or t.raw_response or 'No response recorded.' }}</pre><a href="/traces/{{ t.id }}">Full trace details →</a>
+          </details></td>
         </tr>
-      </thead>
-      <tbody>
-        {% for t in traces %}
-        {# Trace rows link via the # column. Keeping the link in one
-           column (rather than wrapping the whole row) means hovering
-           the technique / behaviour cells still selects text cleanly.
-           The Response cell holds a <details> with the full Gemini
-           output, intercepted body when available, falls back to
-           the rendered side-panel capture. #}
-        {% set full = full_responses.get(t.id) if full_responses else None %}
-        {% set response_text = full or t.raw_response or '' %}
-        <tr>
-          <td><a href="/traces/{{ t.id }}" title="open trace detail">{{ loop.index }}</a></td>
-          <td class="muted">{{ t.timestamp.strftime('%H:%M:%S') }}</td>
-          <td>{{ t.attack_name }}</td>
-          <td>{{ t.technique_id or ', ' }}</td>
-          <td>{{ t.behavior_id }}</td>
-          <td>{{ t.depth }}</td>
-          <td><span class="pill {{ t.verdict or 'refused' }}">{{ t.verdict or '-' }}</span></td>
-          <td>
-            {% if response_text %}
-            <details>
-              <summary class="muted">show ({{ response_text|length }} chars{% if full %}, intercepted{% endif %})</summary>
-              <pre style="white-space: pre-wrap; max-height: 30em; overflow-y: auto; margin: 0.5em 0 0; font-size: 0.85em;">{{ response_text }}</pre>
-            </details>
-            {% else %}
-            <span class="muted"> </span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+      {% endfor %}</tbody>
+    </table></div>
   </details>
 </section>

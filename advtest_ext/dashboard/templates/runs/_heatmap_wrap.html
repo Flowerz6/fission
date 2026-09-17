@@ -3,14 +3,16 @@
    wrapper exists only to give HTMX a stable target id and to opt
    into polling while the run is in flight. #}
 <section id="run-heatmap"
-         {% if not run.finished_at %}
+         {% if run_is_active(run) %}
          hx-get="/runs/{{ run.id }}/_heatmap"
          hx-trigger="every 5s"
          hx-swap="outerHTML"
          {% endif %}>
+  {% if show_technique_heatmap %}<details class="run-analysis"><summary>Technique and payload breakdown</summary>
   <div class="section-head">
     <h2>Heatmap, technique &times; payload family</h2>
     <span class="muted">Cell colour intensity scales with ASR. Hover for absolute counts.</span>
   </div>
-  {% include "_heatmap.html" %}
+  {% with heatmap=technique_heatmap %}{% include "_heatmap.html" %}{% endwith %}
+  </details>{% endif %}
 </section>

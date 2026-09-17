@@ -108,11 +108,11 @@ def live_test_catalog() -> tuple[LiveTestSpec, ...]:
     return (
         LiveTestSpec(
             id="guided-workspace-playbook",
-            title="Multi-turn playbook assessment",
+            title="Multi-turn guide assessment",
             surface="Google Workspace",
             method="Guided branching exploration",
             description=(
-                "Runs a selected assessment playbook through a newly created Workspace "
+                "Runs a selected guide through a newly created Workspace "
                 "surface with a configurable exploration width."
             ),
             prerequisites=(
@@ -253,7 +253,7 @@ class LiveTestController:
             raise ValueError("Assessment services are not configured on this deployment")
         if test_id == "guided-workspace-playbook":
             if playbook not in self._playbooks:
-                raise ValueError("select a valid assessment playbook")
+                raise ValueError("select a valid guide")
             factor = 1 if branching_factor is None else branching_factor
             if not 1 <= factor <= 5:
                 raise ValueError("branching factor must be between 1 and 5")

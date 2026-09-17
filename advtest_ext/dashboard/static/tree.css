@@ -5,9 +5,9 @@
    canvas + node-detail). Loaded only by the tree templates
    (runs/_tree_live.html), never by base.html, so the dashboard's global
    redesign owns base.html and this owns the tree component. Layout chrome
-   leans on the shared design tokens (--surface, --border, --accent, …); the
-   node status palette is hard-committed to the approved hexes below so the
-   tree reads identically in light and dark.
+   leans on the shared design tokens (--surface, --border, --ink, --ok, …).
+   Nodes are HTML cards (.tn) positioned over the canvas by tree.js, so they
+   use the same type and status colours as the rest of the dashboard.
    ============================================================================ */
 
 .tree-explorer {
@@ -17,81 +17,85 @@
      the graph then sits off-centre/clipped and shifts whenever the canvas
      re-renders on scroll or zoom. minmax(0,…) lets the column shrink to fit. */
   grid-template-columns: 264px minmax(0, 1fr);
-  gap: 1px;
-  background: var(--border, #dbe2df);
-  border: 1px solid var(--border, #dbe2df);
-  border-radius: var(--radius, 4px);
+  background: var(--surface, #fbfaf6);
+  border: 1px solid var(--border-strong, #dedbd0);
+  border-radius: var(--radius, 10px);
   overflow: hidden;
   margin-bottom: 1.35rem;
 }
 .tree-explorer.single-cell { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 760px) {
-  .tree-explorer { grid-template-columns: 1fr; }
+  .tree-explorer { grid-template-columns: minmax(0, 1fr); }
+  .tree-explorer .cell-nav { border-right: none; border-bottom: 1px solid var(--border, #eae7dd); max-height: 220px; }
 }
 
 /* ---- navigator ---------------------------------------------------------- */
 .tree-explorer .cell-nav {
-  background: var(--surface, #fff);
-  max-height: 600px;
+  border-right: 1px solid var(--border, #eae7dd);
+  max-height: 640px;
   overflow-y: auto;
 }
 .tree-explorer .cell-nav-group {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.6rem;
+  font-family: var(--sans);
+  font-size: 0.64rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted, #6a7773);
-  padding: 0.7rem 0.85rem 0.35rem;
+  letter-spacing: 0.08em;
+  color: var(--muted, #8a867b);
+  padding: 0.8rem 0.95rem 0.4rem;
 }
 .tree-explorer .cell-item {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.1rem 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.12rem 0.6rem;
   width: 100%;
   text-align: left;
   background: none;
   border: none;
   border-left: 2px solid transparent;
-  border-bottom: 1px solid var(--border, #dbe2df);
-  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--border, #eae7dd);
+  padding: 0.65rem 0.95rem 0.7rem;
   cursor: pointer;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--sans);
+  transition: background 0.15s ease;
 }
-.tree-explorer .cell-item:hover { background: var(--surface-2, #f4f7f6); }
+.tree-explorer .cell-item:hover { background: var(--surface-2, #f1efe7); }
+.tree-explorer .cell-item:focus-visible { outline: 2px solid var(--ink, #1a1a18); outline-offset: -2px; }
 .tree-explorer .cell-item.active {
-  background: var(--accent-soft, rgba(12, 92, 88, 0.09));
-  border-left-color: var(--accent, #0c5c58);
+  background: var(--surface-2, #f1efe7);
+  border-left-color: var(--ink, #1a1a18);
 }
 .tree-explorer .cell-item .ci-b {
   grid-column: 1;
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--fg, #0f1c1a);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink, #1a1a18);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tree-explorer .cell-item .ci-t {
   grid-column: 1;
-  font-size: 0.67rem;
-  color: var(--muted, #6a7773);
+  font-size: 0.72rem;
+  color: var(--muted, #8a867b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tree-explorer .cell-item .ci-n {
   grid-column: 2;
   grid-row: 1 / span 2;
   align-self: center;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--fg-soft, #3f4d4a);
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--ink-soft, #48453d);
   font-variant-numeric: tabular-nums;
 }
 .tree-explorer .cell-item .ci-bar {
   grid-column: 1 / -1;
-  height: 4px;
-  margin-top: 0.25rem;
-  background: var(--surface-2, #f4f7f6);
+  height: 3px;
+  margin-top: 0.4rem;
+  background: var(--border, #eae7dd);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -103,59 +107,35 @@
 
 /* ---- viewer ------------------------------------------------------------- */
 .tree-viewer {
-  background: var(--surface, #fff);
+  background: var(--surface, #fbfaf6);
   min-height: 300px;
   min-width: 0; /* allow the grid track to constrain the Cytoscape canvas */
 }
 .tree-panel { display: none; }
 .tree-panel.active { display: block; }
 .tree-panel-head {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.78rem;
-  padding: 0.6rem 0.9rem;
-  border-bottom: 1px solid var(--border, #dbe2df);
-  background: var(--surface-2, #f4f7f6);
+  font-family: var(--sans);
+  padding: 0.8rem 1.1rem;
+  border-bottom: 1px solid var(--border, #eae7dd);
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  align-items: baseline;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
-.tree-panel-head code {
-  background: transparent;
-  border: none;
-  padding: 0;
-  color: var(--accent, #0c5c58);
-  font-family: var(--font-mono, ui-monospace, monospace);
-}
-
-/* ---- Cytoscape canvas + controls --------------------------------------- */
-.tree-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.55rem 0.9rem 0;
-}
-.tree-btn {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.72rem;
+.tree-panel-head .th-title {
+  font-size: 0.86rem;
   font-weight: 600;
-  color: var(--fg-soft, #3f4d4a);
-  background: var(--surface, #fff);
-  border: 1px solid var(--border-strong, #c6cfcc);
-  border-radius: var(--radius-sm, 2px);
-  padding: 0.3rem 0.7rem;
-  cursor: pointer;
+  color: var(--ink, #1a1a18);
+  overflow-wrap: anywhere;
 }
-.tree-btn:hover { color: var(--accent, #0c5c58); border-color: var(--accent, #0c5c58); }
-.tree-live-flag {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.64rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted, #6a7773);
+.tree-panel-head .th-x { color: var(--muted-2, #b3aea1); font-weight: 400; }
+.tree-panel-head .th-count {
+  font-size: 0.76rem;
+  color: var(--muted, #8a867b);
+  font-variant-numeric: tabular-nums;
 }
-.tree-live-flag[data-live="1"] { color: #b23127; }
-
+/* ---- Cytoscape canvas + controls --------------------------------------- */
+.cy-wrap { position: relative; }
 .cy-mount {
   /* Cytoscape appends its <canvas> layers as position:absolute; without a
      positioned container they anchor to a wrong ancestor and drift as the page
@@ -163,82 +143,231 @@
   position: relative;
   overflow: hidden;
   width: 100%;
-  height: 420px;
-  margin: 0.55rem 0.9rem;
-  border: 1px solid var(--border, #dbe2df);
-  border-radius: var(--radius-sm, 2px);
-  background:#fbfcfd;
+  height: 460px;
+  border-bottom: 1px solid var(--border, #eae7dd);
+  background: var(--bg, #f5f4ee);
+}
+.tree-toolbar {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
+  display: flex;
+  border: 1px solid var(--border-strong, #dedbd0);
+  border-radius: var(--r-sm, 6px);
+  background: var(--raised, #fff);
+  overflow: hidden;
+}
+.tree-btn {
+  font-family: var(--sans);
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink-soft, #48453d);
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border, #eae7dd);
+  min-width: 30px;
+  padding: 0.45rem 0.65rem;
+  cursor: pointer;
+}
+.tree-btn:first-child { border-left: none; }
+.tree-btn:hover { color: var(--ink, #1a1a18); background: var(--surface-2, #f1efe7); }
+.tree-btn:focus-visible { outline: 2px solid var(--ink, #1a1a18); outline-offset: -2px; }
+
+/* ---- node cards ---------------------------------------------------------
+   One layer, transformed to follow Cytoscape's pan/zoom; cards sit at their
+   node's model position. pointer-events:none — Cytoscape's (invisible) node
+   underneath is the hit target. Every rule is scoped to .cy-cards: this
+   stylesheet loads on every page and a bare .tn would hit calibration's
+   true-negative cell. Sizes must match NODE_W/NODE_H/ROOT_W/ROOT_H in
+   tree.js. */
+.cy-cards {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 10;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.cy-cards .tn {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 232px;
+  height: 72px;
+  padding: 0 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  font-family: var(--sans);
+  color: var(--ink, #1a1a18);
+  background: var(--raised, #fff);
+  border: 1px solid var(--border-strong, #dedbd0);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.cy-cards .tn > span { display: block; max-width: 100%; }
+.cy-cards .tn.hover { border-color: var(--muted, #8a867b); }
+.cy-cards .tn.sel { border-color: var(--ink, #1a1a18); box-shadow: 0 0 0 1px var(--ink, #1a1a18); }
+.cy-cards .tn.enter { animation: tn-enter 0.3s ease both; }
+@keyframes tn-enter { from { opacity: 0; } }
+
+/* Names are built server-side to fit two lines (tree._NAME_LIMIT). */
+.cy-cards .tn .tn-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.cy-cards .tn .tn-meta {
+  font-size: 10.5px;
+  color: var(--ink-soft, #48453d);
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status = the card's colour, nothing else. */
+.cy-cards .tn-success { background: #dcebe0; border-color: #9cc4aa; }
+.cy-cards .tn-partial { background: #f3e6c8; border-color: #d9bb7c; }
+.cy-cards .tn-pruned { background: transparent; border-style: dashed; }
+.cy-cards .tn-pruned .tn-title { color: var(--muted, #8a867b); }
+
+/* The objective the tree grows from: same card family as the attempts, set
+   apart only by the centred serif title. */
+.cy-cards .tn-root {
+  width: 320px;
+  height: 58px;
+  gap: 1px;
+}
+.cy-cards .tn-root .tn-k {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted, #8a867b);
+}
+.cy-cards .tn-root .tn-title {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.25;
+  max-width: 100%;
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cy-cards .tn.enter { animation: none; }
 }
 
 .tree-legend {
   display: flex;
-  gap: 1rem;
+  gap: 1.1rem;
   flex-wrap: wrap;
-  padding: 0 0.95rem 0.4rem;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.66rem;
-  color: var(--muted, #6a7773);
+  padding: 0.65rem 1.1rem;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  color: var(--muted, #8a867b);
+  border-bottom: 1px solid var(--border, #eae7dd);
 }
-.tree-legend .lg { display: inline-flex; align-items: center; gap: 0.35rem; }
+.tree-legend .lg { display: inline-flex; align-items: center; gap: 0.4rem; }
 .tree-legend .sw {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 11px;
   border-radius: 3px;
   display: inline-block;
+  background: var(--raised, #fff);
+  border: 1px solid var(--border-strong, #dedbd0);
 }
+.tree-legend .sw.success { background: #dcebe0; border-color: #9cc4aa; }
+.tree-legend .sw.partial { background: #f3e6c8; border-color: #d9bb7c; }
+.tree-legend .ln { width: 16px; height: 0; border-top: 1.5px solid var(--ink, #1a1a18); display: inline-block; }
+.tree-legend .ln.win { border-top-color: var(--ok, #3e8e5b); }
+.tree-legend .ln.dead { border-top: 1.5px dashed #b9b4a6; }
 
 /* ---- node detail -------------------------------------------------------- */
 .tree-detail {
-  margin: 0 0.9rem 0.9rem;
-  border: 1px solid var(--border, #dbe2df);
-  border-radius: var(--radius-sm, 2px);
-  background: var(--surface, #fff);
-  padding: 0.85rem 1rem;
+  padding: 1.1rem 1.1rem 1.2rem;
+  font-family: var(--sans);
 }
 .tree-detail .td-h {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  align-items: baseline;
+  gap: 0.7rem;
   flex-wrap: wrap;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.6rem;
 }
 .tree-detail .td-t {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--fg, #0f1c1a);
+  font-family: var(--serif);
+  font-size: 1.3rem;
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--ink, #1a1a18);
+  overflow-wrap: anywhere;
 }
-.tree-detail .td-pill {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.66rem;
-  font-weight: 600;
-  padding: 0.12rem 0.5rem;
-  border-radius: var(--radius-sm, 2px);
-  border: 1px solid transparent;
-}
+.tree-detail .td-h .pill { align-self: center; }
 .tree-detail .td-link {
   margin-left: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink, #1a1a18);
+  white-space: nowrap;
+}
+.tree-detail .td-approach {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--ink-soft, #48453d);
+  margin: 0 0 0.8rem;
+  max-width: 80ch;
 }
 .tree-detail .td-hint {
-  font-size: 0.82rem;
-  color: var(--muted, #6a7773);
+  font-size: 0.84rem;
+  color: var(--muted, #8a867b);
   margin: 0;
+  max-width: 70ch;
 }
+.tree-detail .td-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  margin: 0 0 0.9rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--border, #eae7dd);
+  border-bottom: 1px solid var(--border, #eae7dd);
+}
+.tree-detail .td-meta dt { font-size: 0.7rem; color: var(--muted, #8a867b); margin-bottom: 0.1rem; }
+.tree-detail .td-meta dd { margin: 0; font-size: 0.82rem; color: var(--ink, #1a1a18); font-variant-numeric: tabular-nums; }
 .tree-detail .td-transcript {
-  background: var(--surface-2, #f4f7f6);
-  border: 1px solid var(--border, #dbe2df);
-  border-radius: var(--radius-sm, 2px);
-  padding: 0.6rem 0.75rem;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.78rem;
-  line-height: 1.5;
-  max-height: 280px;
+  max-height: 320px;
   overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
+  border: 1px solid var(--border, #eae7dd);
+  border-radius: var(--r-sm, 6px);
+  background: var(--raised, #fff);
 }
-.tree-detail .td-transcript > div { padding: 0.15rem 0; }
-.tree-detail .td-transcript .u { color: var(--accent, #0c5c58); font-weight: 600; }
-.tree-detail .td-transcript .a { color: #1c7a45; font-weight: 600; }
+.tree-detail .td-turn { padding: 0.75rem 0.95rem; }
+.tree-detail .td-turn + .td-turn { border-top: 1px solid var(--border, #eae7dd); }
+.tree-detail .td-k {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted, #8a867b);
+  margin-bottom: 0.3rem;
+}
+.tree-detail .td-v {
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--ink-soft, #48453d);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
