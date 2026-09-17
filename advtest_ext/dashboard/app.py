@@ -53,12 +53,14 @@ from advtest_ext.dashboard.live_tests import LiveTestController
 from advtest_ext.dashboard.presentation import (
     attack_label,
     finding_method,
+    finding_severity,
     finding_title,
     objective_label,
     run_display_name,
     run_method_label,
     run_surface_key,
     run_surface_label,
+    severity_rank,
     surface_label,
 )
 from advtest_ext.dashboard.run_actions import (
@@ -763,6 +765,7 @@ def create_app(
     templates.env.globals["objective_label"] = objective_label
     templates.env.globals["finding_title"] = finding_title
     templates.env.globals["finding_method"] = finding_method
+    templates.env.globals["finding_severity"] = finding_severity
     templates.env.globals["target_surface_label"] = lambda name: target_identity(name)[2]
 
     # Cache-busting version for the tree component's static assets. tree.js/
@@ -1674,26 +1677,30 @@ def create_app(
         severity = severity or None
         run_id = run_id or None
         behavior_id = behavior_id or None
-        findings = list_findings(
-            session,
-            severity=severity,
-            run_id=run_id,
-            behavior_id=behavior_id,
-        )
-        severity_order = {"critical": 0, "high": 1, "med": 2, "medium": 2, "low": 3}
+        # Severity is derived (stored value is a constant "med"), so filter and
+        # sort on the derived value in Python rather than in the SQL WHERE.
+        findings = list_findings(session, run_id=run_id, behavior_id=behavior_id)
+        fsev = {f.id: finding_severity(f) for f in findings}
+        sev_counts = {s: 0 for s in ("critical", "high", "med", "low")}
+        for s in fsev.values():
+            sev_counts[s] = sev_counts.get(s, 0) + 1
+        findings_total = len(findings)
+        if severity:
+            findings = [f for f in findings if fsev[f.id] == severity]
         findings.sort(
             key=lambda f: (
-                severity_order.get((f.severity or "").lower(), 9),
+                severity_rank(fsev[f.id]),
                 -(max((s.score for s in f.trace.judge_scores), default=0.0) if f.trace else 0.0),
             )
         )
-        run_options = list_finding_run_ids(session)
-        # Behavior dropdown is scoped to the selected run when one is
-        # picked, so "within the run by behaviour" only offers
-        # behaviours that actually have findings in that run.
+        # Filter dropdowns: readable run names + objective labels, value = id.
+        run_options = [
+            (rid, run_display_name(run) if run else rid)
+            for rid in list_finding_run_ids(session)
+            for run in [get_run(session, rid)]
+        ]
+        # Behaviour dropdown scoped to the selected run.
         behavior_options = list_finding_behavior_ids(session, run_id=run_id)
-        # If the request looks like an HTMX partial, return the table
-        # only — keeps the filter swap snappy.
         finding_seq = finding_run_seq_map(session, [f.run_id for f in findings])
         partial = request.headers.get("hx-request") == "true"
         template = "findings/_table.html" if partial else "findings/index.html"
@@ -1710,6 +1717,8 @@ def create_app(
                 "surface_label": surface_label,
                 "run_display_name": run_display_name,
                 "finding_seq": finding_seq,
+                "sev_counts": sev_counts,
+                "findings_total": findings_total,
             },
         )
 
@@ -1743,6 +1752,13 @@ def create_app(
                     session.refresh(finding)
             except Exception:  # pragma: no cover - defensive; never break the page
                 pass
+        # Prev/next within the same run (ordered by promotion), so you can walk a
+        # run's findings without going back to the list.
+        run_seq = finding_run_seq_map(session, [finding.run_id])
+        ordered = sorted(run_seq, key=lambda fid: run_seq[fid])
+        here = ordered.index(finding.id) if finding.id in ordered else -1
+        prev_finding = ordered[here - 1] if here > 0 else None
+        next_finding = ordered[here + 1] if 0 <= here < len(ordered) - 1 else None
         return templates.TemplateResponse(
             request,
             "findings/show.html",
@@ -1751,7 +1767,9 @@ def create_app(
                 "trace": trace,
                 "full_response": full_response,
                 "authenticity": finding.authenticity or None,
-                "finding_seq_n": finding_run_seq_map(session, [finding.run_id]).get(finding.id),
+                "finding_seq_n": run_seq.get(finding.id),
+                "prev_finding": prev_finding,
+                "next_finding": next_finding,
                 "run_display_name": run_display_name,
                 "return_to_run": request.query_params.get("from_run") == finding.run_id,
             },

@@ -98,10 +98,12 @@ def build_overview(session: Session, *, run_limit: int = 200) -> OverviewStats:
     stats.total_runs = len(runs)
     stats.recent_runs = runs[:8]
 
-    # Severity histogram.
+    # Severity histogram — derived (stored severity is a constant "med").
+    from advtest_ext.dashboard.presentation import finding_severity
+
     sev: dict[str, int] = {k: 0 for k in _SEVERITY_ORDER}
     for f in findings:
-        key = (getattr(f, "severity", "") or "med").lower()
+        key = finding_severity(f)
         sev[key] = sev.get(key, 0) + 1
     stats.findings_by_severity = sev
     stats.total_findings = len(findings)

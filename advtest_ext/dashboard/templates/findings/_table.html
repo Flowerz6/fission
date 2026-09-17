@@ -1,20 +1,28 @@
+{% set total = findings_total if findings_total is defined else findings|length %}
+{% if total %}
+<div class="sev-summary">
+  <span class="sev-total">{{ total }} finding{{ 's' if total != 1 }}</span>
+  {% for s in ('critical', 'high', 'med', 'low') %}
+  <a class="sev-chip sevdot {{ s }}{{ ' on' if severity == s }}" href="/findings?severity={{ '' if severity == s else s }}{% if run_id %}&run_id={{ run_id }}{% endif %}{% if behavior_id %}&behavior_id={{ behavior_id }}{% endif %}{% if selected_service %}&service={{ selected_service.key }}{% endif %}"><span class="d"></span>{{ s|capitalize }} <b>{{ (sev_counts or {}).get(s, 0) }}</b></a>
+  {% endfor %}
+</div>
+{% endif %}
 {% if findings %}
 <div class="table-scroll"><table>
   <thead>
     <tr>
-      <th class="cell-check"><input type="checkbox" aria-label="Select all" data-select-all></th>
       <th>Finding</th><th>Severity</th><th>Target</th><th>Run</th><th>Detected</th><th></th>
     </tr>
   </thead>
   <tbody>
     {% for f in findings %}
+    {% set sev = finding_severity(f) %}
     <tr>
-      <td class="cell-check"><input class="rowcheck" type="checkbox" aria-label="Select finding"></td>
       <td>
         <a class="fname" href="/findings/{{ f.id }}">{{ finding_title(f) }}</a>{% if f.authenticity and f.authenticity.verdict == 'real' %}<span class="authn-chip authn-real" title="{{ f.authenticity.reasoning }}">Corroborated · {{ f.authenticity.n_runs }} runs</span>{% endif %}
         {% set m = finding_method(f) %}{% if m %}<div class="fmeta muted">{{ m }}</div>{% endif %}
       </td>
-      <td><span class="sevdot {{ f.severity }}"><span class="d"></span>{{ f.severity|capitalize }}</span></td>
+      <td><span class="sevdot {{ sev }}"><span class="d"></span>{{ sev|capitalize }}</span></td>
       <td>{{ surface_label(f.trace.target_name) if f.trace else "Unknown" }}</td>
       <td class="muted"><a class="frun mono" href="/runs/{{ f.run_id }}" title="{{ run_display_name(f.run) if f.run else '' }}">{{ f.run_id }}</a>{% if finding_seq.get(f.id) %} <span class="frun-n">· #{{ finding_seq[f.id] }}</span>{% endif %}</td>
       <td class="muted">{{ f.promoted_at.strftime('%Y-%m-%d %H:%M') if f.promoted_at else '—' }}</td>
@@ -23,7 +31,7 @@
     {% endfor %}
   </tbody>
 </table></div>
-<div class="pager"><span class="info">Showing {{ findings|length }} finding{{ 's' if findings|length != 1 else '' }}</span></div>
+<div class="pager"><span class="info">Showing {{ findings|length }} finding{{ 's' if findings|length != 1 else '' }}{% if severity %} · {{ severity|capitalize }} severity{% endif %}</span></div>
 {% else %}
 <div class="empty-state">No findings match this filter.</div>
 {% endif %}

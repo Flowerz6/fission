@@ -26,17 +26,16 @@
     <option value="{{ s }}" {% if severity == s %}selected{% endif %}>{{ s|capitalize }}</option>
     {% endfor %}
   </select>
-  <select class="selectbox" name="run_id" aria-label="Run"
->
+  <select class="selectbox" name="run_id" aria-label="Run">
     <option value="">All runs</option>
-    {% for r in run_options %}
-    <option value="{{ r }}" {% if run_id == r %}selected{% endif %}>{{ r }}</option>
+    {% for rid, rname in run_options %}
+    <option value="{{ rid }}" {% if run_id == rid %}selected{% endif %}>{{ rname }}</option>
     {% endfor %}
   </select>
   <select class="selectbox" name="behavior_id" aria-label="Scenario">
     <option value="">All scenarios</option>
     {% for b in behavior_options %}
-    <option value="{{ b }}" {% if behavior_id == b %}selected{% endif %}>{{ b }}</option>
+    <option value="{{ b }}" {% if behavior_id == b %}selected{% endif %}>{{ objective_label(b) }}</option>
     {% endfor %}
   </select>
 <noscript><button class="btn-outline" type="submit">Apply filters</button></noscript></form>

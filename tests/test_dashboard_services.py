@@ -103,7 +103,7 @@ def test_service_selection_scopes_collections_and_persists(service_engine):
         assert {r.id for r in client.get("/runs").context["runs"]} == {"gemini-one", "gemini-two"}
         findings = client.get("/findings")
         assert len(findings.context["findings"]) == 4
-        assert set(findings.context["run_options"]) == {"gemini-one", "gemini-two"}
+        assert {rid for rid, _ in findings.context["run_options"]} == {"gemini-one", "gemini-two"}
         assert set(findings.context["behavior_options"]) == {
             "scenario-gemini-one",
             "scenario-gemini-two",

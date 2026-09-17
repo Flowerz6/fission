@@ -2,9 +2,66 @@
 
 from __future__ import annotations
 
+import functools
 from typing import Any
 
 from advtest_ext.dashboard.services import target_identity
+
+# Severity is stored as a constant "med" on every finding at promotion time, so
+# derive the real value at display from the behaviour catalogue (the authored
+# per-behaviour severity in seed_behaviors.yaml). This is what makes the Severity
+# column, filter and sort actually discriminate.
+_SEVERITY_RANK = {"critical": 0, "high": 1, "med": 2, "medium": 2, "low": 3}
+_SEVERITIES = ("critical", "high", "med", "low")
+
+# Guide-only behaviours aren't in the seed catalogue; classify by objective word.
+_SEVERITY_KEYWORDS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("exfil", "credential", "keylogger", "malware", "secret", "pii"), "high"),
+    (("phish", "rogue", "payload", "insecure_code"), "high"),
+    (
+        (
+            "leak",
+            "disclosure",
+            "skill",
+            "system_prompt",
+            "manifest",
+            "schema",
+            "registry",
+            "reasoning",
+        ),
+        "med",
+    ),
+    (("format", "language", "translate", "style", "summari"), "low"),
+)
+
+
+@functools.lru_cache(maxsize=1)
+def _behavior_severity_map() -> dict[str, str]:
+    try:
+        from advtest_ext.core.models import load_seed_behaviors
+
+        return {b.id: str(b.severity) for b in load_seed_behaviors()}
+    except Exception:  # pragma: no cover - defensive; falls back to keywords
+        return {}
+
+
+def finding_severity(finding: Any) -> str:
+    """Real severity for a finding, from the behaviour catalogue, else a keyword
+    rule for guide-only behaviours. Returns one of critical/high/med/low."""
+    trace = getattr(finding, "trace", None)
+    bid = (getattr(trace, "behavior_id", "") if trace else "") or ""
+    sev = _behavior_severity_map().get(bid)
+    if sev:
+        return "med" if sev == "medium" else sev
+    low = bid.lower()
+    for keys, s in _SEVERITY_KEYWORDS:
+        if any(k in low for k in keys):
+            return s
+    return "med"
+
+
+def severity_rank(sev: str) -> int:
+    return _SEVERITY_RANK.get((sev or "").lower(), 9)
 
 
 def surface_key(target_name: str) -> str:
