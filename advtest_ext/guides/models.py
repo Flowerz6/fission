@@ -58,7 +58,9 @@ _App = Literal[
     "tool_use_agent",
     "agentdojo",
 ]
-_AccountRole = Literal["recipient", "attacker_sender", "attacker", "victim", "self"]
+_AccountRole = Literal[
+    "recipient", "attacker_sender", "outlook_sender", "attacker", "victim", "self"
+]
 _MutationDimension = Literal[
     "framing",
     "turn_order",

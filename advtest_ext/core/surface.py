@@ -58,6 +58,7 @@ Region = Literal[
 AccountRole = Literal[
     "recipient",  # the victim — Gemini operates on their behalf
     "attacker_sender",  # an account the attacker controls; plants content into the recipient's surfaces
+    "outlook_sender",  # attacker account on Outlook.com, driven purely through the web UI (no OAuth)
     "bystander",  # third-party account referenced by the Recipe but neither attacker nor victim
 ]
 

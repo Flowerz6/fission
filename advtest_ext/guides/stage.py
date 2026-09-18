@@ -31,6 +31,7 @@ _ROLE = {
     "self": "recipient",
     "attacker": "attacker_sender",
     "attacker_sender": "attacker_sender",
+    "outlook_sender": "outlook_sender",
     "bystander": "bystander",
 }
 
@@ -44,8 +45,13 @@ _ROLE = {
 _ROLE_PROFILE_ENV: dict[str, tuple[str, str]] = {
     "recipient": ("ADVTEST_PLAYWRIGHT_PROFILE_DIR", "playwright-profile"),
     "attacker_sender": ("ADVTEST_PROFILE_ATTACKER_SENDER", "profile-attacker-sender"),
+    "outlook_sender": ("ADVTEST_PROFILE_OUTLOOK_SENDER", "profile-outlook-sender"),
     "bystander": ("ADVTEST_PROFILE_BYSTANDER", "profile-bystander"),
 }
+# OAuth token conventions — only for roles whose plant is an *API* op
+# (e.g. gmail.send_email). A role absent here is UI-mode-only: it is driven
+# through a signed-in Chrome profile (e.g. outlook_sender via outlook.com web
+# UI), needs no token, and is provisioned/verified by its profile_dir instead.
 _ROLE_TOKEN_ENV: dict[str, tuple[str, str]] = {
     "recipient": ("ADVTEST_OAUTH_TOKEN_CACHE", "oauth-token.json"),
     "attacker_sender": ("ADVTEST_OAUTH_TOKEN_ATTACKER_SENDER", "oauth-token-attacker-sender.json"),
@@ -88,9 +94,15 @@ def build_setup_account_pool(guide: Guide) -> AccountPool | None:
     slots: list[AccountSlot] = []
     for role in sorted(roles):
         prof_env, prof_default = _ROLE_PROFILE_ENV[role]
-        tok_env, tok_default = _ROLE_TOKEN_ENV[role]
         profile_dir = Path(os.environ.get(prof_env) or (_ADVTEST_HOME / prof_default))
-        token_cache = Path(os.environ.get(tok_env) or (_ADVTEST_HOME / tok_default))
+        # UI-mode-only roles (no token convention) carry no OAuth cache — the
+        # signed-in profile IS the credential.
+        token_env = _ROLE_TOKEN_ENV.get(role)
+        token_cache = (
+            Path(os.environ.get(token_env[0]) or (_ADVTEST_HOME / token_env[1]))
+            if token_env is not None
+            else None
+        )
         slots.append(
             AccountSlot(
                 role=cast("AccountRole", role),
@@ -106,12 +118,17 @@ def preflight_setup_accounts(pool: AccountPool | None) -> None:
     """Fail loudly if a non-recipient staging account is not provisioned.
 
     A multi-account guide plants its carrier AS a second account (e.g. the
-    attacker_sender that mails the victim). If that account's OAuth token is
-    missing, staging would otherwise fall back to the single default identity and
-    silently plant from the wrong account — the run then "passes" while testing
-    nothing. This checks every non-recipient slot's ``token_cache`` up front and
-    raises one clear error naming each missing role, the file expected, and the
-    env var that overrides it, so the failure is actionable before the run starts.
+    attacker_sender that mails the victim). If that account is not provisioned,
+    staging would otherwise fall back to the single default identity and silently
+    plant from the wrong account — the run then "passes" while testing nothing.
+    This checks each non-recipient slot up front and raises one clear error naming
+    each missing role, the path expected, and the env var that overrides it, so
+    the failure is actionable before the run starts.
+
+    An API-plant role (``attacker_sender``) is verified by its OAuth
+    ``token_cache``; a UI-mode-only role (``outlook_sender``, driven through a
+    signed-in Chrome profile) has no token and is verified by its ``profile_dir``
+    instead — the profile IS its credential.
 
     ``None`` pool (single-account guide) is a no-op. The recipient slot is skipped
     because it legitimately uses the default identity."""
@@ -121,11 +138,19 @@ def preflight_setup_accounts(pool: AccountPool | None) -> None:
     for slot in pool.slots:
         if slot.role == "recipient":
             continue
-        if slot.token_cache is None or not slot.token_cache.exists():
-            env_var, _ = _ROLE_TOKEN_ENV.get(slot.role, ("(unknown)", ""))
+        if slot.role in _ROLE_TOKEN_ENV:
+            if slot.token_cache is None or not slot.token_cache.exists():
+                env_var, _ = _ROLE_TOKEN_ENV.get(slot.role, ("(unknown)", ""))
+                missing.append(
+                    f"  - role {slot.role!r}: no OAuth token at {slot.token_cache} "
+                    f"(set {env_var} to its path, or run the account's OAuth login first)"
+                )
+        elif not slot.profile_dir.exists():
+            env_var, _ = _ROLE_PROFILE_ENV.get(slot.role, ("(unknown)", ""))
             missing.append(
-                f"  - role {slot.role!r}: no OAuth token at {slot.token_cache} "
-                f"(set {env_var} to its path, or run the account's OAuth login first)"
+                f"  - role {slot.role!r}: no signed-in browser profile at "
+                f"{slot.profile_dir} (set {env_var} to its path, or log the "
+                "account in there first)"
             )
     if missing:
         raise RuntimeError(

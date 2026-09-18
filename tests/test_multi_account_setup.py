@@ -295,6 +295,23 @@ def test_build_setup_account_pool_defaults_under_advtest_home(
     assert str(slot.profile_dir).endswith("profile-attacker-sender")
 
 
+def test_build_setup_account_pool_outlook_sender_ui_mode_no_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A UI-mode-only staging role (outlook_sender) binds a profile but no OAuth
+    token — the signed-in Outlook profile is its credential."""
+    from advtest_ext.guides import load_guide
+    from advtest_ext.guides.stage import build_setup_account_pool
+
+    monkeypatch.setenv("ADVTEST_PROFILE_OUTLOOK_SENDER", "/tmp/outlook-profile")
+    g = load_guide(Path("guides/workspace_engineer_persona_forgery_outlook.json"))
+    pool = build_setup_account_pool(g)
+    assert pool is not None
+    slot = pool.get_slot("outlook_sender")
+    assert str(slot.profile_dir) == "/tmp/outlook-profile"
+    assert slot.token_cache is None
+
+
 def test_build_setup_account_pool_none_for_recipient_only() -> None:
     """A guide whose setup drives only the recipient (or has no setup) needs
     no distinct account — legacy single-account path."""
