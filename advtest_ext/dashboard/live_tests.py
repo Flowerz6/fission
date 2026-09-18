@@ -275,6 +275,12 @@ class LiveTestController:
         elif test_id == "cross-surface-email-docs":
             launch_run_id = f"demo-{uuid.uuid4().hex[:12]}"
             argv = (*argv, "--run-id", launch_run_id)
+        if test_id == "guided-workspace-playbook" and launch_run_id is not None:
+            # Reserve the Run row synchronously so the run page resolves the
+            # instant the launcher redirects to it — the subprocess only writes
+            # its own Run row after staging (browser login + carrier plant), a
+            # 30-60s window during which /runs/<id> would otherwise 404.
+            self._precreate_run_row(launch_run_id, playbook)
         with self._lock:
             if self._process is not None and self._process.poll() is None:
                 raise RuntimeError("another live test is already running")
@@ -299,6 +305,38 @@ class LiveTestController:
             self._status = "running"
             threading.Thread(target=self._collect, args=(self._process,), daemon=True).start()
         return self.snapshot()
+
+    def _precreate_run_row(self, run_id: str, playbook: str | None) -> None:
+        """Insert (idempotent) the Run row at launch so the run page resolves
+        immediately with a live, stoppable tree. Best-effort: on any failure the
+        launch still proceeds and the subprocess creates the row itself — the
+        only regression is the brief 'run not found' window this closes."""
+        try:
+            from advtest_ext.guides.corpus import load_guides
+            from advtest_ext.guides.run import default_target_name
+            from advtest_ext.storage import (
+                make_engine,
+                make_session_factory,
+                session_scope,
+                upsert_run,
+            )
+
+            target_name = "google_docs_multiturn"
+            if playbook:
+                guide = next(
+                    (g for g in load_guides(_REPO_ROOT / "guides") if g.id == playbook), None
+                )
+                if guide is not None:
+                    try:
+                        target_name = default_target_name(guide)
+                    except Exception:
+                        target_name = guide.target.app
+            factory = make_session_factory(make_engine(self.db_url))
+            with session_scope(factory) as s:
+                upsert_run(s, run_id=run_id, target_name=target_name, strategy="tap_crescendo")
+        except Exception as exc:  # never block a launch on the reservation
+            with self._lock:
+                self._lines.append(f"(run row reservation skipped: {type(exc).__name__})")
 
     def _collect(self, process: subprocess.Popen[str]) -> None:
         assert process.stdout is not None
