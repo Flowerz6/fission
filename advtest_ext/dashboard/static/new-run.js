@@ -1,10 +1,11 @@
 /* ============================================================================
    New-run launcher — a centred modal over the Runs list.
 
-   Choose a Workspace surface (left), pick single- or multi-app, choose a guide
-   for that surface, set the tree-search width, and launch. Options come from
-   /live-tests/options (guides keyed by surface, flagged single/multi-app, each
-   with a one-line blurb). Every launch runs the guided-workspace workflow with
+   Choose a Workspace surface (left), pick single-workspace or across-workspaces
+   (whether the run drives a second account), choose a guide for that surface,
+   set the tree-search width, and launch. Options come from /live-tests/options
+   (guides keyed by surface, flagged single- vs across-workspaces, each with a
+   one-line blurb). Every launch runs the guided-workspace workflow with
    the chosen guide and returns to the new run's live page. The <a href="/runs/
    new"> still works with no JS — this only intercepts the click.
    ============================================================================ */
@@ -27,8 +28,8 @@
     slides: "google-slides", drive: "google-drive", calendar: "google-calendar",
   };
 
-  var options = null; // { enabled, guides:[{id,title,surface,surface_label,multi_app,maturity,blurb}] }
-  var mode = "single"; // "single" | "multi"
+  var options = null; // { enabled, guides:[{id,title,surface,surface_label,multi_workspace,second_accounts,maturity,blurb}] }
+  var mode = "single"; // "single" | "multi"  (single-workspace | across-workspaces)
   var workspace = null; // surface key
   var guideId = null;
 
@@ -64,7 +65,7 @@
 
   // ---- data helpers -------------------------------------------------------
   function guidesFor(m) {
-    return options.guides.filter(function (g) { return !!g.multi_app === (m === "multi"); });
+    return options.guides.filter(function (g) { return !!g.multi_workspace === (m === "multi"); });
   }
   function surfacesFor(m) {
     var seen = {}, order = [];
@@ -111,15 +112,15 @@
     var modeToggle =
       '<div class="ld-modes" role="tablist" aria-label="Scope">' +
       '<button type="button" role="tab" class="ld-mode' + (mode === "single" ? " on" : "") +
-      '" data-mode="single" aria-selected="' + (mode === "single") + '">Single app</button>' +
+      '" data-mode="single" aria-selected="' + (mode === "single") + '">Single workspace</button>' +
       '<button type="button" role="tab" class="ld-mode' + (mode === "multi" ? " on" : "") +
-      '" data-mode="multi" aria-selected="' + (mode === "multi") + '">Multi app</button></div>';
+      '" data-mode="multi" aria-selected="' + (mode === "multi") + '">Across workspaces</button></div>';
 
     if (!guides.length) {
       cfgEl.innerHTML =
         modeToggle +
-        '<p class="ld-empty">No ' + (mode === "multi" ? "multi-app" : "single-app") +
-        " guides for this workspace yet.</p>";
+        '<p class="ld-empty">No ' + (mode === "multi" ? "cross-workspace" : "single-workspace") +
+        " guides for this surface yet.</p>";
       launchBtn.disabled = true;
       return;
     }
@@ -156,7 +157,12 @@
     var el = document.getElementById("nr-blurb");
     if (!el) return;
     var g = options.guides.filter(function (x) { return x.id === guideId; })[0];
-    el.textContent = g ? g.blurb : "";
+    var text = g ? g.blurb : "";
+    if (g && g.second_accounts && g.second_accounts.length) {
+      text += (text ? "  ·  " : "") + "Across workspaces: needs a second signed-in account (" +
+        g.second_accounts.join(", ") + ").";
+    }
+    el.textContent = text;
   }
 
   // Delegated: workspace pick + mode switch (both re-render the panel).

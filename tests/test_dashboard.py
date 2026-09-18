@@ -1347,11 +1347,19 @@ def test_live_tests_options_keys_guides_by_surface_and_scope() -> None:
     assert data["enabled"] is True
     assert data["guides"], "expected at least one guide"
     g = data["guides"][0]
-    assert {"id", "title", "surface", "surface_label", "multi_app", "maturity", "blurb"} <= set(g)
-    assert isinstance(g["multi_app"], bool)
-    # Both scopes are represented, so the Single/Multi toggle has content.
-    assert any(x["multi_app"] for x in data["guides"])
-    assert any(not x["multi_app"] for x in data["guides"])
+    assert {
+        "id", "title", "surface", "surface_label",
+        "multi_workspace", "second_accounts", "maturity", "blurb",
+    } <= set(g)
+    assert isinstance(g["multi_workspace"], bool)
+    # Both scopes are represented, so the Single/Across-workspaces toggle has content.
+    assert any(x["multi_workspace"] for x in data["guides"])
+    assert any(not x["multi_workspace"] for x in data["guides"])
+    # Across-workspaces guides name the extra account(s) they stage.
+    assert all(
+        x["second_accounts"] if x["multi_workspace"] else not x["second_accounts"]
+        for x in data["guides"]
+    )
     # Surface keys are canonical (no google_ prefix) and drive the workspace list.
     assert all("google_" not in x["surface"] for x in data["guides"])
     # Sorted by surface label then title, so the picker groups cleanly.

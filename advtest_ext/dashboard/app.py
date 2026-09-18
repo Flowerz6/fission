@@ -1059,8 +1059,9 @@ def create_app(
     async def live_tests_options() -> dict[str, Any]:
         """Everything the New-run dialog needs to choose and configure a run
         without leaving the runs list: the guide catalogue keyed by Workspace
-        surface, flagged single- vs multi-app, each with a one-line blurb, so
-        the picker reads as scenarios per app, not filenames."""
+        surface, flagged single-workspace vs across-workspaces (whether the run
+        drives a second account), each with a one-line blurb, so the picker
+        reads as scenarios per surface, not filenames."""
         from advtest_ext.guides.corpus import load_guides
         from advtest_ext.guides.models import display_title
 
@@ -1091,18 +1092,24 @@ def create_app(
         guide_opts: list[dict[str, Any]] = []
         for g in guides:
             target = canon_surface(g.target.app)
-            apps = {target} | {
-                canon_surface(str(getattr(st, "region", None) or getattr(st, "app", None) or ""))
-                for st in g.setup_steps
+            # "Across workspaces" = the run drives more than one account (e.g. an
+            # attacker_sender that mails the victim, who then talks to Gemini in
+            # their own Docs/Gmail). That needs a second signed-in profile, so it
+            # is the account axis, NOT how many apps the flow touches.
+            victim_role = str(getattr(g.target, "account_role", None) or "recipient")
+            roles = {victim_role} | {
+                str(getattr(st, "account_role", None) or "") for st in g.setup_steps
             }
-            apps.discard("other")
+            roles.discard("")
+            extra_accounts = sorted(roles - {victim_role})
             guide_opts.append(
                 {
                     "id": g.id,
                     "title": display_title(g),
                     "surface": target,
                     "surface_label": surface_label(target),
-                    "multi_app": len(apps) > 1,
+                    "multi_workspace": len(roles) > 1,
+                    "second_accounts": extra_accounts,
                     "maturity": (getattr(g, "maturity", None) or "").lower(),
                     "blurb": blurb_of(g),
                 }
