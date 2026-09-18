@@ -415,10 +415,16 @@ def _tap_crescendo_attack_factory(options: dict[str, Any] | None = None) -> Atta
             )
     # Hybrid success-confirmation: the fast heuristic judge drives the
     # per-turn escalation gradient, but when ``confirm_with_llm_judge`` is
-    # set a node only converges / goes green once the LLM ipi_verdict judge
+    # set a node only converges / goes green once the LLM confirm judge
     # agrees the injection fired — so "green → move on" matches the
-    # authoritative verdict the dashboard shows.
-    confirm_judge = _ipi_verdict_judge_factory() if opts.get("confirm_with_llm_judge") else None
+    # authoritative verdict the dashboard shows. Defaults to the decomposed
+    # (attended/complied/harmful_effect) judge; override via
+    # ``confirm_judge: jury`` (or any registered judge name) for a panel vote.
+    confirm_judge = (
+        _resolve_judge(str(opts.get("confirm_judge", "decomposed_ipi")))
+        if opts.get("confirm_with_llm_judge")
+        else None
+    )
     # Family-disjoint on-mechanism checker (report §6.3). Opt-in via
     # attack_options.tap_crescendo.on_mechanism_check. Loaded from a
     # SEPARATE role so it isn't the Claude attacker grading its own turns
@@ -930,6 +936,87 @@ def _decomposed_ipi_judge_factory() -> JudgeBase:
     return DecomposedIpiJudge(provider=provider)
 
 
+def _ipi_judge_over_role(kind: str, role: str) -> JudgeBase:
+    """Build one IPI LLM judge (``decomposed_ipi`` or ``ipi_verdict``) over a
+    named provider role, so a jury can mix judge logics *and* model families.
+    Raises ``KeyError`` when the role is absent from the config (the jury
+    catches that to skip an optional juror); ``BadParameter`` when the config
+    file itself is missing (a hard, global failure)."""
+    from advtest_ext.judges.decomposed_ipi import DecomposedIpiJudge
+    from advtest_ext.judges.ipi_verdict import IpiVerdictJudge
+    from advtest_ext.providers import load_provider_from_yaml
+
+    cfg_path = Path(os.environ.get("ADVTEST_PROVIDER_CONFIG") or _DEFAULT_PROVIDER_CONFIG)
+    if not cfg_path.exists():
+        raise typer.BadParameter(
+            f"provider config not found at {cfg_path} — set "
+            "ADVTEST_PROVIDER_CONFIG or create the file with a CLAUDE_JUDGE role"
+        )
+    provider = load_provider_from_yaml(cfg_path, role)  # KeyError if role absent
+    provider = _apply_model_override(provider, role)
+    if kind == "decomposed_ipi":
+        return DecomposedIpiJudge(provider=provider)
+    if kind == "ipi_verdict":
+        return IpiVerdictJudge(provider=provider)
+    raise ValueError(f"unknown IPI judge kind {kind!r}")
+
+
+# The jury panel: (judge-logic, provider-role). Two Claude-family judges with
+# *different* logics (decomposed rule + holistic rubric) plus a model-diverse
+# third (haiku by default). Override via ADVTEST_JURY_PANEL as a comma list of
+# ``kind@ROLE`` entries — e.g. drop in a clean cross-vendor Qwen once hosted:
+# ``decomposed_ipi@CLAUDE_JUDGE,ipi_verdict@CLAUDE_JUDGE,decomposed_ipi@QWEN_JUDGE``.
+_DEFAULT_JURY_PANEL = (
+    ("decomposed_ipi", "CLAUDE_JUDGE"),
+    ("ipi_verdict", "CLAUDE_JUDGE"),
+    ("decomposed_ipi", "CHECKER_MODEL"),
+)
+
+
+def _jury_panel_spec() -> tuple[tuple[str, str], ...]:
+    """Parse ADVTEST_JURY_PANEL (``kind@ROLE,…``) or fall back to the default."""
+    raw = os.environ.get("ADVTEST_JURY_PANEL", "").strip()
+    if not raw:
+        return _DEFAULT_JURY_PANEL
+    panel: list[tuple[str, str]] = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        kind, _, role = entry.partition("@")
+        if not role:
+            raise typer.BadParameter(
+                f"ADVTEST_JURY_PANEL entry {entry!r} must be 'kind@ROLE'"
+            )
+        panel.append((kind.strip(), role.strip()))
+    return tuple(panel) if panel else _DEFAULT_JURY_PANEL
+
+
+def _jury_judge_factory() -> JudgeBase:
+    """LLM-as-a-jury (Verga et al. 2024): a panel of IPI judges over disjoint
+    models, majority vote. Reduces the single-judge variance / idiosyncratic
+    over-calling that one confirm judge shows, and dilutes any one model's
+    self-preference. Jurors whose role is missing are skipped (fail-open); the
+    jury still needs >=2 loadable ones. Selectable via ``judges: [jury]``."""
+    from advtest_ext.judges.ensemble import EnsembleAsJudge, JudgeEnsemble
+
+    jurors: list[JudgeBase] = []
+    skipped: list[str] = []
+    for kind, role in _jury_panel_spec():
+        try:
+            jurors.append(_ipi_judge_over_role(kind, role))
+        except KeyError:
+            skipped.append(f"{kind}@{role}")
+    if len(jurors) < 2:
+        raise typer.BadParameter(
+            "jury needs >=2 loadable judges; only "
+            f"{len(jurors)} resolved (skipped missing roles: {skipped or 'none'}). "
+            "Ensure CLAUDE_JUDGE exists, or set ADVTEST_JURY_PANEL."
+        )
+    ensemble = JudgeEnsemble(judges=jurors, aggregation="majority_vote")
+    return EnsembleAsJudge(ensemble)
+
+
 def _retrieval_verdict_judge_factory() -> JudgeBase:
     """Run-level judge for retrieval-IPI runs (crescendo / tap_chain /
     tap_crescendo). Scores grounding/persona/handshake/canary so the
@@ -951,6 +1038,7 @@ _JUDGE_REGISTRY: dict[str, Callable[[], JudgeBase]] = {
     "strong_reject": _strong_reject_judge_factory,
     "ipi_verdict": _ipi_verdict_judge_factory,
     "decomposed_ipi": _decomposed_ipi_judge_factory,
+    "jury": _jury_judge_factory,
     "retrieval_verdict": _retrieval_verdict_judge_factory,
 }
 

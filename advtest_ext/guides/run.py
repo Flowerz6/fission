@@ -169,6 +169,7 @@ async def run_guide(
     target_options: dict[str, Any] | None = None,
     orchestrator_judge_name: str = "retrieval_verdict",
     confirm_with_llm_judge: bool = True,
+    confirm_judge_name: str = "decomposed_ipi",
     attacker_roles: list[str] | None = None,
     planner_role: str | None = None,
     planner_roles: list[str] | None = None,
@@ -193,13 +194,13 @@ async def run_guide(
 ) -> RunResult:
     """Resolve live components from ``provider_config`` (the providers YAML) and
     run ``guide`` end-to-end. Mirrors the tap_crescendo CLI factory's judge
-    choices: a retrieval judge for the per-turn gradient and the LLM ipi_verdict
-    judge for confirmation. Drives a real target — use via ``scripts/run_guide.py``.
+    choices: a retrieval judge for the per-turn gradient and an LLM confirm
+    judge (``confirm_judge_name``, default ``decomposed_ipi``; pass ``jury`` for
+    a panel vote). Drives a real target — use via ``scripts/run_guide.py``.
     """
     # Imported lazily: these pull the live target/provider stack, which the pure
     # assembly path (and its tests) must not require.
     from advtest_ext._cli_factories import (
-        _ipi_verdict_judge_factory,
         _resolve_judge,
         _resolve_target,
         _retrieval_judge_from_opts,
@@ -321,7 +322,7 @@ async def run_guide(
         planners=extra_planners,
         attack_judge=_retrieval_judge_from_opts({}),
         orchestrator_judge=_resolve_judge(orchestrator_judge_name),
-        confirm_judge=_ipi_verdict_judge_factory() if confirm_with_llm_judge else None,
+        confirm_judge=_resolve_judge(confirm_judge_name) if confirm_with_llm_judge else None,
         checker=checker,
         checkers=extra_checkers,
         budget=budget,

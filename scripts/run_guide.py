@@ -133,6 +133,12 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="disable the LLM confirm-judge (heuristic-only convergence)",
     )
+    p.add_argument(
+        "--confirm-judge",
+        default="decomposed_ipi",
+        help="LLM confirm judge: decomposed_ipi (default), jury (panel vote), "
+        "ipi_verdict, strong_reject",
+    )
     # Multi-turn UI-target options (google_docs_multiturn): keep the run fully
     # UI/no-OAuth by minting the host doc through the browser, or ground on an
     # existing doc you prepared.
@@ -313,6 +319,7 @@ def main() -> None:
             target_name=args.target_name,
             target_options=target_options or None,
             confirm_with_llm_judge=not args.no_confirm,
+            confirm_judge_name=args.confirm_judge,
             output_dir=args.output_dir,
             session_factory=session_factory,
             review_sample_budget=args.review_sample_budget,
