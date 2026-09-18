@@ -1334,6 +1334,34 @@ def test_runs_index_has_new_run_modal() -> None:
     assert "/static/new-run.js" in body
 
 
+def test_run_page_shows_stop_only_for_the_active_live_run() -> None:
+    """The Stop button appears on a run's page only while it is the run the
+    controller is actually driving — not for a finished run, nor for an active
+    run the controller isn't tracking (where /live-tests/stop couldn't act)."""
+    from advtest_ext.dashboard.live_tests import LiveTestController
+
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:  # active run: no finalize -> no finished_at
+        upsert_run(s, run_id="run-live", target_name="GeminiDocsMultiTurnTarget", strategy="tap")
+    controller = LiveTestController("sqlite:///:memory:", enabled=True)
+    app = create_app(engine=engine, live_test_controller=controller)
+
+    # Controller is driving THIS run -> Stop button present.
+    controller._run_id = "run-live"
+    controller._status = "running"
+    with TestClient(app) as c:
+        body = c.get("/runs/run-live").text
+    assert "Stop run" in body
+    assert 'hx-post="/live-tests/stop"' in body
+
+    # Controller is driving a different run -> no Stop button on this page.
+    controller._run_id = "run-other"
+    with TestClient(app) as c:
+        body = c.get("/runs/run-live").text
+    assert "Stop run" not in body
+
+
 def test_live_tests_options_keys_guides_by_surface_and_scope() -> None:
     """The New-run dialog's data source: guides keyed by Workspace surface,
     flagged single- vs multi-app, each with a one-line blurb."""

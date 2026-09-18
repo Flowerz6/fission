@@ -1361,10 +1361,20 @@ def create_app(
             "scenarios": len({trace.behavior_id for trace in traces if trace.behavior_id}),
             "duration_seconds": duration_seconds,
         }
+        # A run is stoppable only when it is THE live test the controller is
+        # currently driving — otherwise /live-tests/stop would target the wrong
+        # process (or none). Gate the Stop button on that, not just "active".
+        _live = live_tests.snapshot()
+        is_stoppable = bool(
+            run_is_active(run)
+            and _live.get("run_id") == run.id
+            and _live.get("status") in {"starting", "running", "stopping"}
+        )
         return {
             "run": run,
             "run_name": run_display_name(run),
             "surface_name": target_identity(run.target_name)[2],
+            "is_stoppable": is_stoppable,
             "run_metrics": run_metrics,
             "traces": traces,
             "heatmap": heatmap,
