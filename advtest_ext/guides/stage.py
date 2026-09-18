@@ -186,9 +186,35 @@ def _region(operation: str) -> Region:
     return "main"
 
 
+# Setup variables that carry a standing preset from the environment, so a
+# launch that passes none (e.g. the dashboard's guided run) still resolves them.
+# The victim's address is a fixed property of the provisioned recipient account,
+# not something to retype per run. An explicit variable always overrides.
+_ENV_PRESET_VARS: dict[str, str] = {"victim_email": "ADVTEST_VICTIM_EMAIL"}
+
+
+def _preset_setup_variables() -> dict[str, str]:
+    """Standing setup-variable values sourced from the environment (see
+    ``_ENV_PRESET_VARS``). Only present env vars contribute."""
+    out: dict[str, str] = {}
+    for var, env in _ENV_PRESET_VARS.items():
+        val = os.environ.get(env)
+        if val:
+            out[var] = val
+    return out
+
+
 def build_setup_recipe(guide: Guide, variables: dict[str, str] | None = None) -> Recipe:
-    """Project executable Guide steps into the existing RecipeRunner shape."""
-    values = {"exemplar_turns": "\n".join(guide.exemplar_turns), **(variables or {})}
+    """Project executable Guide steps into the existing RecipeRunner shape.
+
+    Setup variables resolve from (lowest → highest precedence): the environment
+    presets (``_ENV_PRESET_VARS``), then the explicit ``variables`` passed in, so
+    a caller can always override a preset while a bare launch still resolves it."""
+    values = {
+        "exemplar_turns": "\n".join(guide.exemplar_turns),
+        **_preset_setup_variables(),
+        **(variables or {}),
+    }
     steps: list[Step] = []
     for source in guide.setup_steps:
         app = cast("App", _APP.get(source.app, source.app))

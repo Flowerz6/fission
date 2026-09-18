@@ -42,9 +42,26 @@ def test_build_setup_recipe_renders_operator_variables() -> None:
     assert recipe.steps[0].surface.account_role == "attacker_sender"
 
 
-def test_build_setup_recipe_rejects_missing_variables() -> None:
+def test_build_setup_recipe_rejects_missing_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ADVTEST_VICTIM_EMAIL", raising=False)  # no preset → still fails loud
     with pytest.raises(ValueError, match="victim_email"):
         build_setup_recipe(_guide())
+
+
+def test_build_setup_recipe_resolves_victim_email_from_env_preset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dashboard launch passes no variables; the standing ADVTEST_VICTIM_EMAIL
+    preset must resolve {{victim_email}} so the run isn't blocked."""
+    monkeypatch.setenv("ADVTEST_VICTIM_EMAIL", "preset@example.test")
+    recipe = build_setup_recipe(_guide())
+    assert recipe.steps[0].params["to"] == "preset@example.test"
+
+
+def test_explicit_variable_overrides_env_preset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ADVTEST_VICTIM_EMAIL", "preset@example.test")
+    recipe = build_setup_recipe(_guide(), {"victim_email": "explicit@example.test"})
+    assert recipe.steps[0].params["to"] == "explicit@example.test"
 
 
 async def test_stage_guide_executes_registered_setup_operation() -> None:
