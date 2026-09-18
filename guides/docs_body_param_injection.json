@@ -133,6 +133,16 @@
       ],
       "dependent_invariants": [
         "the payload lives in the DATA channel (doc body), never in the chat turn"
+      ],
+      "cell_values": [
+        "tip:rot13",
+        "tip:url_encode",
+        "tip:morse_code",
+        "tip:vigenere",
+        "tip:hex_encode",
+        "tip:base32",
+        "tip:affine_cipher",
+        "tip:reverse_cipher"
       ]
     }
   ]
