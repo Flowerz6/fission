@@ -21,7 +21,7 @@ CLAUDE_ATTACKER:
   provider_type: local_vllm
   endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
   model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
-  max_tokens: 512
+  max_tokens: 2048
   temperature: 1.0
 
 # --- The judge: CLAUDE (accurate scoring, doesn't over-call success) ----------

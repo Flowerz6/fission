@@ -52,12 +52,16 @@ def _read_file(path: str) -> str | None:
     return f"[Attached file: {p.name}]\n```\n{text}\n```\n\n"
 
 
-async def _run(role: str, config: str, system: str | None, preload: str | None) -> None:
+async def _run(
+    role: str, config: str, system: str | None, preload: str | None, max_tokens: int | None
+) -> None:
     from advtest_ext.providers.base import ChatMessage
     from advtest_ext.providers.factory import load_provider_from_yaml
 
     provider = load_provider_from_yaml(config, role)
-    print(f"chatting with role {role!r} via {config}")
+    overrides = {"max_tokens": max_tokens} if max_tokens else {}
+    cap = max_tokens or getattr(provider.config, "max_tokens", None)
+    print(f"chatting with role {role!r} via {config} (max_tokens={cap})")
     print("(/file <path> attaches a text file, /reset clears history, /exit quits)\n")
 
     history: list[ChatMessage] = []
@@ -94,7 +98,7 @@ async def _run(role: str, config: str, system: str | None, preload: str | None) 
         pending_file = None
         history.append(ChatMessage(role="user", content=content))
         try:
-            resp = await provider.complete(history)
+            resp = await provider.complete(history, **overrides)
         except Exception as exc:  # keep the REPL alive on a transient error
             print(f"[error: {type(exc).__name__}: {exc}]\n")
             history.pop()  # drop the unanswered turn
@@ -113,10 +117,11 @@ def main() -> None:
     )
     ap.add_argument("--system", default=None, help="optional system prompt")
     ap.add_argument("--file", default=None, help="preload a text file into the first message")
+    ap.add_argument("--max-tokens", type=int, default=None, help="override the role's output token cap")
     args = ap.parse_args()
     _quiet_logs()
     try:
-        asyncio.run(_run(args.role, args.config, args.system, args.file))
+        asyncio.run(_run(args.role, args.config, args.system, args.file, args.max_tokens))
     except KeyboardInterrupt:
         print("\n(bye)")
 
