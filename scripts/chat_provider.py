@@ -36,17 +36,34 @@ def _quiet_logs() -> None:
         pass
 
 
-async def _run(role: str, config: str, system: str | None) -> None:
+def _read_file(path: str) -> str | None:
+    """Read a text file's contents, or None with a printed reason. The model is
+    text-only, so a file means its text — binaries/images aren't supported."""
+    p = Path(path).expanduser()
+    if not p.is_file():
+        print(f"(no such file: {p})\n")
+        return None
+    try:
+        text = p.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        print(f"({p.name} isn't UTF-8 text — this model is text-only, no binaries/images)\n")
+        return None
+    print(f"(attached {p.name}, {len(text)} chars — rides with your next message)\n")
+    return f"[Attached file: {p.name}]\n```\n{text}\n```\n\n"
+
+
+async def _run(role: str, config: str, system: str | None, preload: str | None) -> None:
     from advtest_ext.providers.base import ChatMessage
     from advtest_ext.providers.factory import load_provider_from_yaml
 
     provider = load_provider_from_yaml(config, role)
     print(f"chatting with role {role!r} via {config}")
-    print("(/reset clears history, /exit quits, Ctrl-D quits)\n")
+    print("(/file <path> attaches a text file, /reset clears history, /exit quits)\n")
 
     history: list[ChatMessage] = []
     if system:
         history.append(ChatMessage(role="system", content=system))
+    pending_file = _read_file(preload) if preload else None
 
     while True:
         try:
@@ -60,10 +77,22 @@ async def _run(role: str, config: str, system: str | None) -> None:
             break
         if user == "/reset":
             history = [h for h in history if h.role == "system"]
+            pending_file = None
             print("(history cleared)\n")
             continue
+        if user.startswith("/file"):
+            _, _, arg = user.partition(" ")
+            if not arg.strip():
+                print("(usage: /file <path>)\n")
+                continue
+            loaded = _read_file(arg.strip())
+            if loaded is not None:
+                pending_file = loaded
+            continue
 
-        history.append(ChatMessage(role="user", content=user))
+        content = user if pending_file is None else pending_file + user
+        pending_file = None
+        history.append(ChatMessage(role="user", content=content))
         try:
             resp = await provider.complete(history)
         except Exception as exc:  # keep the REPL alive on a transient error
@@ -83,10 +112,11 @@ def main() -> None:
         default=os.environ.get("ADVTEST_PROVIDER_CONFIG", str(_REPO_ROOT / "configs" / "hybrid.yaml")),
     )
     ap.add_argument("--system", default=None, help="optional system prompt")
+    ap.add_argument("--file", default=None, help="preload a text file into the first message")
     args = ap.parse_args()
     _quiet_logs()
     try:
-        asyncio.run(_run(args.role, args.config, args.system))
+        asyncio.run(_run(args.role, args.config, args.system, args.file))
     except KeyboardInterrupt:
         print("\n(bye)")
 
