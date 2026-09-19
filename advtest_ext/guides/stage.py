@@ -190,7 +190,13 @@ def _region(operation: str) -> Region:
 # launch that passes none (e.g. the dashboard's guided run) still resolves them.
 # The victim's address is a fixed property of the provisioned recipient account,
 # not something to retype per run. An explicit variable always overrides.
-_ENV_PRESET_VARS: dict[str, str] = {"victim_email": "ADVTEST_VICTIM_EMAIL"}
+_ENV_PRESET_VARS: dict[str, str] = {
+    "victim_email": "ADVTEST_VICTIM_EMAIL",
+    # A collaborator/OOB or self-hosted sink the OPERATOR owns, for exfil-path
+    # measurement against their own account. Set it in .env; never commit a
+    # third-party endpoint. Guides reference it as {{exfil_sink}}.
+    "exfil_sink": "ADVTEST_EXFIL_SINK",
+}
 
 
 def _preset_setup_variables() -> dict[str, str]:
