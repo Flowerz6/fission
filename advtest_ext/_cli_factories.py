@@ -651,6 +651,14 @@ _CALENDAR_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
     {"ui_output_dir", "event_id", "event_ids", "browser_mint"}
 )
 
+# Gmail grounds on the inbox/thread (no artifact to mint), so it takes a
+# ``thread_id`` (bound from staging) instead of doc/sheet ids. ``browser_mint``
+# is accepted as a no-op so the docs-shaped guided launch (which always passes
+# it) works unchanged.
+_GMAIL_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
+    {"ui_output_dir", "thread_id", "browser_mint"}
+)
+
 
 def _multiturn_target_factory(options: dict[str, Any] | None = None) -> DocumentTarget:
     """Build a ``GeminiDocsMultiTurnTarget`` — a live, warm Gemini Docs
@@ -804,6 +812,34 @@ def _calendar_multiturn_target_factory(options: dict[str, Any] | None = None) ->
     )
 
 
+def _gmail_multiturn_target_factory(options: dict[str, Any] | None = None) -> DocumentTarget:
+    """Build a ``GeminiGmailMultiTurnTarget`` — the Gmail peer of
+    ``google_docs_multiturn``: a warm, multi-turn Gemini Gmail side-panel target
+    (crescendo / tap_crescendo drive it). Provider-free — the side panel IS the
+    model, so unlike the legacy ``gmail`` target it needs no ``GEMINI_TARGET``
+    role, only a logged-in Playwright profile.
+
+    target_options: ``ui_output_dir`` (screenshots + intercepted JSONL;
+    default ./out), ``thread_id`` (the planted thread to ground on, bound from
+    staging; an inbox alias / omission grounds on recent mail), ``browser_mint``
+    (accepted as a no-op — Gmail mints no artifact)."""
+    from advtest_ext.adapters.gmail.ui_mode.multi_turn_target import (
+        GeminiGmailMultiTurnTarget,
+    )
+
+    opts = options or {}
+    unknown = set(opts) - _GMAIL_MULTITURN_TARGET_OPTION_KEYS
+    if unknown:
+        raise typer.BadParameter(
+            f"unknown target_options keys for gmail_multiturn: {sorted(unknown)}; "
+            f"allowed: {sorted(_GMAIL_MULTITURN_TARGET_OPTION_KEYS)}"
+        )
+    return GeminiGmailMultiTurnTarget(
+        output_dir=Path(str(opts.get("ui_output_dir", "./out"))),
+        thread_id=opts.get("thread_id"),
+    )
+
+
 def _stub_target(options: dict[str, Any] | None = None) -> DocumentTarget:
     """Adapter signature shim: the CLI registry callable returns a
     fresh ``StubDocumentTarget``. The stub doesn't accept per-run
@@ -846,6 +882,7 @@ def _register_workspace_targets() -> None:
     _TARGET_REGISTRY["google_sheets_multiturn"] = _sheets_multiturn_target_factory
     _TARGET_REGISTRY["google_slides_multiturn"] = _slides_multiturn_target_factory
     _TARGET_REGISTRY["google_calendar_multiturn"] = _calendar_multiturn_target_factory
+    _TARGET_REGISTRY["gmail_multiturn"] = _gmail_multiturn_target_factory
 
 
 _register_workspace_targets()

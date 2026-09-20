@@ -142,7 +142,7 @@ def test_confirm_judge_passes_into_the_attack() -> None:
         ("google_sheets", "google_sheets_multiturn"),
         ("google_slides", "google_slides_multiturn"),
         ("google_calendar", "google_calendar_multiturn"),
-        ("gmail", "gmail"),
+        ("gmail", "gmail_multiturn"),
     ],
 )
 def test_default_target_name_maps_app_to_adapter(app: str, expected: str) -> None:

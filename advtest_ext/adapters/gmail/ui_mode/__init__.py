@@ -32,11 +32,13 @@ from advtest_ext.adapters.gmail.ui_mode.compose import (
 )
 from advtest_ext.adapters.gmail.ui_mode.compose_selectors import COMPOSE_SELECTORS
 from advtest_ext.adapters.gmail.ui_mode.invoker import ui_mode_invoke
+from advtest_ext.adapters.gmail.ui_mode.multi_turn_target import GeminiGmailMultiTurnTarget
 from advtest_ext.adapters.gmail.ui_mode.selectors import SELECTORS
 
 __all__ = [
     "COMPOSE_SELECTORS",
     "SELECTORS",
+    "GeminiGmailMultiTurnTarget",
     "GmailComposeUnavailable",
     "GmailSendResult",
     "GmailUiComposeSession",
