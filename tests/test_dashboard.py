@@ -858,13 +858,11 @@ def test_run_page_shows_calibrated_ci_with_uniform_labels() -> None:
     assert "labels" in body
 
 
-def test_references_page_renders(client: TestClient) -> None:
-    resp = client.get("/references")
-    assert resp.status_code == 200
-    body = resp.text
-    # The bib has well-known anchor entries we cite all over the codebase.
-    assert "greshake2023ipi" in body
-    assert "agentvigil2025" in body
+def test_references_page_removed(client: TestClient) -> None:
+    # The standalone /references (Citations) page was removed; the bib is still
+    # parsed for report citations (advtest_ext.dashboard.references), just not
+    # served as its own page.
+    assert client.get("/references").status_code == 404
 
 
 # ----------------------------------------------------------------------
@@ -1320,8 +1318,9 @@ def test_stale_unfinished_run_is_interrupted_not_running() -> None:
 
 
 def test_runs_index_has_new_run_modal() -> None:
-    """The Runs list opens a centred launcher dialog in place of navigating to
-    the /runs/new page; the link is kept as a no-JS fallback."""
+    """The Runs list opens a centred launcher dialog; the standalone /runs/new
+    page is gone, so the no-JS fallback now points at /runs?new=1 (which auto-
+    opens the modal) rather than a separate launcher page."""
     engine = make_engine("sqlite:///:memory:")
     with session_scope(make_session_factory(engine)) as s:
         upsert_run(s, run_id="run-x", target_name="T", strategy="grid")
@@ -1330,8 +1329,20 @@ def test_runs_index_has_new_run_modal() -> None:
         body = c.get("/runs").text
     assert 'id="new-run-dialog"' in body
     assert "data-open-new-run" in body
-    assert 'href="/runs/new"' in body  # fallback link still present
+    assert 'href="/runs?new=1"' in body  # fallback opens the modal, not a page
+    assert 'href="/runs/new"' not in body  # the standalone launcher link is gone
     assert "/static/new-run.js" in body
+
+
+def test_runs_new_redirects_to_modal() -> None:
+    """/runs/new no longer renders a page — it redirects to the Runs list with
+    the launcher modal open."""
+    engine = make_engine("sqlite:///:memory:")
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        resp = c.get("/runs/new", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/runs?new=1"
 
 
 def test_run_page_shows_stop_only_for_the_active_live_run() -> None:

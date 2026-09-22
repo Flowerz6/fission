@@ -14,7 +14,6 @@ Pages:
 * ``/findings`` — flagged traces (severity-filterable via HTMX).
 * ``/findings/{id}`` — full trace + replay-bundle download link.
 * ``/hitl`` — judge-disagreement queue with resolution form.
-* ``/references`` — references.bib rendered.
 
 PDF export of /runs/{id} is handled by :mod:`report`; the route
 returns 501 with a friendly install hint when ``weasyprint`` isn't
@@ -41,6 +40,7 @@ from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     PlainTextResponse,
+    RedirectResponse,
     Response,
 )
 from fastapi.staticfiles import StaticFiles
@@ -962,9 +962,14 @@ def create_app(
         session.commit()
         return Response(status_code=204)
 
+    @app.get("/runs/new", include_in_schema=False)
+    async def runs_new_redirect() -> Response:
+        """The standalone launcher page is gone — the New-run modal on /runs is the
+        launcher now. Redirect any old link/bookmark there with the modal open."""
+        return RedirectResponse("/runs?new=1", status_code=302)
+
     @app.get("/live-tests", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/assessments/new", response_class=HTMLResponse)
-    @app.get("/runs/new", response_class=HTMLResponse)
     async def live_tests_index(request: Request) -> Response:
         """Launch a named, allow-listed surface assessment."""
         return templates.TemplateResponse(
@@ -2309,12 +2314,6 @@ def create_app(
         if not ctx:
             raise HTTPException(404, f"surface {target_name!r} has no traces")
         return templates.TemplateResponse(request, "surfaces/_panel.html", ctx)
-
-    @app.get("/references", response_class=HTMLResponse)
-    async def references_index(request: Request) -> Response:
-        from advtest_ext.dashboard.references import parse_bibfile
-
-        return templates.TemplateResponse(request, "references.html", {"entries": parse_bibfile()})
 
     @app.get("/reports", response_class=HTMLResponse)
     async def reports_index(

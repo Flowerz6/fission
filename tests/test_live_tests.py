@@ -69,8 +69,10 @@ def _client(controller: _StubController) -> TestClient:
 
 
 def test_live_tests_page_names_real_workflows() -> None:
+    # The standalone launcher moved off /runs/new (now a modal on /runs); the
+    # surface-assessment page still lives at /live-tests.
     with _client(_StubController()) as client:
-        response = client.get("/runs/new")
+        response = client.get("/live-tests")
     assert response.status_code == 200
     assert "Stop run" in response.text
     assert "Outlook → Gmail → Docs" in response.text

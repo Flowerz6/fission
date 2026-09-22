@@ -575,6 +575,28 @@
     }
     th, .tbl th { text-transform: uppercase; letter-spacing: 0.07em; font-size: 0.66rem; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* Queued-runs indicator (top-right) — surfaces batch/active runs so a quiet
+       CUSUM-style "nothing visible" never hides in-flight work. */
+    .run-queue { position: relative; display: flex; align-items: center; padding: 0 0.9rem; }
+    .run-queue-btn { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--accent-soft); color: var(--ink);
+      border: 1px solid var(--border); border-radius: 999px; padding: 0.32rem 0.7rem; cursor: pointer; font: inherit; font-size: 0.82rem; }
+    .run-queue-btn:hover { background: var(--surface-2); }
+    .run-queue-count { min-width: 1.2em; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .run-queue-menu { position: absolute; top: calc(100% + 6px); right: 0.6rem; min-width: 260px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.18); padding: 0.4rem; z-index: 40; }
+    .run-queue-item { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.6rem;
+      border-radius: 7px; text-decoration: none; color: var(--ink); font-size: 0.86rem; }
+    .run-queue-item:hover { background: var(--surface-2); }
+    .run-queue-item .rq-status { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+    .run-queue-item .rq-status.running { color: var(--high); }
+    .run-queue-empty { padding: 0.6rem; color: var(--muted-2); font-size: 0.84rem; }
+    /* Queue list inside the New-run modal (stack several guides, run back-to-back). */
+    .ld-queue { margin: 0 1.4rem; border-top: 1px solid var(--border); padding-top: 0.6rem; }
+    .ld-queue-h { margin: 0 0 0.35rem; font-size: 0.78rem; color: var(--ink-soft); }
+    .ld-queue-item { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+      padding: 0.3rem 0.5rem; border: 1px solid var(--border); border-radius: 7px; margin-bottom: 0.3rem; font-size: 0.86rem; }
+    .ld-queue-x { background: none; border: none; cursor: pointer; font-size: 1.1rem; line-height: 1; color: var(--muted-2); padding: 0 0.2rem; }
+    .ld-queue-x:hover { color: var(--crit); }
   </style>
 </head>
 <body>
@@ -586,14 +608,20 @@
       <div class="ws"><details class="workspace-switcher"><summary class="ws-btn" aria-label="Select service"><svg class="dia" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 2l9 9-8-2z"/></svg><span data-service-name>{{ selected_service.label }}</span><span class="caret">⌄</span></summary><div class="workspace-menu"><div class="service-menu-label">Service</div>{% for option in service_options %}<a class="workspace-link service-option {{ 'selected' if option.key == selected_service.key else '' }}" href="{{ service_switch_path }}?service={{ option.key }}" {% if option.key == selected_service.key %}aria-current="true"{% endif %}><span>{{ option.label }}</span>{% if option.key == selected_service.key %}<span aria-hidden="true">✓</span>{% endif %}</a>{% endfor %}<div class="service-menu-divider"></div><a class="workspace-link" href="/account">Your account</a><a class="workspace-link" href="/settings">Workspace settings</a><button type="button" class="workspace-link" onclick="togglePresentation()">Presentation mode</button>
         <div class="nav-group collapsed"><button type="button" onclick="this.parentElement.classList.toggle('collapsed')">More <span class="caret">&#9662;</span></button><div class="nav-list">
           <a class="nav-item" href="/hitl" data-path="/hitl"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 8l3.5 3.5L13 5"/></svg>Review</a>
-          <a class="nav-item" href="/runs/new" data-path="/runs/new"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l7 5-7 5z"/></svg>New run</a>
+          <a class="nav-item" href="/runs?new=1" data-path="/runs"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l7 5-7 5z"/></svg>New run</a>
           <a class="nav-item" href="/seeds" data-path="/seeds"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="4.5"/></svg>Seeds</a>
           <a class="nav-item" href="/variants" data-path="/variants"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2v5M8 7c-2 0-3.5 1.5-3.5 3.5S6 14 8 14s3.5-1.5 3.5-3.5S10 7 8 7z"/></svg>Proven variants</a>
           <a class="nav-item" href="/ledger" data-path="/ledger"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10"/><path d="M2 7h12M7 3v10"/></svg>Seed ledger</a>
           <a class="nav-item" href="/drift" data-path="/drift"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 9c2 0 2-3 4-3s2 3 4 3 2-3 4-3"/></svg>Drift</a>
-          <a class="nav-item" href="/references" data-path="/references"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 2h8v12l-4-2-4 2z"/></svg>Citations</a>
         </div></div>
       </div></details></div>
+      <div class="run-queue" id="run-queue" hidden>
+        <button type="button" class="run-queue-btn" id="run-queue-btn" aria-haspopup="true" aria-expanded="false" aria-label="Queued and running runs">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4h12M2 8h12M2 12h8"/></svg>
+          <span class="run-queue-count" id="run-queue-count">0</span>
+        </button>
+        <div class="run-queue-menu" id="run-queue-menu" role="menu" hidden></div>
+      </div>
       <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
     </header>
     <aside class="sidebar">
@@ -702,5 +730,6 @@
   </script>
   <link rel="stylesheet" href="/static/dashboard.css?v={{ static_v() }}">
   <script src="/static/dashboard.js?v={{ static_v() }}" defer></script>
+  <script src="/static/run-queue.js?v={{ static_v() }}" defer></script>
 </body>
 </html>

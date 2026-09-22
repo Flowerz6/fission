@@ -3,7 +3,7 @@
 {% block content %}
 {% from "surfaces/_status.html" import target_status %}
 {% set tested_count = surface_groups|selectattr('attempts')|list|length %}
-<div class="head-bar"><div class="ht"><h1>Targets</h1><p>{{ 'Workspace surfaces for ' ~ selected_service.label ~ '.' if selected_service.key != 'all' else 'Workspace surfaces across your services.' }}</p></div><div class="ha"><a class="btn-primary" href="/runs/new">＋ Add target</a></div></div>
+<div class="head-bar"><div class="ht"><h1>Targets</h1><p>{{ 'Workspace surfaces for ' ~ selected_service.label ~ '.' if selected_service.key != 'all' else 'Workspace surfaces across your services.' }}</p></div><div class="ha"><a class="btn-primary" href="/runs?new=1">＋ Add target</a></div></div>
 
 
 
