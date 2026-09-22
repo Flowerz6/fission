@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}version diff · target drift{% endblock %}
+{% block content %}
+<div class="page-head"><p class="eyebrow">Version-diff regression report</p><h1>{{ old }} → {{ new }}</h1>
+<p>Facets changed: {% for f in facets_changed %}<code>{{ f }}</code> {% else %}none{% endfor %}</p></div>
+<h2>Population divergence (resolution-segregated)</h2>
+<table class="td-div"><tr><th>resolution</th><th>PSI</th><th>KL</th><th>cells</th></tr>
+{% for d in divergences %}<tr class="res-{{ d.resolution }}"><td>{{ d.resolution }}</td><td>{{ d.psi }}</td><td>{{ d.kl }}</td><td>{{ d.n }}</td></tr>{% endfor %}
+</table>
+<h2>Regressed cells: {{ regressed | length }}</h2>
+<h2>Axis-level attribution</h2>
+<ul class="td-axes">
+{% for a in axis_rows %}
+  <li class="axis {{ 'asserted' if a.asserted else 'not-asserted' }}">
+    <strong>{{ a.axis }} = {{ a.feature_value }}</strong> — rate {{ a.success_rate }} CI {{ a.ci }}
+    {% if a.asserted %}<span class="badge-clean">asserted</span>
+    {% else %}<span class="badge-caveat">not asserted — {{ a.caveat }}</span>{% endif %}
+  </li>
+{% else %}
+  <li>No axis coefficients for the regressed cells.</li>
+{% endfor %}
+</ul>
+{% endblock %}

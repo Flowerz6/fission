@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}alerts · target drift{% endblock %}
+{% block content %}
+<div class="page-head"><p class="eyebrow">Per-cell drift alerts</p><h1>Drift alerts</h1></div>
+<ul class="td-alerts">
+{% for a in alerts %}
+  {% if not a.calibrated %}
+  <li class="td-alert calibrating"><strong>calibrating — alerts suppressed</strong>
+    <span class="muted">{{ a.cell_key }} · {{ a.note }}</span></li>
+  {% else %}
+  <li class="td-alert live source-{{ a.source }}">
+    <span class="td-dir">{{ a.direction }}</span>
+    <span class="td-cellkey">{{ a.cell_key }}</span>
+    <span class="td-source">source: {{ a.source }}</span>
+    <span class="td-mag">Δ {{ a.magnitude }}</span>
+  </li>
+  {% endif %}
+{% else %}
+  <li>No drift alerts recorded.</li>
+{% endfor %}
+</ul>
+{% endblock %}

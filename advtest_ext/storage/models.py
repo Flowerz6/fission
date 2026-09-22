@@ -38,9 +38,11 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -137,6 +139,12 @@ class Trace(Base):
     uncertainty_reason: Mapped[str] = mapped_column(Text, default="")
     """Human-readable axis that drove ``uncertainty`` (shown in the
     review UI so the expert sees *why* a trace was surfaced)."""
+    cross_app_hops: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    """Count of distinct-app transitions (Gmail→Docs …) derived from the run's
+    ``config.phases`` for the fingerprint archive's cross-app indirection axis.
+    NOT ``depth`` (turn depth). Nullable; added additively via
+    ``_ensure_additive_columns`` and populated forward — historical runs (none
+    used ``phases``) read NULL → bucket 0. See ``advtest_ext.archive.signature``."""
 
     run: Mapped[Run] = relationship(back_populates="traces")
     judge_scores: Mapped[list[JudgeScore]] = relationship(
@@ -582,14 +590,250 @@ class SeedReliability(Base):
     )
 
 
+# ----------------------------------------------------------------------
+# MAP-Elites vulnerability-fingerprint archive
+# ----------------------------------------------------------------------
+#
+# Additive, new tables only (no Alembic — created by ``create_all``; new
+# columns on existing tables land via ``_ensure_additive_columns``). The atomic
+# drift unit is the operator-declared, composite ``TargetProfile`` key
+# (model_label, tenant_tier, surface_config_hash) — three columns, never a
+# mashed string, so drift attribution can later name which facet moved.
+# See ``docs/INTEGRATION_CONTRACT.md`` and ``advtest_ext.archive``.
+
+
+class TargetProfile(Base):
+    """One operator-declared target version — the atomic drift unit.
+
+    The harness cannot detect these through Playwright (the side panel *is* the
+    model), so all three key facets are supplied at runtime. Ground-truth fields
+    (system prompt, tool schema, allowed tools, exfil sink) are nullable and
+    filled by later parts.
+    """
+
+    __tablename__ = "target_profiles"
+
+    model_label: Mapped[str] = mapped_column(String(128), primary_key=True)
+    tenant_tier: Mapped[str] = mapped_column(String(64), primary_key=True)
+    surface_config_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    declared_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    declared_by: Mapped[str] = mapped_column(String(64), default="")
+    # Operator ground truth (greenfield per the contract; nullable for now).
+    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tool_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    allowed_tools: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    exfil_sink: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+
+class TargetFingerprintCell(Base):
+    """One MAP-Elites cell for one target profile: its Beta posterior + provenance.
+
+    The cell key is the seven descriptor fields (five non-wording mutation axes
+    + objective_class + cross_app_hops_bucket). ``prev_alpha``/``prev_beta`` hold
+    the *undecayed* previous-version posterior this cell was carry-forward seeded
+    from (drift compares against that, not the decayed prior).
+    """
+
+    __tablename__ = "target_fingerprint_cells"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["model_label", "tenant_tier", "surface_config_hash"],
+            [
+                "target_profiles.model_label",
+                "target_profiles.tenant_tier",
+                "target_profiles.surface_config_hash",
+            ],
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "model_label",
+            "tenant_tier",
+            "surface_config_hash",
+            "cell_key",
+            name="uq_fingerprint_cell",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_label: Mapped[str] = mapped_column(String(128), index=True)
+    tenant_tier: Mapped[str] = mapped_column(String(64))
+    surface_config_hash: Mapped[str] = mapped_column(String(64))
+
+    cell_key: Mapped[str] = mapped_column(String(512), index=True)
+    """Stable ``\\x1f``-joined encoding of the seven-field cell key (also
+    denormalised into the columns below for querying)."""
+    objective_class: Mapped[str] = mapped_column(String(128), index=True)
+    framing: Mapped[str] = mapped_column(String(128))
+    turn_order: Mapped[str] = mapped_column(String(128))
+    persona: Mapped[str] = mapped_column(String(128))
+    carrier_placement: Mapped[str] = mapped_column(String(128), index=True)
+    escalation_speed: Mapped[str] = mapped_column(String(128))
+    cross_app_hops_bucket: Mapped[str] = mapped_column(String(8))
+
+    alpha: Mapped[float] = mapped_column(Float, default=1.0)
+    beta: Mapped[float] = mapped_column(Float, default=1.0)
+    prev_alpha: Mapped[float | None] = mapped_column(Float, nullable=True)
+    prev_beta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    provenance_resolution: Mapped[str] = mapped_column(String(16), default="native")
+    """native | medium | coarse — the *best* resolution any observation in this
+    cell reached (native wins)."""
+    n_success: Mapped[float] = mapped_column(Float, default=0.0)
+    n_failure: Mapped[float] = mapped_column(Float, default=0.0)
+    last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class TargetFingerprintIndividual(Base):
+    """One individual (a ``content_hash(guide)`` + wording variant) within a cell.
+
+    MAP-Elites keeps per-cell diversity: two leaves sharing a cumulative
+    non-wording vector but differing in wording are distinct individuals here.
+    """
+
+    __tablename__ = "target_fingerprint_individuals"
+    __table_args__ = (
+        UniqueConstraint("cell_id", "individual_id", "wording", name="uq_fingerprint_individual"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    cell_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("target_fingerprint_cells.id", ondelete="CASCADE"), index=True
+    )
+    individual_id: Mapped[str] = mapped_column(String(64), index=True)
+    """``content_hash(guide)`` — stable attack-content identity."""
+    wording: Mapped[str] = mapped_column(String(256), default="__baseline__")
+    n_obs: Mapped[float] = mapped_column(Float, default=0.0)
+    n_success: Mapped[float] = mapped_column(Float, default=0.0)
+    last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class JudgeOnlySignal(Base):
+    """A judge-only success — banked here, NEVER into a cell posterior (Q6).
+
+    The deterministic success channel stays single: an LLM-judge win with no
+    corroborating deterministic signal is written here for the mutation engine
+    and judge calibration to consume, but leaves ``alpha``/``beta`` untouched.
+    """
+
+    __tablename__ = "judge_only_signals"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    trace_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("traces.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cell_key: Mapped[str] = mapped_column(String(512), index=True)
+    individual_id: Mapped[str] = mapped_column(String(64), index=True)
+    judge_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    resolution: Mapped[str] = mapped_column(String(16), default="native")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class TargetDriftSentinel(Base):
+    """The frozen sentinel selection — one canonical, never-mutated attack
+    (``content_hash``) per populated cell, chosen once and stable across cycles.
+    TARGET-VERSION drift, distinct from operational ``dashboard/drift.py``."""
+
+    __tablename__ = "target_drift_sentinels"
+    __table_args__ = (
+        UniqueConstraint(
+            "model_label", "tenant_tier", "surface_config_hash", "cell_key",
+            name="uq_target_drift_sentinel",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_label: Mapped[str] = mapped_column(String(128), index=True)
+    tenant_tier: Mapped[str] = mapped_column(String(64))
+    surface_config_hash: Mapped[str] = mapped_column(String(64))
+    cell_key: Mapped[str] = mapped_column(String(512), index=True)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    selected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class TargetDriftSentinelObservation(Base):
+    """One sentinel outcome per cycle. Because the sentinel never changes, any
+    movement here is attributable to the TARGET, not search/judge/tenant."""
+
+    __tablename__ = "target_drift_sentinel_observations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_label: Mapped[str] = mapped_column(String(128), index=True)
+    tenant_tier: Mapped[str] = mapped_column(String(64))
+    surface_config_hash: Mapped[str] = mapped_column(String(64))
+    cell_key: Mapped[str] = mapped_column(String(512), index=True)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    cycle_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, index=True)
+    signal_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    run_outcome: Mapped[str] = mapped_column(String(24), default="invalid_technical")
+    fixture_clean: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class TargetDriftAlert(Base):
+    """The DERIVED per-cycle drift verdict the orchestration loop persists from
+    Part E's detectors (CUSUM alert + guards ``source`` label + calibration flag),
+    so the dashboard reads a stored verdict rather than recomputing it. TARGET-drift
+    namespace; distinct from operational ``dashboard/drift.py``."""
+
+    __tablename__ = "target_drift_alerts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_label: Mapped[str] = mapped_column(String(128), index=True)
+    tenant_tier: Mapped[str] = mapped_column(String(64))
+    surface_config_hash: Mapped[str] = mapped_column(String(64))
+    cell_key: Mapped[str] = mapped_column(String(512), index=True)
+    cycle_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, index=True)
+    direction: Mapped[str] = mapped_column(String(24), default="none")
+    magnitude: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(16), default="target", index=True)
+    """target | search | judge — never render a non-target source as a target regression."""
+    detector_calibrated: Mapped[bool] = mapped_column(Boolean, default=False)
+    """When False the dashboard shows 'calibrating — suppressed', never a live alert."""
+    note: Mapped[str] = mapped_column(Text, default="")
+
+
+class BoundaryModelRow(Base):
+    """The per-target boundary model (Part D credit assignment): main effects +
+    interactions the drift layer compares later versions against."""
+
+    __tablename__ = "boundary_models"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_label: Mapped[str] = mapped_column(String(128), index=True)
+    tenant_tier: Mapped[str] = mapped_column(String(64))
+    surface_config_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class FingerprintSnapshot(Base):
+    """An immutable per-cell snapshot of a target profile's archive at a time.
+
+    Stored/reloaded keyed by ``(target profile, taken_at)`` so the drift part can
+    diff two versions' fingerprints. ``payload`` is the serialised per-cell
+    ``{mean, ess, resolution}`` map.
+    """
+
+    __tablename__ = "fingerprint_snapshots"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_label: Mapped[str] = mapped_column(String(128), index=True)
+    tenant_tier: Mapped[str] = mapped_column(String(64))
+    surface_config_hash: Mapped[str] = mapped_column(String(64))
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 __all__ = [
     "Base",
+    "BoundaryModelRow",
     "CalibrationExample",
     "CalibrationResult",
     "Finding",
+    "FingerprintSnapshot",
     "GoldLabel",
     "GuideVariant",
     "HitlItem",
+    "JudgeOnlySignal",
     "JudgeScore",
     "RecipeRow",
     "RecipeStepRow",
@@ -597,5 +841,11 @@ __all__ = [
     "SeedReliability",
     "SeedRow",
     "SignalRecord",
+    "TargetDriftAlert",
+    "TargetDriftSentinel",
+    "TargetDriftSentinelObservation",
+    "TargetFingerprintCell",
+    "TargetFingerprintIndividual",
+    "TargetProfile",
     "Trace",
 ]

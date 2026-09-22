@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}status · target drift{% endblock %}
+{% block content %}
+<div class="page-head"><p class="eyebrow">Stability status</p><h1>Stability</h1></div>
+<div class="td-status state-{{ state }}">
+  <strong class="td-state">{{ state | replace('_', ' ') }}</strong>
+  <p class="td-detail">{{ detail }}</p>
+  <ul class="muted">
+    <li>CUSUM (sustained shifts): {{ 'quiet' if cusum_quiet else 'ALERTING' }}</li>
+    <li>Version-diff (gradual drift): {{ 'available' if version_diff_available else 'not computed' }}</li>
+  </ul>
+  <p class="muted">A quiet CUSUM alone is never "stable" — a slow ramp lags CUSUM by design; the version-diff is the gradual-drift check.</p>
+</div>
+{% endblock %}

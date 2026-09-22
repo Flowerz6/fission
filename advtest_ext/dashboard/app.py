@@ -214,6 +214,22 @@ class LiveTestStart(BaseModel):
     max_nodes_per_seed: int | None = Field(default=None, ge=1, le=400)
 
 
+class LiveTestBatchItem(BaseModel):
+    """One guide run in a back-to-back batch, with its own tree knobs."""
+
+    playbook: str
+    branching_factor: int | None = Field(default=None, ge=1, le=5)
+    max_depth: int | None = Field(default=None, ge=1, le=12)
+    max_nodes_per_seed: int | None = Field(default=None, ge=1, le=400)
+
+
+class LiveTestBatchStart(BaseModel):
+    """Queue several guide runs to execute one after another."""
+
+    confirmed: bool = False
+    items: list[LiveTestBatchItem] = Field(default_factory=list, max_length=50)
+
+
 def _hitl_blind_pct() -> int:
     """Fraction of reviews shown *blind* (oracle verdict hidden) to guard
     against anchoring bias — the reviewer judges the evidence, not the
@@ -827,6 +843,13 @@ def create_app(
     # Routes
     # ------------------------------------------------------------------
 
+    # Target-version drift views (Part F1), under the /target_drift prefix —
+    # distinct from the operational-drift routes below. Registered as its own
+    # router so it never shadows an operational-drift route/template.
+    from advtest_ext.dashboard.target_drift import build_target_drift_router
+
+    app.include_router(build_target_drift_router(templates, get_session))
+
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         """Liveness probe: the process is up and serving. No dependencies —
@@ -1123,6 +1146,23 @@ def create_app(
             state = live_tests.stop()
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
+        return JSONResponse(state, status_code=202)
+
+    # NOTE: registered BEFORE the "/live-tests/{test_id}/start" catch-all so the
+    # literal "batch" path isn't swallowed as test_id="batch".
+    @app.post("/live-tests/batch/start")
+    async def live_tests_batch_start(submission: LiveTestBatchStart) -> JSONResponse:
+        """Queue several guide runs to execute back-to-back (one at a time)."""
+        if not submission.confirmed:
+            raise HTTPException(422, "confirm the live-account prerequisites before starting")
+        try:
+            state = live_tests.start_batch([item.model_dump() for item in submission.items])
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
         return JSONResponse(state, status_code=202)
 
     @app.post("/live-tests/{test_id}/start")
@@ -2323,9 +2363,12 @@ def create_app(
         date_from: str | None = None,
         date_to: str | None = None,
         run_id: str | None = None,
+        finding_id: str | None = None,
+        recipient: str | None = Query(default=None, max_length=160),
+        author: str | None = Query(default=None, max_length=160),
+        contact: str | None = Query(default=None, max_length=254),
     ) -> Response:
         from advtest_ext.dashboard.report import (
-            WEASYPRINT_INSTALLED,
             build_findings_report_context,
         )
 
@@ -2337,9 +2380,9 @@ def create_app(
             workspace=workspace,
             date_from=date_from,
             date_to=date_to,
-            run_id=run_id,
+            run_id=run_id, finding_id=finding_id, recipient=recipient, author=author, contact=contact,
         )
-        ctx["pdf_available"] = WEASYPRINT_INSTALLED
+        ctx["pdf_available"] = True
         return templates.TemplateResponse(request, "reports/document.html", ctx)
 
     @app.get("/reports/view.pdf")
@@ -2353,20 +2396,15 @@ def create_app(
         date_from: str | None = None,
         date_to: str | None = None,
         run_id: str | None = None,
+        finding_id: str | None = None,
+        recipient: str | None = Query(default=None, max_length=160),
+        author: str | None = Query(default=None, max_length=160),
+        contact: str | None = Query(default=None, max_length=254),
     ) -> Response:
         from advtest_ext.dashboard.report import (
-            WEASYPRINT_INSTALLED,
             build_findings_report_context,
-            render_pdf,
         )
 
-        if not WEASYPRINT_INSTALLED:
-            return PlainTextResponse(
-                "PDF rendering requires the optional 'pdf' extra:\n"
-                "    poetry install --extras pdf\n"
-                "The HTML version is available at /reports/view.",
-                status_code=501,
-            )
         ctx = build_findings_report_context(
             session,
             title=title,
@@ -2375,15 +2413,16 @@ def create_app(
             workspace=workspace,
             date_from=date_from,
             date_to=date_to,
-            run_id=run_id,
+            run_id=run_id, finding_id=finding_id, recipient=recipient, author=author, contact=contact,
         )
         ctx["pdf_available"] = True
-        html = templates.get_template("reports/document.html").render(request=request, **ctx)
-        pdf_bytes = render_pdf(html, base_url=str(_TEMPLATE_DIR))
+        from advtest_ext.dashboard.disclosure_pdf import render_disclosure_pdf
+
+        pdf_bytes = render_disclosure_pdf(ctx)
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": 'inline; filename="fission-findings-report.pdf"'},
+            headers={"Content-Disposition": f'attachment; filename="fission-{ctx["report_id"]}.pdf"'},
         )
 
     @app.get("/settings", response_class=HTMLResponse)
