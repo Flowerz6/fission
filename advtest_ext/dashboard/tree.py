@@ -20,12 +20,35 @@ from typing import Any
 from advtest_ext.dashboard.presentation import attack_label, objective_label
 
 
-def _score_of(trace: Any) -> float:
+def _trace_score(trace: Any) -> float | None:
+    """The per-node score to display/rank by.
+
+    For tap_crescendo the meaningful score is the effective per-turn score
+    persisted in ``extra_metadata['tap_crescendo']`` (``score``, else the raw
+    gradient ``judge_score_raw``) — the orchestrator's ``judge_scores`` row is a
+    separate gradient that is frequently 0 for these nodes, which is why the tree
+    used to show 0 on green nodes. Non-tap traces fall back to ``judge_scores``.
+    """
+    meta = getattr(trace, "extra_metadata", None)
+    if isinstance(meta, dict):
+        tc = meta.get("tap_crescendo")
+        if isinstance(tc, dict):
+            for key in ("score", "judge_score_raw"):
+                value = tc.get(key)
+                if isinstance(value, (int, float)):
+                    return float(value)
     js = getattr(trace, "judge_scores", None)
+    if not js:
+        return None
     try:
-        return max((float(score.score) for score in js), default=0.0) if js else 0.0
+        return max(float(score.score) for score in js)
     except (AttributeError, TypeError, ValueError):
-        return 0.0
+        return None
+
+
+def _score_of(trace: Any) -> float:
+    score = _trace_score(trace)
+    return score if score is not None else 0.0
 
 
 def _conversation_spec(trace: Any) -> tuple[str, Any, int, Any] | None:
@@ -360,13 +383,8 @@ def _node_status(verdict: str | None) -> str:
 
 
 def _node_score(trace: Any) -> float | None:
-    js = getattr(trace, "judge_scores", None)
-    if not js:
-        return None
-    try:
-        return max(float(score.score) for score in js)
-    except (AttributeError, TypeError, ValueError):
-        return None
+    # Prefer the tap_crescendo effective/raw score; fall back to judge_scores.
+    return _trace_score(trace)
 
 
 def _node_name(trace: Any, index: int) -> str:

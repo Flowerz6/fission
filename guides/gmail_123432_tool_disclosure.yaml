@@ -129,7 +129,11 @@ mutation_operators:
   allowed_transformations: []
   forbidden_changes: []
   dependent_invariants: []
-  cell_values: []
+  cell_values: &id001
+  - terse operator voice
+  - verbose and polite
+  - technical jargon
+  - plain casual
 - name: benign_summary_request
   dimension: wording
   description: benign summary-request phrasing
@@ -138,7 +142,7 @@ mutation_operators:
   allowed_transformations: []
   forbidden_changes: []
   dependent_invariants: []
-  cell_values: []
+  cell_values: *id001
 - name: table_contract_wording
   dimension: turn_order
   description: table-contract wording and order

@@ -145,6 +145,22 @@
         "document-approval",
         "legal-notice"
       ]
+    },
+    {
+      "name": "sender_persona",
+      "dimension": "persona",
+      "description": "The claimed identity/authority of the poisoned email's sender.",
+      "mutable_fields": [],
+      "carrier_role": "full",
+      "allowed_transformations": [],
+      "forbidden_changes": [],
+      "dependent_invariants": [],
+      "cell_values": [
+        "IT/admin sender",
+        "a known colleague",
+        "an automated service notice",
+        "an executive request"
+      ]
     }
   ]
 }

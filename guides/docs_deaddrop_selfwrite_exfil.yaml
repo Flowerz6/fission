@@ -117,4 +117,21 @@ mutation_operators:
   allowed_transformations: []
   forbidden_changes: []
   dependent_invariants: []
-  cell_values: []
+  cell_values:
+  - terse operator voice
+  - verbose and polite
+  - technical jargon
+  - plain casual
+- name: authority_persona
+  dimension: persona
+  description: The authority the planted content claims to speak with.
+  mutable_fields: []
+  carrier_role: full
+  allowed_transformations: []
+  forbidden_changes: []
+  dependent_invariants: []
+  cell_values:
+  - system/admin directive
+  - the document's author
+  - a compliance/audit note
+  - a trusted internal team

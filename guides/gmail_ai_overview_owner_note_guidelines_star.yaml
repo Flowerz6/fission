@@ -253,7 +253,11 @@ mutation_operators:
   allowed_transformations: []
   forbidden_changes: []
   dependent_invariants: []
-  cell_values: []
+  cell_values:
+  - terse operator voice
+  - verbose and polite
+  - technical jargon
+  - plain casual
 - name: placement_two_injection
   dimension: carrier_placement
   description: placement of the two injection blocks after the visible body

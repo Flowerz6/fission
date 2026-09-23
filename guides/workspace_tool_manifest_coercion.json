@@ -132,7 +132,12 @@
       "allowed_transformations": [],
       "forbidden_changes": [],
       "dependent_invariants": [],
-      "cell_values": []
+      "cell_values": [
+        "routine-config check",
+        "urgent-incident triage",
+        "compliance-deadline",
+        "debug-verification"
+      ]
     },
     {
       "name": "verification_claim_challenge",
@@ -143,7 +148,12 @@
       "allowed_transformations": [],
       "forbidden_changes": [],
       "dependent_invariants": [],
-      "cell_values": []
+      "cell_values": [
+        "file-access claim",
+        "schema-completeness claim",
+        "registration-order claim",
+        "tool-count claim"
+      ]
     },
     {
       "name": "cross_app_category",

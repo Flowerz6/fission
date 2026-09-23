@@ -251,11 +251,15 @@ def map_guide(guide: Guide) -> GuidePlan:
     seed_chain = _seed_chain(guide.exemplar_turns)
     if seed_chain:
         attack_kwargs["seed_chain"] = seed_chain
-        # Reproduce the seed ONCE, verbatim: that single node is both the
-        # "does the known-good chain still work" check and the strict_seed
-        # baseline the mutations are measured against. ("both" would replay it
-        # a second time adaptively, costing a full extra conversation.)
+        # Reproduce the seed ONCE, EXACTLY as documented in the guide: the root
+        # node sends the guide's exemplar turns byte-for-byte (seed_adaptive=False),
+        # so it is a faithful "does the known-good chain still work" check and the
+        # baseline the branches' mutations are measured against. Without
+        # seed_adaptive=False the root would silently rewrite the seed prompts to
+        # react to the live target — not an exact reproduction. Mutations happen in
+        # the BRANCHES, never in the root's seed reproduction.
         attack_kwargs["replay_mode"] = "strict"
+        attack_kwargs["seed_adaptive"] = False
 
     # Seed the branch strategist with the guide's own approach so variant
     # proposals stay on-goal (a system-prompt-leak guide must not inherit the

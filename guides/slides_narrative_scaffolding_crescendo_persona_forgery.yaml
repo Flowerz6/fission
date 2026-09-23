@@ -396,4 +396,20 @@ mutation_operators:
   allowed_transformations: []
   forbidden_changes: []
   dependent_invariants: []
-  cell_values: []
+  cell_values:
+  - with completeness turn
+  - without completeness turn
+  - extra-confirmation turn
+- name: request_framing
+  dimension: framing
+  description: How the request/scaffold is framed.
+  mutable_fields: []
+  carrier_role: full
+  allowed_transformations: []
+  forbidden_changes: []
+  dependent_invariants: []
+  cell_values:
+  - neutral inline note
+  - official/compliance directive
+  - system/config annotation
+  - cited-reference footnote

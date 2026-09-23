@@ -146,7 +146,11 @@ mutation_operators:
   allowed_transformations: []
   forbidden_changes: []
   dependent_invariants: []
-  cell_values: []
+  cell_values:
+  - terse operator voice
+  - verbose and polite
+  - technical jargon
+  - plain casual
 - name: order_labels_forced
   dimension: turn_order
   description: order and labels of the forced disclosure table

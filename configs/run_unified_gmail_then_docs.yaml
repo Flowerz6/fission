@@ -52,6 +52,7 @@ phases:
         # with the authoritative verdict shown on the dashboard.
         confirm_with_llm_judge: true
         canary: HX-WHITE
+        accept_output_markers: true
         handshake_token: SABLEWING-ENGINEER   # conditional-reveal persona token
         # Per-seed deepening shape: branch, keep the best, go deeper —
         # bounded by max_nodes_per_seed (4). keep_top=1 makes each seed a
@@ -77,6 +78,7 @@ phases:
         entity: CARA-2025
         confirm_with_llm_judge: true   # LLM judge confirms before a node goes green
         canary: HX-WHITE
+        accept_output_markers: true
         branching_factor: 3
         max_depth: 2
         keep_top: 1
@@ -84,7 +86,7 @@ phases:
         # then completes — this is the last phase). The natural root opener
         # is tried first; if it fails, the seeded known-good chain at
         # n1-0-1 (below) lands the win and the search stops there.
-        stop_on_success: true
+        stop_on_success: false
         node_max_turns: 5
         node_stuck_patience: 2
         success_threshold: 1.0
