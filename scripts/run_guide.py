@@ -44,6 +44,10 @@ import argparse
 import asyncio
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
 from advtest_ext.guides import Guide, load_guide, load_guides
 from advtest_ext.guides.corpus import resolve_guide_path
 from advtest_ext.guides.models import display_title
@@ -127,6 +131,21 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="stop the tree at the first winning node (default: keep exploring for more successes)",
     )
+    p.add_argument(
+        "--model-thoughts",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="show the target's 'Model thoughts' chain-of-thought to the attacker LLM "
+        "before it writes the next turn (default ON). On the Gemini Workspace side panel "
+        "the reasoning pane is USER-VISIBLE, so this reflects what a real operator sees; "
+        "pass --no-model-thoughts to hide it (e.g. modelling a surface that doesn't show it).",
+    )
+    p.add_argument(
+        "--planner-role",
+        help="provider role (in the --provider-config YAML) to use for the mutation "
+        "PLANNER, split from the turn-writing attacker. Default: same as CLAUDE_ATTACKER. "
+        "Use CLAUDE_PLANNER to let Claude propose the plan while the local model writes turns.",
+    )
     p.add_argument("--node-max-turns", type=int, help="max turns per Crescendo node")
     p.add_argument(
         "--no-confirm",
@@ -148,6 +167,18 @@ def _parse_args() -> argparse.Namespace:
         help="mint the host doc through the logged-in browser (no Docs API / OAuth)",
     )
     p.add_argument("--doc-id", help="ground on an existing Doc/Sheet id (no API create)")
+    p.add_argument(
+        "--accept-suggestions",
+        action="store_true",
+        help="(google_docs_multiturn) after each turn, click Accept on Gemini's suggested "
+        "edit so a write-back exfil commits into the doc body (the exit channel)",
+    )
+    p.add_argument(
+        "--confirm-actions",
+        action="store_true",
+        help="(google_docs_multiturn) click through Gemini action-permission gates "
+        "(Allow / Continue) when they appear",
+    )
     p.add_argument(
         "--setup-var",
         action="append",
@@ -246,6 +277,8 @@ def main() -> None:
     if args.invariant_gate:
         overrides["hard_invariant_validation"] = True
         overrides["semantic_validation_required"] = True
+    if args.model_thoughts:
+        overrides["include_model_thoughts"] = True
 
     # Target adapter options (multi-turn UI targets). Only set what the operator
     # asked for so the factory defaults hold.
@@ -256,6 +289,10 @@ def main() -> None:
         target_options["doc_id"] = args.doc_id
     if args.output_dir:
         target_options["ui_output_dir"] = str(args.output_dir)
+    if args.accept_suggestions:
+        target_options["accept_suggestions"] = True
+    if args.confirm_actions:
+        target_options["confirm_actions"] = True
 
     if args.dry_run:
         _print_dry_run(guide, args.target_name, overrides, target_options)
@@ -316,6 +353,7 @@ def main() -> None:
         run_guide(
             guide,
             provider_config=args.provider_config,
+            planner_role=args.planner_role,
             target_name=args.target_name,
             target_options=target_options or None,
             confirm_with_llm_judge=not args.no_confirm,

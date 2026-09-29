@@ -643,7 +643,7 @@ def _workspace_target_factory(
 
 
 _MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
-    {"ui_output_dir", "doc_id", "doc_ids", "browser_mint"}
+    {"ui_output_dir", "doc_id", "doc_ids", "browser_mint", "accept_suggestions", "confirm_actions"}
 )
 
 _SHEETS_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
@@ -702,6 +702,8 @@ def _multiturn_target_factory(options: dict[str, Any] | None = None) -> Document
         doc_id=opts.get("doc_id"),
         doc_ids=doc_ids,
         browser_mint=bool(opts.get("browser_mint", False)),
+        accept_suggestions=bool(opts.get("accept_suggestions", False)),
+        confirm_actions=bool(opts.get("confirm_actions", False)),
     )
 
 

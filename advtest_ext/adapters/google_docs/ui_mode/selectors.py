@@ -109,6 +109,30 @@ class SidePanelSelectors(TypedDict):
     button first and falls back to Enter only if the selector misses
     (drift safety net)."""
 
+    suggestion_accept: str
+    """The "Accept" control on a Gemini-proposed *suggested edit*
+    (Docs track-changes). When Gemini writes into the doc via the
+    inline editor it does NOT commit directly — it proposes a
+    suggestion the user must Accept before the text becomes real
+    document body. For a write-back exfil guide this click IS the
+    exit channel: without it the leaked data stays in a pending
+    suggestion the ``document_body`` signal never sees. Returns ALL
+    accept controls on the page (a reply can propose several); the
+    invoker clicks them oldest-first until none remain."""
+
+    suggestion_reject: str
+    """The "Reject" control on a Gemini-proposed suggested edit —
+    the clean-control counterpart to ``suggestion_accept`` (discard
+    the proposal so nothing is written). Used by reject-mode runs and
+    to clear a stuck "Resolve Gemini suggestions" lock between nodes."""
+
+    action_confirm: str
+    """A generic confirm / allow / continue button on a Gemini
+    action-permission prompt (e.g. "Gemini wants to …" → Allow, or a
+    "Continue" step gate). Best-effort and permissive — accessible
+    names vary and this surface drifts often; the invoker clicks it
+    only when ``confirm_actions`` is enabled and swallows a miss."""
+
 
 # Snapshot taken against the live Docs DOM. Confirmed by DevTools
 # inspection — selectors target the ``appsElementsSidekick…``
@@ -200,6 +224,34 @@ _BASE_SELECTORS: SidePanelSelectors = {
         '[role="complementary"][aria-label="Gemini"] '
         'button[aria-label*="Send" i]:not([disabled]):not([aria-disabled="true"])'
     ),
+    "suggestion_accept": (
+        # Accept control on a Docs suggested edit. Google renders this
+        # both as an inline hover-card button and as a per-suggestion
+        # popup; accessible name has appeared as "Accept" and
+        # "Accept suggestion". NOT scoped under the Gemini panel — the
+        # suggestion controls live in the document editor surface, not
+        # the side panel. Permissive across button / role=button.
+        'div[role="button"][aria-label*="Accept" i], '
+        'button[aria-label*="Accept" i], '
+        'div[role="button"]:has-text("Accept"), '
+        'button:has-text("Accept")'
+    ),
+    "suggestion_reject": (
+        # Reject control on a Docs suggested edit — mirror of accept.
+        'div[role="button"][aria-label*="Reject" i], '
+        'button[aria-label*="Reject" i], '
+        'div[role="button"]:has-text("Reject"), '
+        'button:has-text("Reject")'
+    ),
+    "action_confirm": (
+        # Generic Gemini action-permission / continue button. Very
+        # permissive and drift-prone by nature; only used when
+        # confirm_actions is enabled. Excludes the composer send button.
+        'button[aria-label*="Allow" i], '
+        'button:has-text("Allow"), '
+        'button:has-text("Continue"), '
+        'div[role="button"]:has-text("Allow")'
+    ),
 }
 
 
@@ -222,6 +274,9 @@ EXPECTED_KEYS: frozenset[str] = frozenset(
         "side_panel_new_conversation",
         "side_panel_close",
         "side_panel_send",
+        "suggestion_accept",
+        "suggestion_reject",
+        "action_confirm",
     }
 )
 """Source of truth for the SELECTORS keys. The invoker's lookups

@@ -705,6 +705,8 @@ async def ui_mode_invoke(
     external_context: Any = None,
     external_page: Any = None,
     reset_conversation: bool = True,
+    accept_suggestions: bool = False,
+    confirm_actions: bool = False,
 ) -> Response:
     """Drive the Gemini side panel against an existing Doc.
 
@@ -784,7 +786,10 @@ async def ui_mode_invoke(
     context: Any = None
     owns_context: bool = False
     owns_page: bool = False
+    document_body_before: str = ""
     document_body: str = ""
+    suggestions_accepted: int = 0
+    actions_confirmed: int = 0
     try:
         if page_factory is not None:
             context, page = await page_factory()
@@ -831,13 +836,30 @@ async def ui_mode_invoke(
                 # before doing anything. Helps if Docs renders some
                 # late-mounting UI that affects layout.
                 await jitter_pause(HUMAN_ACTION_PAUSE_S)
-                response_text = await _run_side_panel_flow(
+                # Snapshot the editor immediately before the side-panel action.
+                # Downstream evaluators use the before/after delta so planted
+                # source text cannot be mistaken for generated output.
+                document_body_before = await _read_doc_body_text(page)
+                response_text, model_thoughts = await _run_side_panel_flow(
                     page=page,
                     user_prompt=user_prompt,
                     screenshot_path=screenshot_path,
                     timeout_ms=timeout,
                     reset_conversation=reset_conversation,
                 )
+                # When the guide's exit channel is a doc write-back, the
+                # model proposes a SUGGESTED edit the user must Accept
+                # before it becomes real body text. Optionally play that
+                # human-in-the-loop click here (and clear any action-
+                # permission gate first) so the ``document_body`` read
+                # below sees the COMMITTED data, not a pending suggestion.
+                if confirm_actions:
+                    actions_confirmed = await _confirm_pending_action(page, timeout)
+                if accept_suggestions:
+                    suggestions_accepted = await _accept_doc_suggestions(page, timeout)
+                    if suggestions_accepted:
+                        # Let Docs commit the accepted edit into the body.
+                        await jitter_pause(HUMAN_ACTION_PAUSE_S)
                 # Capture editor body BEFORE teardown. Read from the
                 # live DOM via Playwright so signal evaluation can
                 # score against what Gemini actually saw — no Drive
@@ -889,9 +911,104 @@ async def ui_mode_invoke(
             "ui_response": ui_response_text,
             "intercepted_traffic_path": str(intercept_path) if intercept_on else None,
             "ui_mode": True,
+            "document_body_before": document_body_before,
             "document_body": document_body,
+            "model_thoughts": model_thoughts,
+            "suggestions_accepted": suggestions_accepted,
+            "actions_confirmed": actions_confirmed,
         },
     )
+
+
+_MODEL_THOUGHTS_TOGGLE_SELECTOR = (
+    '[role="complementary"][aria-label="Gemini"] '
+    '[class*="Thought" i] [role="button"], '
+    '[role="complementary"][aria-label="Gemini"] '
+    'button[aria-label*="thought" i], '
+    '[role="complementary"][aria-label="Gemini"] '
+    'button[aria-label*="reasoning" i]'
+)
+_MODEL_THOUGHTS_CONTENT_SELECTOR = (
+    '[role="complementary"][aria-label="Gemini"] [class*="ThoughtContent" i], '
+    '[role="complementary"][aria-label="Gemini"] [class*="ThoughtBody" i], '
+    '[role="complementary"][aria-label="Gemini"] [class*="Thought" i] [class*="markdown" i]'
+)
+
+
+async def _read_model_thoughts(page: Any) -> str:
+    """Best-effort capture of the 'Model thoughts' disclosure widget."""
+    try:
+        content = page.locator(_MODEL_THOUGHTS_CONTENT_SELECTOR)
+        n = int(await content.count())
+    except Exception:
+        return ""
+    if n == 0:
+        return ""
+    try:
+        body = (await content.nth(n - 1).inner_text()).strip()
+    except Exception:
+        body = ""
+    if not body:
+        try:
+            toggle = page.locator(_MODEL_THOUGHTS_TOGGLE_SELECTOR).last
+            await toggle.click(timeout=1_000)
+            body = (await content.nth(n - 1).inner_text()).strip()
+        except Exception:
+            body = ""
+    if not body:
+        return ""
+    return str(body)  # full reasoning — evidence never truncated at capture
+
+
+async def _accept_doc_suggestions(page: Any, timeout_ms: int, *, max_clicks: int = 12) -> int:
+    """Click every pending Gemini "Accept" suggestion so the proposed
+    edit commits into the real document body.
+
+    A single reply can propose several suggestions; each Accept removes
+    one control and (sometimes) reveals the next. We click the FIRST
+    match, re-query, and repeat until no accept control remains or we hit
+    ``max_clicks`` (a runaway guard). Entirely best-effort — a miss, a
+    detached node, or a per-click timeout is swallowed and simply ends the
+    loop, because a run must never fail on the accept step: the reply is
+    already captured and a missing suggestion is a legitimate "nothing to
+    accept" outcome, not an error. Returns the number of clicks performed.
+    """
+    sel = SELECTORS["suggestion_accept"]
+    clicks = 0
+    for _ in range(max_clicks):
+        try:
+            locator = page.locator(sel)
+            if int(await locator.count()) == 0:
+                break
+            # Oldest-first: the first suggestion in document order.
+            await locator.first.click(timeout=min(timeout_ms, 4_000))
+            clicks += 1
+            # Brief settle so the DOM drops the resolved control before we
+            # re-count (avoids clicking a stale handle).
+            await jitter_pause(HUMAN_ACTION_PAUSE_S)
+        except Exception:
+            break
+    return clicks
+
+
+async def _confirm_pending_action(page: Any, timeout_ms: int, *, max_clicks: int = 4) -> int:
+    """Click a Gemini action-permission / continue gate ("Allow",
+    "Continue") when one is showing. Best-effort and permissive — this
+    surface drifts and is often absent; a miss is swallowed. Returns the
+    number of confirm clicks performed."""
+    sel = SELECTORS["action_confirm"]
+    clicks = 0
+    for _ in range(max_clicks):
+        try:
+            locator = page.locator(sel)
+            if int(await locator.count()) == 0:
+                break
+            await locator.first.click(timeout=min(timeout_ms, 3_000))
+            clicks += 1
+            await jitter_pause(HUMAN_ACTION_PAUSE_S)
+        except Exception:
+            break
+    return clicks
 
 
 async def _run_side_panel_flow(
@@ -901,51 +1018,24 @@ async def _run_side_panel_flow(
     screenshot_path: Path,
     timeout_ms: int,
     reset_conversation: bool = True,
-) -> str:
+) -> tuple[str, str]:
     """Inner sequence shared between the production and test-
     injection paths. Open the panel, optionally reset to a fresh
     conversation, submit the prompt, read the response, screenshot.
-    All raise-points convert to ``SidePanelUnavailable`` upstream —
-    this function is deliberately a thin orchestrator over the
-    helpers.
-
-    ``reset_conversation`` controls whether we click "New
-    conversation" before submitting. True (default) lands the
-    prompt as turn 1 of a fresh thread — right for one-shot
-    attacks (PAIR/TAP) and the first turn of a multi-step
-    Recipe. False keeps the existing conversation so subsequent
-    Recipe steps land as turn 2, 3, ... — required for V3/V4
-    progressive-disclosure chains where persona / context
-    must accumulate across turns."""
+    Returns (reply_text, model_thoughts)."""
     await _open_side_panel(page, timeout_ms)
-    # Wait for Google's auto-summary to finish BEFORE attempting
-    # the reset. Clicking "New conversation" while the panel is
-    # mid-stream leaves it in a half-reset state where the old
-    # conversation lingers and the input combobox stays
-    # non-actionable.
     await _wait_for_panel_idle(page)
     if reset_conversation:
-        # Best-effort: discard the auto-summary by clicking
-        # "New conversation". When this lands, our prompt becomes
-        # turn 1 of a fresh conversation. When it doesn't (selector
-        # drift, button missing), the conversation continues as a
-        # follow-up — our reply is still ``.last`` either way.
         await _start_new_conversation(page)
-    # Count bubbles BEFORE submit so the read waits for the NEW one
-    # (the panel already holds prior turns + the auto-summary).
     prev_count = await _count_responses(page)
     await _submit_prompt(page, user_prompt, timeout_ms)
     response_text = await _read_response(page, timeout_ms, prev_count=prev_count)
+    thoughts = await _read_model_thoughts(page)
     await _screenshot_side_panel(page, screenshot_path, timeout_ms)
-    # Demo-hold: keep Gemini's response on screen for a few seconds
-    # before returning so the operator / audience can read it before
-    # the next attack creates a new doc page and the side panel
-    # flashes blank. Configurable via ADVTEST_UI_MODE_HOLD_S; 0
-    # disables.
     hold_s = resolve_post_response_hold_s()
     if hold_s > 0:
         await asyncio.sleep(hold_s)
-    return response_text
+    return response_text, thoughts
 
 
 __all__ = [
