@@ -2535,9 +2535,12 @@ class TapCrescendoAttack(AttackPlugin):
                 temperature=self._temp,
                 # A carrier rewrite must emit the whole new field body in
                 # artifact_patch; 512 tokens truncates it (the patch comes back
-                # empty/clipped and the re-plant silently no-ops). Give the model
-                # room only when we actually asked for a rewritten artifact.
-                max_tokens=2048 if seed_artifact_block else 512,
+                # empty/clipped and the re-plant silently no-ops). Current Claude
+                # models think with this budget (thinking + reply share
+                # max_tokens), so a thinking planner can spend the whole 2048 on
+                # reasoning and return an empty reply — give generous headroom
+                # only when we actually asked for a rewritten artifact.
+                max_tokens=8192 if seed_artifact_block else 512,
             )
             candidate = parse_candidate(
                 resp.text,

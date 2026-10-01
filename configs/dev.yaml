@@ -85,3 +85,26 @@ CLAUDE_ATTACKER:
   # instead of long formal essays that tip off the target.
   max_tokens: 512
   temperature: 1.0
+
+# Claude-as-PLANNER (strategist). Split from the turn-writing attacker via
+# `run_guide --planner-role CLAUDE_PLANNER`; without that flag the planner
+# defaults to CLAUDE_ATTACKER. This is the reasoning-heavy role: it reads the
+# target's reply + model-thoughts, diagnoses WHY it refused, and authors a
+# materially different, legitimacy-framed carrier payload (the artifact_patch).
+# That work is Opus-tier — hence the strongest default model.
+#   * max_tokens is high on purpose: on current Claude models thinking shares
+#     the max_tokens budget with the reply, and a carrier rewrite must emit the
+#     whole new document body in artifact_patch. A tight cap lets thinking eat
+#     the budget and return an empty patch (silent — re-plants the seed), the
+#     same failure documented on CLAUDE_JUDGE above. 8192 matches the strategist
+#     call's cap in tap_crescendo.
+#   * temperature is accepted for 4.x models and auto-DROPPED for 5.x (Opus/
+#     Sonnet 5.x reject a non-default value; see providers/anthropic.py
+#     _TEMPERATURE_REJECTING_MODELS) — kept here so the role also works if ever
+#     pointed back at a 4.x planner.
+CLAUDE_PLANNER:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-opus-5-5
+  max_tokens: 8192
+  temperature: 1.0
