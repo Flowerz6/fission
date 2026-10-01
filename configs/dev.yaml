@@ -79,7 +79,7 @@ CLAUDE_JUDGE:
 CLAUDE_ATTACKER:
   provider_type: anthropic
   api_key_env: ANTHROPIC_API_KEY
-  model_id: claude-sonnet-4-6
+  model_id: claude-sonnet-5-5
   # Kept low on purpose: the attacker turn is one short chat message + a
   # one-line reasoning, so a tight cap forces concise, human-sounding turns
   # instead of long formal essays that tip off the target.
