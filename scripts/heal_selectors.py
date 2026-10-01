@@ -68,8 +68,13 @@ def _selectors_for(app: str) -> dict[str, str]:
         from advtest_ext.adapters.sheets.ui_mode.selectors import SELECTORS
 
         return {k: str(v) for k, v in SELECTORS.items()}
+    if app == "google_calendar":
+        from advtest_ext.adapters.calendar.ui_mode.selectors import SELECTORS
+
+        return {k: str(v) for k, v in SELECTORS.items()}
     raise SystemExit(
-        f"no selector registry wired for app {app!r} yet (supported: google_docs, google_sheets)"
+        f"no selector registry wired for app {app!r} yet "
+        "(supported: google_docs, google_sheets, google_calendar)"
     )
 
 
@@ -78,6 +83,8 @@ def _infer_app(url: str) -> str:
         return "google_sheets"
     if "/document/" in url:
         return "google_docs"
+    if "calendar.google.com" in url:
+        return "google_calendar"
     raise SystemExit("could not infer --app from --url; pass --app explicitly")
 
 

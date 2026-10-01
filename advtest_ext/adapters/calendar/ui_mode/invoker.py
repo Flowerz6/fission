@@ -331,7 +331,6 @@ _MODEL_THOUGHTS_CONTENT_SELECTOR = (
     '[role="complementary"][aria-label="Gemini"] [class*="ThoughtBody" i], '
     '[role="complementary"][aria-label="Gemini"] [class*="Thought" i] [class*="markdown" i]'
 )
-_MODEL_THOUGHTS_MAX_CHARS = 2000
 
 
 async def _read_model_thoughts(page: Any) -> str:
@@ -358,7 +357,7 @@ async def _read_model_thoughts(page: Any) -> str:
             body = ""
     if not body:
         return ""
-    return str(body)[:_MODEL_THOUGHTS_MAX_CHARS]
+    return str(body)  # full reasoning — evidence never truncated at capture
 
 
 async def _run_side_panel_flow(

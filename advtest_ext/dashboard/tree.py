@@ -29,6 +29,18 @@ def _trace_score(trace: Any) -> float | None:
     separate gradient that is frequently 0 for these nodes, which is why the tree
     used to show 0 on green nodes. Non-tap traces fall back to ``judge_scores``.
     """
+    js = getattr(trace, "judge_scores", None)
+    # On a CONFIRMED success, the representative number is the confirming judge's
+    # score (e.g. decomposed_ipi 0.8), not the pre-success partial-signal ranking
+    # floor (0.55) that tap uses to rank branches. Show the outcome, not the
+    # gradient, so a green node doesn't read like a partial.
+    if getattr(trace, "verdict", None) == "success" and js:
+        try:
+            best = max(float(score.score) for score in js)
+            if best > 0:
+                return best
+        except (AttributeError, TypeError, ValueError):
+            pass
     meta = getattr(trace, "extra_metadata", None)
     if isinstance(meta, dict):
         tc = meta.get("tap_crescendo")
@@ -37,7 +49,6 @@ def _trace_score(trace: Any) -> float | None:
                 value = tc.get(key)
                 if isinstance(value, (int, float)):
                     return float(value)
-    js = getattr(trace, "judge_scores", None)
     if not js:
         return None
     try:

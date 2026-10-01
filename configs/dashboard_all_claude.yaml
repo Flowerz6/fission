@@ -1,0 +1,58 @@
+# Dashboard default profile: CLAUDE end-to-end (attacker + planner + judge).
+#
+# Every guided run launched from the dashboard uses this, so the diagnose->adapt
+# reasoning runs at full quality on BOTH the branch planner and the per-turn
+# attacker (a strong model is what makes the "think like a human red-teamer"
+# scaffold actually work; the local 32B could not do it).
+#
+# Wired in advtest_ext/dashboard/live_tests.py (--provider-config + --planner-role).
+# The target is the Gemini side panel via Playwright (ui_mode), so no target key
+# is needed here. Needs ANTHROPIC_API_KEY.
+
+# The turn-writer (executor). Claude now, per the reshape — it reacts per turn:
+# keep the framing that passed, exploit the foothold, evade the stated block.
+CLAUDE_ATTACKER:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-5
+  max_tokens: 1024
+  temperature: 1.0
+
+# The branch planner (diagnose-then-adapt) — the high-leverage step, so it runs on
+# the strongest model (opus). The per-turn attacker stays sonnet for cost.
+CLAUDE_PLANNER:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-opus-4-8
+  max_tokens: 768
+  temperature: 1.0
+
+CLAUDE_JUDGE:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-5
+  max_tokens: 512
+  temperature: 0.0
+
+JUDGE_MODEL:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-5
+  max_tokens: 256
+  temperature: 0.0
+
+# Family-disjoint on-mechanism checker stays Haiku (cheap, reliable VALID/INVALID).
+CHECKER_MODEL:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-haiku-4-5-20251001
+  max_tokens: 16
+  temperature: 0.0
+
+# For any api_mode target (ui_mode ignores this).
+GEMINI_TARGET:
+  provider_type: gemini
+  api_key_env: GEMINI_API_KEY
+  model_id: gemini-2.5-flash
+  max_tokens: 1024
+  temperature: 0.7

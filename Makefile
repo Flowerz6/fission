@@ -42,9 +42,11 @@ seed:
 
 dashboard:
 	@echo "Starting dashboard at http://localhost:8000 ..."
-	ADVTEST_DB_URL=$(DB_URL) $(POETRY) run uvicorn \
-		advtest_ext.dashboard.app:create_app --factory \
-		--host 0.0.0.0 --port 8000
+	@[ -f "$(REPO_ROOT)/.env" ] && echo "Loading env from $(REPO_ROOT)/.env" || echo "No .env found — live-test launching will be disabled"
+	set -a; [ -f "$(REPO_ROOT)/.env" ] && . "$(REPO_ROOT)/.env"; set +a; \
+		ADVTEST_DB_URL=$(DB_URL) $(POETRY) run uvicorn \
+			advtest_ext.dashboard.app:create_app --factory \
+			--host 0.0.0.0 --port 8000
 
 # One-keystroke FULL end-to-end demo (headed browsers):
 #   Act 0  deliver Outlook->Gmail bait + Gmail->Outlook ack (UI senders)

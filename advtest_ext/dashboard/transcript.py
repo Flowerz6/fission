@@ -31,6 +31,7 @@ class TranscriptTurn:
     score: float | None
     verdict: str | None
     fired: dict[str, Any]
+    thoughts: str = ""
 
 
 @dataclass
@@ -55,6 +56,18 @@ def _score_of(trace: Any) -> float | None:
         except (AttributeError, TypeError, ValueError):
             return None
     return None
+
+
+def _thoughts_of(trace: Any) -> str:
+    """The target's captured 'Model thoughts' chain-of-thought, persisted by the
+    ui_mode invoker into ``Response.raw`` -> ``trace.raw_response_data``. Empty
+    string when the surface didn't expose thoughts (or none were captured)."""
+    rrd = getattr(trace, "raw_response_data", None)
+    if isinstance(rrd, dict):
+        value = rrd.get("model_thoughts")
+        if isinstance(value, str):
+            return value
+    return ""
 
 
 def _pick_response(*, intercepted: str, rendered: str) -> str:
@@ -150,6 +163,7 @@ def build_transcript_groups(
                 score=_score_of(t),
                 verdict=getattr(t, "verdict", None),
                 fired=fired,
+                thoughts=_thoughts_of(t),
             )
         )
 

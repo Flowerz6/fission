@@ -1095,13 +1095,13 @@ async def test_typed_scheduler_rotates_across_full_mutation_surface() -> None:
                 return await super().complete(messages, **kw)
             dimension = next(
                 name
-                for name in ("persona", "turn_order", "escalation_speed")
+                for name in ("persona", "persuasion_principle", "escalation_trajectory")
                 if f"dimension '{name}'" in user
             )
             operator_name = {
                 "persona": "legacy-0",
-                "turn_order": "legacy-1",
-                "escalation_speed": "legacy-2",
+                "persuasion_principle": "legacy-1",
+                "escalation_trajectory": "legacy-2",
             }[dimension]
             return SimpleNamespace(
                 text=(
@@ -1119,7 +1119,7 @@ async def test_typed_scheduler_rotates_across_full_mutation_surface() -> None:
         attacker=_DimensionAwareAttacker(),  # type: ignore[arg-type]
         judge=_judge(),
         entity=ENTITY,
-        mutation_surface=["persona labels", "turn order", "escalation speed"],
+        mutation_surface=["persona labels", "the persuasion principle", "escalation trajectory"],
         invariants=["keep mechanism"],
         semantic_validation_required=False,
         branching_factor=1,
@@ -1134,7 +1134,7 @@ async def test_typed_scheduler_rotates_across_full_mutation_surface() -> None:
         for a in attempts
         if a.metadata["tap_crescendo"]["turn"] == 1 and a.metadata["tap_crescendo"]["depth"] > 0
     ]
-    assert dimensions == ["persona", "turn_order", "escalation_speed"]
+    assert dimensions == ["persona", "persuasion_principle", "escalation_trajectory"]
 
 
 @pytest.mark.asyncio

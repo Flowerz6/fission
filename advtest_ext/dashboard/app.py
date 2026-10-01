@@ -130,6 +130,57 @@ _STATIC_DIR = Path(__file__).resolve().parent / "static"
 # implementation and can't drift on family-bucketing or aggregation.
 
 
+def _highlight_html(text: str | None, patterns: list[str]) -> str:
+    """HTML-escape ``text`` and wrap every substring matched by ``patterns`` in
+    ``<mark class="sig-hit">`` so the exact text a signal fired on is coloured
+    in place. Matching is done on the raw text (indices intact); each segment is
+    escaped so the result is safe to render with ``| safe``."""
+    import html as _h
+    import re as _re
+
+    if not text:
+        return ""
+    if not patterns:
+        return _h.escape(text)
+    try:
+        combined = _re.compile("|".join(f"(?:{p})" for p in patterns), _re.IGNORECASE)
+    except _re.error:
+        return _h.escape(text)
+    out: list[str] = []
+    last = 0
+    for m in combined.finditer(text):
+        if m.start() == m.end():  # skip zero-width matches
+            continue
+        out.append(_h.escape(text[last:m.start()]))
+        out.append('<mark class="sig-hit">' + _h.escape(m.group(0)) + "</mark>")
+        last = m.end()
+    out.append(_h.escape(text[last:]))
+    return "".join(out)
+
+
+def _signal_highlight_patterns(signals: list[Any]) -> tuple[list[str], list[str]]:
+    """From a trace's fired signals, the regex patterns to highlight in the
+    (response, model_thoughts) surfaces respectively."""
+    resp: list[str] = []
+    thoughts: list[str] = []
+    for s in signals:
+        if not getattr(s, "fired", False):
+            continue
+        ev = s.evidence if isinstance(getattr(s, "evidence", None), dict) else {}
+        pat = ev.get("pattern")
+        if not pat:
+            tok = ev.get("token") or ev.get("canary") or ev.get("first_match")
+            if tok:
+                import re as _re
+
+                pat = _re.escape(str(tok))
+        if not pat:
+            continue
+        surface = ev.get("surface") or getattr(s, "surface", None)
+        (thoughts if surface == "model_thoughts" else resp).append(str(pat))
+    return resp, thoughts
+
+
 def _full_responses_for_traces(traces: list[Any]) -> dict[str, str]:
     """Return the best response text for each trace.
 
@@ -888,7 +939,13 @@ def create_app(
         from advtest_ext.storage.repository import hydrate_missing_summaries
 
         all_runs = hydrate_missing_summaries(session, list_runs(session))
-        runs = [run for run in all_runs if run_has_success(run)]
+        # Show EVERY run by default (including partial / no-success runs, so a run
+        # is visible the moment it exists). ?only=success narrows to runs that
+        # have at least one green, which was the old default.
+        if request.query_params.get("only") == "success":
+            runs = [run for run in all_runs if run_has_success(run)]
+        else:
+            runs = list(all_runs)
         group_order = ("sheets", "docs", "cross-surface", "other")
         groups = []
         for key in group_order:
@@ -1684,6 +1741,17 @@ def create_app(
         # so the template can render the typed-signal panel alongside
         # the existing judge-scores table.
         signals = list_signals_for_trace(session, trace_id)
+        # Per-turn signal highlighting: colour the exact text each fired signal
+        # matched, in place in the conversation. Each turn is its own trace, so
+        # load its signals and re-apply the matched patterns to the reply/thoughts.
+        highlights: dict[str, dict[str, str]] = {}
+        for _turn in node_turns:
+            _sigs = signals if _turn.trace_id == trace_id else list_signals_for_trace(session, _turn.trace_id)
+            _rp, _tp = _signal_highlight_patterns(_sigs)
+            highlights[_turn.trace_id] = {
+                "response": _highlight_html(_turn.response, _rp),
+                "thoughts": _highlight_html(_turn.thoughts, _tp),
+            }
         return templates.TemplateResponse(
             request,
             "traces/show.html",
@@ -1693,6 +1761,7 @@ def create_app(
                 "full_response": full_response,
                 "node_turns": node_turns,
                 "signals": signals,
+                "highlights": highlights,
             },
         )
 

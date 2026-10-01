@@ -33,6 +33,7 @@ attack_options:
   tap_crescendo:
     entity: QUILLFEATHER       # overridden by the e2e from --codename
     canary: HX-WHITE           # the marker = "the planted instruction fired"
+    accept_output_markers: true
     branching_factor: 2        # strategy variants per parent node
     max_depth: 3               # keep branching into NEW conversations...
     keep_top: 2                # ...until a node fires the injection

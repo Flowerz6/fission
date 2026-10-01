@@ -24,6 +24,32 @@ CLAUDE_ATTACKER:
   max_tokens: 2048
   temperature: 1.0
 
+# --- The PLANNER: CLAUDE (proposes the mutation strategy, not the turn text) ---
+# Split from the attacker: the local 32B is strong at writing hard, un-softened
+# TURN CONTENT but weak at the structured meta-task of "propose exactly the
+# scheduled operator's mutation as a valid plan (plan_steps + expected_effect)",
+# which produced ~50 "no executable plan / wrong dimension" rejections. Claude
+# plans (picks operator/cell, writes the plan); the 32B still EXECUTES each turn.
+# Pass --planner-role CLAUDE_PLANNER to activate. Downgrade to haiku to cut cost.
+CLAUDE_PLANNER:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-5
+  max_tokens: 768
+  temperature: 1.0
+
+# --- The SEED GENERATOR: CLAUDE (authors new attack-class candidate seeds) -----
+# Bottles the hand-design process (advtest_ext/guides/seed_generator.py) and runs
+# it on a Claude model behind an Anthropic key, so the corpus grows in BREADTH
+# (new classes), which mutation cannot provide. Use your strongest available Claude
+# here — seed design is the high-leverage creative step. scripts/generate_seeds.py.
+CLAUDE_SEEDER:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-opus-4-8
+  max_tokens: 4096
+  temperature: 1.0
+
 # --- The judge: CLAUDE (accurate scoring, doesn't over-call success) ----------
 CLAUDE_JUDGE:
   provider_type: anthropic

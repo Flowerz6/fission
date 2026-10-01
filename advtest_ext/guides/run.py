@@ -167,7 +167,11 @@ async def run_guide(
     provider_config: str | Path,
     target_name: str | None = None,
     target_options: dict[str, Any] | None = None,
-    orchestrator_judge_name: str = "retrieval_verdict",
+    # The rubric-grounded IPI judge (attended/complied/harmful_effect), which
+    # scores against the guide's human-authored success.rubric — the right
+    # oracle for skill-leak / exfil / action guides. The old default
+    # (retrieval_verdict) is a retrieval-IPI heuristic that under-calls those.
+    orchestrator_judge_name: str = "decomposed_ipi",
     confirm_with_llm_judge: bool = True,
     confirm_judge_name: str = "decomposed_ipi",
     attacker_roles: list[str] | None = None,
@@ -311,6 +315,26 @@ async def run_guide(
                 cleanup_callback=mutation_cleanup_callback,
             ),
         )
+    if guide.environment_variants:
+        from advtest_ext.guides.environment import EnvironmentSeeder
+
+        # The staged host artifact id (bound into the target options during
+        # staging); the seeder re-writes it per node to match the pretext.
+        artifact_id = (
+            options.get("spreadsheet_id")
+            or options.get("sheet_id")
+            or options.get("document_id")
+            or options.get("doc_id")
+        )
+        if artifact_id:
+            attack_overrides.setdefault(
+                "environment_seeder",
+                EnvironmentSeeder(
+                    app=guide.target.app,
+                    artifact_id=str(artifact_id),
+                    variants=guide.environment_variants,
+                ),
+            )
     if verifier_quorum is not None:
         attack_overrides.setdefault("verifier_quorum", verifier_quorum)
     orchestrator = build_guide_run(

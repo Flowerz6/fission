@@ -42,7 +42,7 @@ def test_find_suspect_captures_oracle_only_wins_with_evidence() -> None:
         sus = _domain_trace("sus", verdict="success")
         sus.raw_response = _LEAK
         insert_trace(s, run_id="r1", trace=sus)
-        # hard-verified success (deterministic signal) -> NOT a suspect
+        # A marker hit alone does not verify the effect.
         hard = _domain_trace("hard", verdict="success")
         hard.raw_response = _LEAK
         insert_trace(s, run_id="r1", trace=hard)
@@ -54,8 +54,8 @@ def test_find_suspect_captures_oracle_only_wins_with_evidence() -> None:
 
     suspects = find_suspect_wins(factory, ["r1"], artifact_patterns=_PATTERNS)
     ids = {s.trace_id for s in suspects}
-    assert ids == {"sus"}  # only the oracle-only one
-    sw = suspects[0]
+    assert ids == {"sus", "hard"}
+    sw = next(s for s in suspects if s.trace_id == "sus")
     assert sw.artifact == _LEAK  # evidence saved
     assert "get_skills" in sw.artifact_tokens  # specific success tokens captured
 
@@ -90,6 +90,8 @@ def test_winagain_reproduction() -> None:
     assert reverify_winagain(sw, [True, True, False], min_winrate=0.5).reproduced is True
     assert reverify_winagain(sw, [True, False, False], min_winrate=0.5).reproduced is False
     assert reverify_winagain(sw, [], min_winrate=0.5).reproduced is False
+    assert reverify_winagain(sw, [True], min_winrate=0.5).reproduced is False
+    assert reverify_content(sw, [_LEAK]).reproduced is False
 
 
 def test_promote_reproduced_writes_verified_variant() -> None:
@@ -110,3 +112,19 @@ def test_promote_skips_when_not_reproduced() -> None:
     assert promote_reproduced(factory, sw, bad, guide_id="g") is False
     with session_scope(factory) as s:
         assert list_guide_variants(s, guide_id="g") == []
+
+
+def test_content_reproduction_requires_specific_evidence_not_boilerplate() -> None:
+    boilerplate = "Standard response with the same repeated introductory and closing language."
+    sw = _suspect(artifact=f"{boilerplate} get_skills")
+    result = reverify_content(sw, [boilerplate, boilerplate], min_consistency=0.3)
+    assert result.reproduced is False
+    assert "specific artifact tokens" in result.reasoning
+
+
+def test_content_reproduction_fails_closed_without_saved_tokens() -> None:
+    sw = _suspect()
+    sw.artifact_tokens = []
+    result = reverify_content(sw, [_LEAK, _LEAK], min_consistency=0.3)
+    assert result.reproduced is False
+    assert "cannot be authenticated" in result.reasoning

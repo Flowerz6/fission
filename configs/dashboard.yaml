@@ -1,0 +1,61 @@
+# Dashboard default profile: OPUS PLANNER + un-softened 32B ATTACKER + CLAUDE JUDGE.
+#
+# The reshape put the THINKING in the planner (diagnose->adapt), so the strategy is
+# Opus-quality; the turn-WRITER only has to author the payload the planner designed —
+# and a safety-tuned Claude softens/refuses hard attack turns (the reason the local
+# abliterated model existed). So: Opus plans, the abliterated 32B executes un-softened,
+# and the Claude judge/checker stay FAMILY-DISJOINT from the 32B executor (no
+# self-grading). For the all-Claude variant (attacker=sonnet), use
+# configs/dashboard_all_claude.yaml and A/B the two.
+#
+# Wired in advtest_ext/dashboard/live_tests.py (--provider-config + --planner-role).
+# Target is the Gemini side panel via Playwright (ui_mode). Needs ANTHROPIC_API_KEY
+# for planner/judge/checker and a reachable RunPod endpoint for the attacker.
+
+# The turn-writer (executor): the un-softened local model, so it never refuses or
+# softens the actual attack turn. It follows the Opus planner's diagnosed strategy.
+CLAUDE_ATTACKER:
+  provider_type: local_vllm
+  endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
+  model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
+  max_tokens: 2048
+  temperature: 1.0
+
+# The branch planner (diagnose-then-adapt) — the high-leverage step, so it runs on
+# the strongest model (opus). The per-turn attacker stays sonnet for cost.
+CLAUDE_PLANNER:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-opus-4-8
+  max_tokens: 768
+  temperature: 1.0
+
+CLAUDE_JUDGE:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-5
+  max_tokens: 512
+  temperature: 0.0
+
+JUDGE_MODEL:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-sonnet-5
+  max_tokens: 256
+  temperature: 0.0
+
+# Family-disjoint on-mechanism checker stays Haiku (cheap, reliable VALID/INVALID).
+CHECKER_MODEL:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-haiku-4-5-20251001
+  max_tokens: 16
+  temperature: 0.0
+
+# For any api_mode target (ui_mode ignores this).
+GEMINI_TARGET:
+  provider_type: gemini
+  api_key_env: GEMINI_API_KEY
+  model_id: gemini-2.5-flash
+  max_tokens: 1024
+  temperature: 0.7

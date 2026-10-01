@@ -122,7 +122,10 @@ def _load_attacker(role: str):  # noqa: ANN201 - Provider type is internal
 async def _run(args: argparse.Namespace) -> int:
     out_dir = Path(args.output_dir).resolve()
     attacker = _load_attacker(args.attacker_role)
-    judge = RetrievalVerdictJudge(entity=ENTITY, canary=qf.CANARY, handshake_token=HANDSHAKE_TOKEN)
+    judge = RetrievalVerdictJudge(
+        entity=ENTITY, canary=qf.CANARY, handshake_token=HANDSHAKE_TOKEN,
+        accept_output_markers=True,
+    )
     attack = CrescendoAttack(
         attacker=attacker,
         judge=judge,

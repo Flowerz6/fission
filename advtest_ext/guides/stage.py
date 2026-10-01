@@ -24,7 +24,13 @@ if TYPE_CHECKING:
     from advtest_ext.core.surface import AccountRole, App, Region
 
 _VAR_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
-_APP = {"google_docs": "docs", "google_sheets": "sheets"}
+_APP = {
+    "google_docs": "docs",
+    "google_sheets": "sheets",
+    "google_calendar": "calendar",
+    "google_drive": "drive",
+    "google_slides": "slides",
+}
 _ROLE = {
     "recipient": "recipient",
     "victim": "recipient",

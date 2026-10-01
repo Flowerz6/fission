@@ -31,6 +31,7 @@ Entry point: :func:`outlook_ui_send_email`. Raises
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -175,27 +176,74 @@ async def _wait_for_compose_open(page: Any, timeout_ms: int) -> None:
     3. The Compose pane mounts but the body field doesn't accept
        focus within the timeout.
     """
-    try:
-        button = page.locator(SELECTORS["new_mail_button"]).first
-        await button.wait_for(state="visible", timeout=timeout_ms)
-        # force=True: a just-arrived "New mail" toast / its dialog
-        # backdrop can transiently overlay the toolbar; the real
-        # Compose button is still the right target, so dispatch the
-        # click regardless of a momentary pointer-event intercept.
-        await button.click(force=True)
-    except Exception as exc:
+    # Click "New mail". The command's ACCESSIBLE NAME ("New mail" / "New email" /
+    # "New message") is stable, but how Outlook exposes it drifts: sometimes an
+    # aria-label on a <button>, sometimes only the visible text on a role=button
+    # <div>, sometimes a split-button. The old CSS matched only
+    # `button[aria-label*=…]`, so when the real control derives its name from its
+    # text (no aria-label) that CSS misses it and `.first` grabs a stray element
+    # whose aria-label merely contains "new email" — the symptom being "it isn't
+    # clicking the New mail button". Match by accessible name / text first (works
+    # regardless of element type or where the name comes from), then fall back to
+    # the CSS registry, then to a raw visible-text match.
+    name_re = re.compile(r"new\s+(mail|email|message)", re.IGNORECASE)
+    click_strategies = (
+        lambda: page.get_by_role("button", name=name_re).first,
+        lambda: page.locator(SELECTORS["new_mail_button"]).first,
+        lambda: page.get_by_text(name_re).first,
+    )
+    per_try_ms = max(3_000, timeout_ms // len(click_strategies))
+    clicked = False
+    last_exc: Exception | None = None
+    for make_locator in click_strategies:
+        try:
+            button = make_locator()
+            await button.wait_for(state="visible", timeout=per_try_ms)
+            try:
+                await button.scroll_into_view_if_needed(timeout=per_try_ms)
+            except Exception:
+                pass  # non-fatal: force-click still dispatches below
+            # force=True: a just-arrived "New mail" toast / its dialog backdrop
+            # can transiently overlay the toolbar; the real Compose button is
+            # still the right target, so dispatch the click regardless of a
+            # momentary pointer-event intercept.
+            await button.click(force=True)
+            clicked = True
+            break
+        except Exception as exc:
+            last_exc = exc  # try the next strategy
+    if not clicked:
         raise OutlookComposeUnavailable(
-            "New-mail button not actionable — re-validate selectors "
-            "or check whether outlook.com redirected the profile "
-            "to a login screen"
-        ) from exc
+            "New-mail button not actionable — no element matching the New mail / "
+            "New email / New message command was clickable via accessible name, "
+            "CSS selectors, or visible text. Re-validate selectors, or check "
+            "whether outlook.com redirected the profile to a login screen (the "
+            "visible browser will show which)."
+        ) from last_exc
 
+    # "Compose is open" signal. The compose *region*'s aria-label is the most
+    # drift-prone selector Microsoft ships (re-skinned ~quarterly), so don't rely
+    # on it alone: the To / Subject fields mounting is equally strong proof the
+    # Compose surface opened, and their accessible names ("To", "Subject") are far
+    # more stable. Wait for a UNION — whichever mounts first confirms Compose.
+    open_signal = ", ".join(
+        (
+            SELECTORS["compose_pane"],
+            SELECTORS["to_field"],
+            SELECTORS["subject_field"],
+        )
+    )
     try:
-        pane = page.locator(SELECTORS["compose_pane"]).first
+        pane = page.locator(open_signal).first
         await pane.wait_for(state="visible", timeout=timeout_ms)
     except Exception as exc:
         raise OutlookComposeUnavailable(
-            "Compose pane did not mount after clicking New mail"
+            "Compose pane did not mount after clicking New mail — the New-mail "
+            "click landed but neither the compose region nor the To/Subject "
+            "fields appeared within the timeout. Likely compose-surface selector "
+            "drift (re-validate SELECTORS against live outlook.com) or a slow "
+            "mount (raise ADVTEST_PLAYWRIGHT_TIMEOUT). The browser is visible — "
+            "watch whether Compose actually opens on the New-mail click."
         ) from exc
 
 

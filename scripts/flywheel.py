@@ -176,7 +176,7 @@ def main() -> None:
             rerun_artifacts = [
                 "\n".join(
                     t.raw_response or ""
-                    for t in list_traces_for_run(s, rid)
+                    for t in list_traces_for_run(s, rid, limit=100_000)
                     if (t.verdict or "").lower() == "success"
                 )
                 for rid in run_ids[1:]

@@ -76,7 +76,7 @@ def test_archive_persists_elites_rejections_and_coverage(tmp_path: Any) -> None:
     operators = typed_operators([], [_operator_spec()])
     archive = DiversityArchive(path=path, scope="guide-v1")
     candidate = _candidate()
-    archive.update(candidate, score=0.73, node_id="n1")
+    archive.update(candidate, score=0.73, node_id="n1", succeeded=True)
     rejected = _candidate(strategy="duplicate", valid=False)
     rejected.rejection_reasons = ["semantic duplicate"]
     archive.record_rejection(rejected)
@@ -85,6 +85,8 @@ def test_archive_persists_elites_rejections_and_coverage(tmp_path: Any) -> None:
     report = restored.report(operators)
     assert report["elite_scores"][candidate.cell] == pytest.approx(0.73)
     assert report["coverage"] == pytest.approx(0.5)
+    assert report["search_success_coverage"] == pytest.approx(0.5)
+    assert report["successful_cells"] == [candidate.cell]
     assert report["rejected_count"] == 1
     assert "carrier_placement:move-carrier:header" in report["unexplored_cells"]
 
@@ -109,15 +111,53 @@ def test_partial_calibrator_learns_conservative_weights_and_persists(tmp_path: A
     assert restored.weight("grounded", 0.2) == pytest.approx((grounded, grounded_uncertainty))
 
 
+def _checkpoint_identity() -> dict[str, str]:
+    return {name: f"{name}-v1" for name in SearchCheckpointStore.REQUIRED_IDENTITY_FIELDS}
+
+
 def test_checkpoint_restores_completed_node_atomically(tmp_path: Any) -> None:
     path = tmp_path / "checkpoint.json"
-    checkpoint = SearchCheckpointStore(path, "run")
+    checkpoint = SearchCheckpointStore(path, "run", identity=_checkpoint_identity())
     checkpoint.save_node({"id": "n1", "score": 0.8, "strategy": "saved"}, operator_cursor=4)
-    restored = SearchCheckpointStore(path, "run")
+    restored = SearchCheckpointStore(path, "run", identity=_checkpoint_identity())
     node = {"id": "n1", "strategy": "regenerated"}
     assert restored.restore_node(node) is True
     assert node["strategy"] == "saved"
     assert restored.state["operator_cursor"] == 4
+
+
+@pytest.mark.parametrize("field", sorted(SearchCheckpointStore.REQUIRED_IDENTITY_FIELDS))
+def test_checkpoint_rejects_changed_experiment_identity(tmp_path: Any, field: str) -> None:
+    path = tmp_path / "checkpoint.json"
+    original = SearchCheckpointStore(path, "run", identity=_checkpoint_identity())
+    original.save_node({"id": "n1-1", "parent_id": "n0", "depth": 1, "score": 1.0}, operator_cursor=4)
+    changed = _checkpoint_identity() | {field: "changed-version"}
+    restored = SearchCheckpointStore(path, "run", identity=changed)
+    node = {"id": "n1-1"}
+    assert restored.restore_node(node) is False
+    assert restored.find_child("n0", 1, 1) is None
+    assert node == {"id": "n1-1"}
+    assert restored.state["operator_cursor"] == 0
+
+
+@pytest.mark.parametrize("identity", [None, {}, {"guide": "known"}, _checkpoint_identity() | {"environment": " "}])
+def test_checkpoint_missing_identity_never_reuses_nodes(tmp_path: Any, identity: Any) -> None:
+    path = tmp_path / "checkpoint.json"
+    original = SearchCheckpointStore(path, "run", identity=identity)
+    original.save_node({"id": "n1-1", "parent_id": "n0", "depth": 1}, operator_cursor=4)
+    assert original.restore_node({"id": "n1-1"}) is False
+    restored = SearchCheckpointStore(path, "run", identity=identity)
+    assert restored.restore_node({"id": "n1-1"}) is False
+    assert restored.find_child("n0", 1, 1) is None
+    assert restored.state["operator_cursor"] == 0
+
+
+def test_checkpoint_legacy_state_without_identity_is_not_reused(tmp_path: Any) -> None:
+    path = tmp_path / "checkpoint.json"
+    path.write_text('{"run": {"nodes": {"n1": {"id": "n1", "score": 1.0}}, "operator_cursor": 4}}')
+    restored = SearchCheckpointStore(path, "run", identity=_checkpoint_identity())
+    assert restored.restore_node({"id": "n1"}) is False
+    assert restored.state["operator_cursor"] == 0
 
 
 def test_causal_tracker_reports_control_adjusted_deltas() -> None:

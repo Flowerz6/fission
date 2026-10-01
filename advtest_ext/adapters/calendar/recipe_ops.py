@@ -3,9 +3,10 @@
 Two handlers register here:
 
 - ``("calendar", "create_event")`` — "plant a crafted event into
-  Account A's calendar" step. Creates an event via the Calendar API
-  and returns its id so a later ``type_prompt`` step can drive the
-  side panel against the day it lands on.
+  Account A's calendar" step. Creates an event via the
+  calendar.google.com web UI (no Calendar API / OAuth scope) and
+  returns a synthetic id so a later ``type_prompt`` step can drive
+  the side panel against the day it lands on.
 - ``("calendar", "type_prompt")`` — "Account A asks Gemini to
   summarise the day" step. Delegates to the existing ui_mode invoker
   so this handler benefits from every flake-hardening feature the
@@ -22,14 +23,14 @@ into the default registry by
 
 from __future__ import annotations
 
-import datetime
 import uuid
 from pathlib import Path
 
-from advtest_ext.adapters._auth import get_service
 from advtest_ext.adapters._ui_mode_common import UiModeSession
-from advtest_ext.adapters.calendar.target import CALENDAR_SCOPES
 from advtest_ext.adapters.calendar.ui_mode import ui_mode_invoke
+from advtest_ext.adapters.calendar.ui_mode.create_event import (
+    calendar_ui_create_event,
+)
 from advtest_ext.core.recipe_operations import (
     OperationContext,
     OperationResult,
@@ -45,6 +46,9 @@ _DEFAULT_RECIPE_OUTPUT_DIR = Path("out") / "recipe_runs"
 # The event lands on the signed-in user's default calendar — the
 # surface the "summarise my day" journey reads.
 _PRIMARY_CALENDAR_ID = "primary"
+
+# The day-view the "summarise my day" journey reads after the plant.
+_DAY_VIEW_URL = "https://calendar.google.com/calendar/u/0/r/day"
 
 
 # ----------------------------------------------------------------------
@@ -81,33 +85,35 @@ async def create_event(ctx: OperationContext) -> OperationResult:
     description = body if isinstance(body, str) else ""
 
     date_raw = ctx.params.get("date")
-    if isinstance(date_raw, str) and date_raw:
-        start_date = datetime.date.fromisoformat(date_raw)
-    else:
-        start_date = datetime.date.today()
-    end_date = start_date + datetime.timedelta(days=1)
+    date = date_raw if isinstance(date_raw, str) and date_raw else None
 
-    calendar = get_service("calendar", "v3", CALENDAR_SCOPES)
-    created = (
-        calendar.events()
-        .insert(
-            calendarId=_PRIMARY_CALENDAR_ID,
-            body={
-                "summary": title,
-                "description": description,
-                "start": {"date": start_date.isoformat()},
-                "end": {"date": end_date.isoformat()},
-            },
+    # UI-mode plant: create the event through the calendar.google.com
+    # web editor on the signed-in Chrome profile — no Calendar API, no
+    # extra OAuth scope. Reuse the per-account SessionPool page when the
+    # multi-account path provides one; otherwise fresh-launch on the
+    # profile (same back-compat shape as ``type_prompt`` below and the
+    # Outlook UI plant).
+    if ctx.session is not None and isinstance(ctx.session, UiModeSession):
+        page = await ctx.session.ensure_page()
+        created = await calendar_ui_create_event(
+            title=title,
+            description=description,
+            date=date,
+            external_page=page,
         )
-        .execute()
-    )
-    event_id = created["id"]
+    else:
+        created = await calendar_ui_create_event(
+            title=title,
+            description=description,
+            date=date,
+        )
+    event_id = created.event_id
 
     return OperationResult(
         outputs={
             "event_id": event_id,
-            "title": created.get("summary", title),
-            "url": "https://calendar.google.com/calendar/u/0/r/day",
+            "title": created.title,
+            "url": _DAY_VIEW_URL,
             "calendar_id": _PRIMARY_CALENDAR_ID,
         },
         raw={

@@ -4,6 +4,11 @@
 > when to read it. If you're returning to this project after time away, read the four
 > **Start here** docs and nothing else until you need more.
 
+> 🧭 **New engineer?** The canonical onboarding layer is
+> **[architecture/README.md](architecture/README.md)** — the system stage by stage, with
+> diagrams — plus **[TEAM.md](TEAM.md)** (who owns what). Start there; the docs below are
+> reference/deep-dives.
+
 ## Start here (operating the tool)
 
 | Doc | Read it when |

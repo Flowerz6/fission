@@ -1,102 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<title>{{ report_title }} · Fission</title>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ report_title }} · Fission</title>
 <style>
-  @page { size: A4; margin: 20mm 18mm; }
-  :root { --ink:#1a1a18; --soft:#48453d; --muted:#8a867b; --line:#e5e3de; --paper:#fbfaf6;
-          --crit:#be3a2b; --high:#b8791f; --ok:#3e8e5b; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:#f5f4ee; color:var(--ink);
-         font:14px/1.6 "DM Sans", system-ui, -apple-system, sans-serif; }
-  .sheet { max-width: 860px; margin: 0 auto; padding: 40px 44px 64px; background:var(--paper); }
-  .toolbar { max-width:860px; margin:18px auto 0; padding:0 44px; display:flex; gap:14px;
-             font-size:13px; }
-  .toolbar a { color:var(--soft); text-decoration:none; }
-  .toolbar a:hover { color:var(--ink); text-decoration:underline; }
-  h1 { font:400 30px/1.2 "Instrument Serif", Georgia, serif; margin:0 0 6px; }
-  .meta { color:var(--muted); font-size:13px; margin:0 0 4px; }
-  .filters { color:var(--soft); font-size:13px; margin:10px 0 0; }
-  .rule { border:0; border-top:1px solid var(--line); margin:22px 0; }
-  .counts { display:flex; gap:20px; flex-wrap:wrap; margin:6px 0 0; }
-  .counts .c { font-size:13px; color:var(--soft); }
-  .counts .c b { font-size:22px; font-weight:600; display:block; font-family:"Instrument Serif",Georgia,serif; }
-  .c.critical b { color:var(--crit); } .c.high b { color:var(--high); }
-  .sev { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600;
-         text-transform:uppercase; letter-spacing:.04em; }
-  .sev .d { width:8px; height:8px; border-radius:50%; background:var(--muted); }
-  .sev.critical { color:var(--crit); } .sev.critical .d { background:var(--crit); }
-  .sev.high { color:var(--high); } .sev.high .d { background:var(--high); }
-  .sev.med { color:var(--soft); } .sev.med .d { background:var(--muted); }
-  .sev.low { color:var(--muted); } .sev.low .d { background:#cfccc2; }
-  .finding { border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin:14px 0;
-             background:#fff; page-break-inside: avoid; }
-  .finding h2 { font:400 19px/1.3 "Instrument Serif",Georgia,serif; margin:0 0 4px; }
-  .fmeta { color:var(--muted); font-size:12px; margin:0 0 10px; }
-  .fmeta code { font-family:ui-monospace, monospace; }
-  .kv { font-size:12.5px; color:var(--soft); margin:8px 0 0; }
-  .kv .k { color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-size:10.5px; }
-  pre { white-space:pre-wrap; word-break:break-word; background:#f6f5f1; border:1px solid var(--line);
-        border-radius:6px; padding:10px 12px; font:12px/1.5 ui-monospace, monospace; margin:6px 0 0;
-        max-height:none; overflow:visible; }
-  .authn { margin-top:10px; font-size:12.5px; color:var(--soft); }
-  .authn b { color:var(--ink); }
-  .empty { color:var(--muted); font-style:italic; padding:20px 0; }
-  @media print { body { background:#fff; } .toolbar { display:none; } .sheet { padding:0; max-width:none; } }
-</style>
-</head>
+@page{size:A4;margin:20mm 18mm}*{box-sizing:border-box}body{margin:0;background:#efeee9;color:#202321;font:14px/1.6 Arial,sans-serif}.sheet{max-width:960px;margin:20px auto 40px;background:#fff;padding:52px 60px}.toolbar{max-width:960px;margin:20px auto;display:flex;gap:20px;align-items:center;font-size:13px}.toolbar a,.toolbar button{color:#202321}.toolbar button{font:inherit;padding:8px 12px;border:1px solid #ddd;background:#fff;cursor:pointer}.brand{font:600 15px/1.6 Inter,Arial,sans-serif;letter-spacing:.33em}.eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#767b78;margin:32px 0 10px}h1{font:400 38px/1.15 Georgia,serif;margin:0 0 18px}h2{font:400 25px/1.25 Georgia,serif;margin:32px 0 14px}h3{font-size:15px;margin:24px 0 8px}h4{font-size:13px;margin:18px 0 8px}p{margin:8px 0 14px}.muted{color:#6c746f}.small{font-size:12px}.status{display:inline-block;background:#f5f2e8;color:#75622e;padding:5px 10px;font-size:12px}.metadata{display:grid;grid-template-columns:140px minmax(0,1fr);gap:8px 18px;margin:24px 0;font-size:13px}.metadata dt{color:#747b76}.metadata dd{margin:0;overflow-wrap:anywhere}.cover{border-bottom:2px solid #202321;padding-bottom:28px}.metrics{display:flex;gap:36px;padding:20px 0;border-block:1px solid #ddd;margin:24px 0}.metrics b{display:block;font-size:25px}.metrics span{font-size:12px;color:#6c746f}.toc{padding:0;list-style:none;columns:2}.toc a{color:#202321;text-decoration:none;font-size:13px}.scope{font-size:12px}table{width:100%;border-collapse:collapse;table-layout:fixed;margin:14px 0}th,td{padding:9px 8px;text-align:left;vertical-align:top;border-bottom:1px solid #e6e7e3;overflow-wrap:anywhere}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6c746f;background:#f7f7f3}thead{display:table-header-group}.case{border-top:1px solid #d9dcd6;margin-top:36px;padding-top:18px;break-before:page}.case h2{margin-top:12px}.case-label{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6c746f}.review{border-left:3px solid #87988d;background:#f7f8f5;padding:10px 14px;font-size:13px}.completion{border-left:3px solid #c6b787;padding:10px 14px;background:#fbfaf5}.completion ul{padding-left:20px;margin:4px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-height:none;overflow:visible;font:11px/1.6 monospace;padding:14px;background:#f5f6f3;border:1px solid #e6e7e3}code{font:11px/1.5 monospace;overflow-wrap:anywhere}.turn{border-top:1px solid #e6e7e3;margin-top:20px;padding-top:10px}.turn.finding-turn{border-left:3px solid #518b79;padding-left:14px}.hashes{font-size:10px}.hashes td{font-family:monospace}.case-links{font-size:12px}.case-links a{color:#4b6556}.section-note{font-size:12px;color:#6c746f}a{color:#345d49}li{margin:6px 0}.empty{padding:24px;border:1px solid #ddd}h2,h3,h4{break-after:avoid}tr{break-inside:avoid}
+@media(max-width:700px){.sheet{padding:28px 20px;margin:12px}.toolbar{margin:12px;flex-wrap:wrap}.metadata{grid-template-columns:100px minmax(0,1fr)}.metrics{gap:18px;flex-wrap:wrap}.toc{columns:1}h1{font-size:30px}}
+@media print{body{background:white;font-size:10pt}.sheet{padding:0;margin:0;max-width:none}.toolbar,.case-links{display:none}h1{font-size:28pt}h2{font-size:18pt}pre{font-size:8pt}.cover{break-after:page}a{color:inherit;text-decoration:none}}
+</style></head>
 <body>
-<div class="toolbar">
-  <a href="/reports">← Reports</a>
-  {% if pdf_available %}<a href="{{ '/reports/view.pdf?' ~ (request.url.query if request else '') }}">↓ Download PDF</a>{% endif %}
-</div>
-<div class="sheet">
-  <h1>{{ report_title }}</h1>
-  <p class="meta">Generated {{ generated_at.strftime('%d %b %Y, %H:%M') }} · {{ total }} finding{{ 's' if total != 1 }}</p>
-  {% set fl = filters %}
-  {% if fl.severities or fl.scenarios or fl.workspace or fl.date_from or fl.date_to or fl.run_id %}
-  <p class="filters">Filtered by:
-    {% if fl.severities %}severity {{ fl.severities | map('capitalize') | join(', ') }}{% endif %}
-    {%- if fl.workspace %} · {{ fl.workspace }}{% endif %}
-    {%- if fl.scenarios %} · scenario {{ fl.scenarios | join(', ') }}{% endif %}
-    {%- if fl.date_from or fl.date_to %} · {{ fl.date_from or '…' }} to {{ fl.date_to or '…' }}{% endif %}
-    {%- if fl.run_id %} · run {{ fl.run_id }}{% endif %}
-  </p>
-  {% endif %}
-
-  <hr class="rule">
-  <div class="counts">
-    <div class="c"><b>{{ total }}</b>Total</div>
-    {% for s in ('critical', 'high', 'med', 'low') %}{% if counts.get(s) %}
-    <div class="c {{ s }}"><b>{{ counts[s] }}</b>{{ s|capitalize }}</div>
-    {% endif %}{% endfor %}
-  </div>
-  <hr class="rule">
-
-  {% if findings %}
-  {% for f in findings %}
-  {% set sev = finding_severity(f) %}
-  <div class="finding">
-    <div class="sev {{ sev }}"><span class="d"></span>{{ sev|capitalize }}</div>
-    <h2>{{ finding_title(f) }}</h2>
-    <p class="fmeta">
-      {{ finding_method(f) }} ·
-      Target {{ f.trace.target_name if f.trace else '—' }} ·
-      Run <code>{{ f.run_id }}</code> ·
-      {{ f.promoted_at.strftime('%d %b %Y, %H:%M') if f.promoted_at else '—' }}
-    </p>
-    {% if f.description %}<p class="kv">{{ f.description }}</p>{% endif %}
-    {% if f.trace and f.trace.raw_request %}<div class="kv"><span class="k">Prompt</span><pre>{{ f.trace.raw_request | truncate(700) }}</pre></div>{% endif %}
-    {% if f.trace and f.trace.raw_response %}<div class="kv"><span class="k">Model response</span><pre>{{ f.trace.raw_response | truncate(900) }}</pre></div>{% endif %}
-    {% if f.authenticity and f.authenticity.verdict %}
-    <p class="authn"><b>Authenticity:</b> {{ {'real':'Corroborated','suspect':'Not corroborated','inconclusive':'Not yet corroborated'}.get(f.authenticity.verdict, 'Not yet corroborated') }}{% if f.authenticity.n_runs and f.authenticity.n_runs >= 2 %} across {{ f.authenticity.n_runs }} runs (consistency {{ '%.2f'|format(f.authenticity.consistency) }}){% endif %}.</p>
-    {% endif %}
-  </div>
-  {% endfor %}
-  {% else %}
-  <p class="empty">No findings match the selected filters.</p>
-  {% endif %}
-</div>
-</body>
-</html>
+<nav class="toolbar" aria-label="Report actions"><a href="/reports">← Reports</a><a href="{{ '/reports/view.pdf?' ~ request.url.query }}">Download PDF</a><button type="button" onclick="window.print()">Print / Save as PDF</button></nav>
+<main class="sheet">
+<header class="cover"><div class="brand">FISSION</div><p class="eyebrow">Security assessment · Evidence report</p><h1>{{ report_title }}</h1><span class="status">{{ report_status }}</span>
+<dl class="metadata"><dt>Prepared for</dt><dd>{{ recipient }}</dd><dt>Prepared by</dt><dd>{{ author }}</dd><dt>Contact</dt><dd>{{ contact }}</dd><dt>Report reference</dt><dd>{{ report_id }}</dd><dt>Generated</dt><dd>{{ generated_at.strftime('%d %b %Y, %H:%M UTC') }}</dd></dl>
+</header>
+<nav aria-label="Report contents"><h2>Contents</h2><ol class="toc"><li><a href="#summary">01 Executive summary</a></li><li><a href="#scope">02 Scope and environment</a></li><li><a href="#method">03 Method and limitations</a></li><li><a href="#findings">04 Findings and reproduction evidence</a></li></ol></nav>
+<section id="summary"><h2>01 Executive summary</h2><p>This assessment contains <strong>{{ total }} selected finding{{ 's' if total != 1 else '' }}</strong> from {{ source_runs }} source run{{ 's' if source_runs != 1 else '' }}. These are recorded observations for investigation; multiple findings may describe the same underlying issue.</p>
+<div class="metrics"><div><b>{{ total }}</b><span>Selected findings</span></div><div><b>{{ source_runs }}</b><span>Source runs</span></div><div><b>{{ human_reviewed }}</b><span>Findings with matched human review</span></div></div>
+{% if cases %}<table><thead><tr><th style="width:12%">Case</th><th style="width:40%">Finding</th><th style="width:16%">Assigned severity</th><th>Validation</th></tr></thead><tbody>{% for case in cases %}<tr><td><a href="#{{ case.number }}">{{ case.number }}</a></td><td>{{ case.title }}</td><td>{{ case.severity|capitalize }}</td><td class="small">{{ case.validation }}</td></tr>{% endfor %}</tbody></table>{% else %}<p class="empty">No findings match the selected filters.</p>{% endif %}</section>
+<section id="scope"><h2>02 Scope and environment</h2><p class="section-note">Execution counts below cover complete source runs. They are not a measurement of independent exploit reproducibility.</p>
+{% if filters.severities or filters.scenarios or filters.workspace or filters.date_from or filters.date_to or filters.run_id %}<p class="small"><strong>Selection:</strong> {% if filters.severities %}Severity: {{ filters.severities|join(', ') }}. {% endif %}{% if filters.scenarios %}Scenarios: {{ filters.scenarios|join(', ') }}. {% endif %}{% if filters.workspace %}Workspace: {{ filters.workspace }}. {% endif %}{% if filters.date_from or filters.date_to %}Dates: {{ filters.date_from or 'Any' }} to {{ filters.date_to or 'Any' }}. {% endif %}{% if filters.run_id %}Run: <code>{{ filters.run_id }}</code>.{% endif %}</p>{% endif %}
+{% for run in scope %}<h3>{{ run.service }} · {{ run.surface }}</h3><dl class="metadata scope"><dt>Run</dt><dd>{{ run.name }} · <code>{{ run.id }}</code></dd><dt>Target adapter</dt><dd>{{ run.target }}</dd><dt>Test window</dt><dd>{{ run.started.strftime('%d %b %Y, %H:%M UTC') if run.started else 'Not recorded' }} — {{ run.finished.strftime('%d %b %Y, %H:%M UTC') if run.finished else 'Not recorded / unfinished' }}</dd><dt>Recorded execution</dt><dd>{{ run.attempts }} attempts · {{ run.successful }} automated successes · {{ run.errors }} execution errors · {{ run.conversations }} conversations</dd></dl>{% endfor %}</section>
+<section id="method"><h2>03 Method and limitations</h2><p>Fission records test prompts, payloads, model responses, evaluator results, and promoted findings. Each case below links the observation to the complete recorded conversation containing it. A success label reflects the configured evaluator's decision.</p><ul>{% for limitation in report_limitations %}<li>{{ limitation }}</li>{% endfor %}</ul><p>Severity is the dashboard's assigned assessment priority, not a vendor rating or CVSS score. Current guide instructions are included as reference material where available; they are not proof that every setup step was executed during the source run.</p></section>
+<section id="findings"><h2>04 Findings and reproduction evidence</h2>
+{% for case in cases %}<article class="case" id="{{ case.number }}"><div class="case-label">{{ case.number }} · Assigned severity: {{ case.severity }}</div><h2>{{ case.title }}</h2><p class="review">{{ case.validation }}</p><p class="case-links"><a href="{{ request.url.include_query_params(finding_id=case.id) }}">Open this finding as an individual report →</a></p>
+<h3>Observation and test objective</h3><p>{{ case.description }}</p><p><strong>Objective:</strong> {{ case.objective }}</p><p><strong>Success criterion (guide reference):</strong> {{ case.criterion }}</p>
+<h3>Affected environment</h3><dl class="metadata"><dt>Product / adapter</dt><dd>{{ case.target }}</dd><dt>Model version</dt><dd>{{ case.model }}</dd><dt>Method</dt><dd>{{ case.method }}</dd><dt>Detected</dt><dd>{{ case.detected.strftime('%d %b %Y, %H:%M UTC') if case.detected else 'Not recorded' }}</dd><dt>Finding / trace</dt><dd><code>{{ case.id }} / {{ case.trace_id }}</code></dd><dt>Source run</dt><dd><code>{{ case.run_id }}</code></dd></dl>
+<h3>Security impact and expected behavior</h3><p>The test objective describes the behavior being probed. The transcript documents what the model returned. A human assessment of the trust boundary crossed, attacker prerequisites, affected data or actions, and resulting security impact has not been recorded in this report.</p>
+<h3>Reproduction</h3>{% if case.guide.setup %}<p class="section-note">Setup reference from the current scenario guide. Confirm these prerequisites against the tested environment.</p><ol>{% for step in case.guide.setup %}<li>{{ step }}</li>{% endfor %}</ol>{% endif %}<ol><li>Use the product and model version identified above. Confirm account permissions and the attacker's control of the input surface.</li><li>Apply the recorded payload below in the original input surface, where applicable.</li><li>Replay the user prompts in the transcript in order, retaining the conversation context.</li><li>Compare the observed response at the marked finding turn with the stated success criterion. Record repeat trials separately.</li></ol>
+<h4>Recorded payload</h4>{% if case.payload %}<pre>{{ case.payload }}</pre>{% else %}<p class="muted">No payload text recorded.</p>{% endif %}
+<h3>Complete recorded conversation</h3><p class="section-note">{{ case.turns|length }} recorded turns. The finding's turn is marked; preceding refusals and subsequent turns remain visible.</p>
+{% for turn in case.turns %}<section class="turn{% if turn.trace_id == case.trace_id %} finding-turn{% endif %}"><h4>Turn {{ loop.index }} · {{ turn.verdict or 'Unscored' }}{% if turn.trace_id == case.trace_id %} · Finding recorded here{% endif %}</h4><p class="small muted">Trace <code>{{ turn.trace_id }}</code>{% if turn.score is not none %} · Evaluator score {{ '%.2f'|format(turn.score) }}{% endif %}</p><h4>User prompt</h4><pre>{{ turn.prompt }}</pre><h4>Model response</h4><pre>{{ turn.response }}</pre></section>{% else %}<p class="muted">The source conversation is unavailable.</p>{% endfor %}
+<h3>Evaluation evidence</h3>{% for score in case.scores %}<p><strong>{{ score.judge_name }} · {{ '%.2f'|format(score.score) }}</strong> · {{ 'Flagged' if score.flagged else 'Not flagged' }}</p><p>{{ score.reasoning or 'No evaluator reasoning recorded.' }}</p>{% else %}<p>No judge scores recorded.</p>{% endfor %}
+<h3>Verification and remediation follow-up</h3><div class="completion"><ul>{% for limitation in case.limitations %}<li>{{ limitation }}</li>{% endfor %}<li>Proposed remediation, owner, and retest results require author completion.</li></ul></div>
+<h3>Evidence manifest</h3><p class="section-note">SHA-256 hashes use the UTF-8 text shown in this report. They identify exported evidence text, not an independently signed capture.</p>{% if case.payload_sha256 %}<p class="small">Payload SHA-256: <code>{{ case.payload_sha256 }}</code></p>{% endif %}<table class="hashes"><thead><tr><th style="width:24%">Trace</th><th>Prompt SHA-256</th><th>Response SHA-256</th></tr></thead><tbody>{% for item in case.artifacts %}<tr><td>{{ item.trace_id }}</td><td>{{ item.prompt_sha256 }}</td><td>{{ item.response_sha256 }}</td></tr>{% endfor %}</tbody></table><p class="small">Replay bundle: {{ 'recorded separately; not embedded in this document' if case.replay_recorded else 'not recorded' }}.</p>
+</article>{% endfor %}</section>
+</main></body></html>

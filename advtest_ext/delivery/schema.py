@@ -56,9 +56,11 @@ class PoisonedPayload(BaseModel):
 
 
 class SuccessRate(BaseModel):
-    """Brief field 7: N trials, M successes. ``verdict_breakdown`` records the
-    full grade distribution over the group (success / partial / refused /
-    error) so a reader sees the whole trial history, not just the ratio."""
+    """Brief field 7: independent validation episodes and verified effects.
+
+    ``verdict_breakdown`` is the raw search/validation trace distribution and
+    is intentionally separate from the episode-level N and M.
+    """
 
     model_config = ConfigDict(extra="forbid")
 

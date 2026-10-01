@@ -9,6 +9,10 @@
   .nc-u, .nc-a { margin: 0.35rem 0; }
   .nc-role { display: inline-block; font-size: 0.7rem; font-weight: 600; color: var(--muted); text-transform: lowercase; margin-bottom: 0.15rem; }
   .nc-u pre, .nc-a pre { margin: 0.1rem 0 0; }
+  /* the exact text a success-signal fired on, coloured in place in the reply */
+  mark.sig-hit { background: #ffe89a; color: #3d2f00; padding: 0 1px; border-radius: 2px;
+    box-shadow: 0 0 0 1px #e6c74a inset; font-weight: 600; }
+  .nc-t mark.sig-hit { background: #f6d98a; color: #4a3800; box-shadow: 0 0 0 1px #d8b64a inset; }
 </style>
 <h1>
   <span class="pill {{ trace.verdict or 'refused' }}">{{ trace.verdict or '-' }}</span>
@@ -49,12 +53,16 @@
 <p class="muted" style="font-size: 0.85em;">Every turn of this node's side-panel conversation, with the complete Gemini reply.</p>
 <div class="node-convo">
   {% for turn in node_turns %}
+  {% set hl = highlights.get(turn.trace_id) if highlights else none %}
   <div class="nc-turn{{ ' nc-current' if turn.trace_id == trace.id }}">
     <div class="nc-head"><span class="pill {{ turn.verdict or 'refused' }}">{{ turn.verdict or '-' }}</span>
       <span class="muted">turn {{ turn.turn }}{% if turn.score is not none %} · score {{ '%.2f'|format(turn.score) }}{% endif %}</span>
       {% if turn.trace_id != trace.id %}· <a href="/traces/{{ turn.trace_id }}">open turn</a>{% else %}· <strong>this turn</strong>{% endif %}</div>
     <div class="nc-u"><span class="nc-role">user</span> <pre>{{ turn.prompt }}</pre></div>
-    <div class="nc-a"><span class="nc-role">gemini</span> <pre>{{ turn.response }}</pre></div>
+    {% if turn.thoughts %}
+    <div class="nc-t"><span class="nc-role">model thoughts</span> <pre style="border-left:3px solid #b9a24a;background:#fbf7e8;color:#5a4a12;padding:.3rem .5rem;border-radius:4px">{% if hl and hl.thoughts %}{{ hl.thoughts | safe }}{% else %}{{ turn.thoughts }}{% endif %}</pre></div>
+    {% endif %}
+    <div class="nc-a"><span class="nc-role">gemini</span> <pre>{% if hl and hl.response %}{{ hl.response | safe }}{% else %}{{ turn.response }}{% endif %}</pre></div>
   </div>
   {% endfor %}
 </div>

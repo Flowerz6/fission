@@ -63,6 +63,7 @@ from advtest_ext.adapters._ui_mode_common.config import (
 )
 from advtest_ext.adapters._ui_mode_common.response_assembly import (
     assemble_full_response,
+    extract_model_thoughts,
 )
 from advtest_ext.adapters.google_docs.ui_mode.selectors import SELECTORS
 from advtest_ext.document.target import Response
@@ -901,6 +902,14 @@ async def ui_mode_invoke(
         full = assemble_full_response(intercept_path)
         if full and len(full) >= len(response_text):
             response_text = full
+        # The collapsible "Model thoughts" DOM scrape is fragile and, on the
+        # Docs side panel, has been coming back empty entirely — the reasoning
+        # is also in the intercepted stream, so prefer that (same as the Sheets
+        # adapter). Falls back to the scrape when the stream carries no thought
+        # summaries.
+        stream_thoughts = extract_model_thoughts(intercept_path)
+        if stream_thoughts:
+            model_thoughts = stream_thoughts
 
     return Response(
         text=response_text,

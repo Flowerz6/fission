@@ -62,12 +62,18 @@ _AccountRole = Literal[
     "recipient", "attacker_sender", "outlook_sender", "attacker", "victim", "self"
 ]
 _MutationDimension = Literal[
+    # Revised taxonomy (docs/MUTATION_AXES_TAXONOMY.md).
+    "persuasion_principle",
+    "pretext_scenario",
+    "persona",
+    "escalation_trajectory",
+    "format_mimicry",
+    "carrier_placement",
+    "wording",
+    # Legacy axes — retained until the Signature/DB clean-break migration.
     "framing",
     "turn_order",
-    "persona",
-    "carrier_placement",
     "escalation_speed",
-    "wording",
 ]
 
 # Guide app name -> Recipe-Runner operation-registry region key. The runner
@@ -235,6 +241,12 @@ class Guide(BaseModel):
     # means the playbook has not opted any facet in — nothing is mutable.
     mutation_surface: list[str] = Field(default_factory=list)
     mutation_operators: list[GuideMutationOperator] = Field(default_factory=list)
+    # Per-pretext environment content, keyed by a ``pretext_scenario`` cell value
+    # (e.g. "incident-response") → the host-artifact content for that framing
+    # ({"rows": [...]} for sheets, {"body": "..."} for docs). When a branch
+    # mutates the pretext, the staged sheet/doc is re-seeded to match so what the
+    # attacker says and what's on screen stay consistent. Empty = no re-seeding.
+    environment_variants: dict[str, dict[str, Any]] = Field(default_factory=dict)
     # What must remain true for a Variant to still BE this attack (the frame,
     # the probe, the effect). A variant that breaks an invariant is a
     # different attack, not a variant of this one.

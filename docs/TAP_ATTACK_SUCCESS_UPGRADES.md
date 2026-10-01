@@ -121,3 +121,20 @@ It reuses only target methods every run already exercises (`reset`,
 smoke run against a real UI-mode Gemini session is still the recommended final
 check before enabling it in production, since side-panel replay timing has not
 been exercised against a live target here.
+
+## Checkpoint identity and measurement
+
+A TAP checkpoint can be reused only when `attack_options.tap_crescendo.checkpoint_identity`
+contains nonempty immutable fingerprints for `guide`, `models`, `evaluator`,
+`config`, and `environment`, and all five match the saved checkpoint. A display
+name is insufficient. Missing, legacy, or changed identity causes a fresh run.
+The adaptive-turn SEM in the search report describes variation over turns in
+one evolving conversation; it is not a confidence interval for repeatability.
+Measure repeatability through independent validation episodes and export those
+with the pilot validation workflow in `docs/PILOT_DELIVERY_FORMAT.md`.
+
+Archive reports now expose two separate measures. `search_coverage` is the
+fraction of declared mutation cells containing any elite. `search_success_coverage`
+is the fraction containing a node that cleared the configured search success
+gate. Neither is a count of independently reproduced pilot findings; use the
+validation episode export for that count.

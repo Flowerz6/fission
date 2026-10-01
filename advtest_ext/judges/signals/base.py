@@ -57,6 +57,17 @@ class Surface(StrEnum):
     REQUEST = "request"
     INTERCEPTED_TRAFFIC = "intercepted_traffic"
     DOCUMENT_BODY = "document_body"
+    MODEL_THOUGHTS = "model_thoughts"
+    """Gemini's user-visible 'Model thoughts' chain-of-thought
+    (``raw_response_data['model_thoughts']``, captured from the
+    intercepted stream). A DISTINCT surface from ``full_response``
+    on purpose: the reasoning pane frequently discloses internal
+    detail the answer withholds (tool names, "advisor mode", the
+    guardrail's own rationale), so a leak here is a real, separately
+    scored finding — but it must be OPTED INTO with ``where:
+    model_thoughts``, never folded into the default answer oracle,
+    because thoughts that merely NAME a forbidden object while
+    reasoning to refuse it would false-positive the answer signals."""
 
 
 class SignalResult:
@@ -183,6 +194,16 @@ class SignalContext:
         value = raw.get("document_body", "")
         return value if isinstance(value, str) else ""
 
+    @property
+    def model_thoughts(self) -> str:
+        """Gemini's captured 'Model thoughts' reasoning for this turn,
+        from ``raw_response_data['model_thoughts']`` (populated by the
+        ui_mode invoker from the intercepted stream). Empty string when
+        the surface didn't show thoughts or capture missed."""
+        raw = getattr(self.trace, "raw_response_data", None) or {}
+        value = raw.get("model_thoughts", "")
+        return value if isinstance(value, str) else ""
+
     def surface(self, where: Surface | str) -> str:
         """Return the text content of the named surface. Helper so
         each signal subclass doesn't reimplement the dispatch."""
@@ -202,6 +223,8 @@ class SignalContext:
             return self.intercepted_traffic
         if where is Surface.DOCUMENT_BODY:
             return self.document_body
+        if where is Surface.MODEL_THOUGHTS:
+            return self.model_thoughts
         return ""  # pragma: no cover — exhaustive above
 
 

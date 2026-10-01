@@ -460,7 +460,7 @@ async def ui_mode_invoke(
                     await page.goto(_thread_url(thread_id), timeout=timeout)
                     await _wait_for_thread_body(page)
                     await jitter_pause(HUMAN_ACTION_PAUSE_S)
-                response_text = await _run_side_panel_flow(
+                response_text, model_thoughts = await _run_side_panel_flow(
                     page=page,
                     user_prompt=user_prompt,
                     screenshot_path=screenshot_path,
@@ -493,8 +493,49 @@ async def ui_mode_invoke(
             "screenshot_path": str(screenshot_path),
             "intercepted_traffic_path": str(intercept_path) if intercept_on else None,
             "ui_mode": True,
+            "model_thoughts": model_thoughts,
         },
     )
+
+
+_MODEL_THOUGHTS_TOGGLE_SELECTOR = (
+    '[role="complementary"][aria-label="Gemini"] '
+    '[class*="Thought" i] [role="button"], '
+    '[role="complementary"][aria-label="Gemini"] '
+    'button[aria-label*="thought" i], '
+    '[role="complementary"][aria-label="Gemini"] '
+    'button[aria-label*="reasoning" i]'
+)
+_MODEL_THOUGHTS_CONTENT_SELECTOR = (
+    '[role="complementary"][aria-label="Gemini"] [class*="ThoughtContent" i], '
+    '[role="complementary"][aria-label="Gemini"] [class*="ThoughtBody" i], '
+    '[role="complementary"][aria-label="Gemini"] [class*="Thought" i] [class*="markdown" i]'
+)
+
+
+async def _read_model_thoughts(page: Any) -> str:
+    """Best-effort capture of the 'Model thoughts' disclosure widget."""
+    try:
+        content = page.locator(_MODEL_THOUGHTS_CONTENT_SELECTOR)
+        n = int(await content.count())
+    except Exception:
+        return ""
+    if n == 0:
+        return ""
+    try:
+        body = (await content.nth(n - 1).inner_text()).strip()
+    except Exception:
+        body = ""
+    if not body:
+        try:
+            toggle = page.locator(_MODEL_THOUGHTS_TOGGLE_SELECTOR).last
+            await toggle.click(timeout=1_000)
+            body = (await content.nth(n - 1).inner_text()).strip()
+        except Exception:
+            body = ""
+    if not body:
+        return ""
+    return str(body)  # full reasoning — evidence never truncated at capture
 
 
 async def _run_side_panel_flow(
@@ -504,21 +545,22 @@ async def _run_side_panel_flow(
     screenshot_path: Path,
     timeout_ms: int,
     start_new_conversation: bool = True,
-) -> str:
+) -> tuple[str, str]:
     """Inner sequence shared between production and test-injection
     paths. Open panel, settle auto-summary, reset conversation,
-    submit, read, screenshot, hold."""
+    submit, read, screenshot, hold. Returns (reply_text, model_thoughts)."""
     await _open_side_panel(page, timeout_ms)
     await _wait_for_panel_idle(page)
     if start_new_conversation:
         await _start_new_conversation(page)
     await _submit_prompt(page, user_prompt, timeout_ms)
     response_text = await _read_response(page, timeout_ms)
+    thoughts = await _read_model_thoughts(page)
     await _screenshot_side_panel(page, screenshot_path, timeout_ms)
     hold_s = resolve_post_response_hold_s()
     if hold_s > 0:
         await asyncio.sleep(hold_s)
-    return response_text
+    return response_text, thoughts
 
 
 __all__ = [

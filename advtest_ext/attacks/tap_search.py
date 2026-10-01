@@ -18,18 +18,64 @@ from typing import Any
 
 
 class MutationDimension(StrEnum):
+    # Revised taxonomy (docs/MUTATION_AXES_TAXONOMY.md).
+    PERSUASION_PRINCIPLE = "persuasion_principle"
+    PRETEXT_SCENARIO = "pretext_scenario"
+    PERSONA = "persona"
+    ESCALATION_TRAJECTORY = "escalation_trajectory"
+    FORMAT_MIMICRY = "format_mimicry"
+    CARRIER_PLACEMENT = "carrier_placement"
+    WORDING = "wording"
+    # Legacy axes — retained until the Signature/DB clean-break migration lands so
+    # the un-migrated corpus keeps validating. New guides use the axes above.
     FRAMING = "framing"
     TURN_ORDER = "turn_order"
-    PERSONA = "persona"
-    CARRIER_PLACEMENT = "carrier_placement"
     ESCALATION_SPEED = "escalation_speed"
-    WORDING = "wording"
 
 
 _DIMENSION_TERMS: dict[MutationDimension, tuple[str, ...]] = {
-    MutationDimension.FRAMING: ("frame", "framing", "pretext", "cover", "schema", "delimiter"),
-    MutationDimension.TURN_ORDER: ("turn order", "order", "split across turns", "sequence"),
+    MutationDimension.PERSUASION_PRINCIPLE: (
+        "persuasion",
+        "persuade",
+        "authority",
+        "consistency",
+        "reciprocity",
+        "social proof",
+        "commitment",
+        "expert",
+    ),
+    MutationDimension.PRETEXT_SCENARIO: (
+        "pretext",
+        "scenario",
+        "cover story",
+        "assessment",
+        "audit",
+        "debugging",
+        "incident",
+        "framing",
+        "frame",
+    ),
     MutationDimension.PERSONA: ("persona", "role", "authorial", "sender"),
+    MutationDimension.ESCALATION_TRAJECTORY: (
+        "escalation",
+        "trajectory",
+        "gradual",
+        "turn order",
+        "order",
+        "sequence",
+        "backtrack",
+        "speed",
+        "split across turns",
+    ),
+    MutationDimension.FORMAT_MIMICRY: (
+        "format",
+        "mimic",
+        "tool call",
+        "system tag",
+        "schema block",
+        "delimiter",
+        "error trace",
+    ),
     MutationDimension.CARRIER_PLACEMENT: (
         "carrier",
         "placement",
@@ -39,8 +85,11 @@ _DIMENSION_TERMS: dict[MutationDimension, tuple[str, ...]] = {
         "data channel",
         "payload",
     ),
-    MutationDimension.ESCALATION_SPEED: ("escalation", "gradual", "speed", "one turn", "split"),
     MutationDimension.WORDING: ("wording", "phrasing", "phrase", "label", "name", "token", "host"),
+    # Legacy free-text fallbacks (map onto the retained legacy enum members).
+    MutationDimension.FRAMING: ("cover", "pretense"),
+    MutationDimension.TURN_ORDER: ("reorder", "beats"),
+    MutationDimension.ESCALATION_SPEED: ("one turn", "compression", "slow burn"),
 }
 
 
@@ -112,6 +161,9 @@ class MutationCandidate:
     expected_effect: str = ""
     artifact_patch: dict[str, Any] = field(default_factory=dict)
     preserved_invariants: tuple[str, ...] = ()
+    # The planner's diagnose-then-adapt findings (outcome / active_guardrail /
+    # what_passed / foothold) — recorded so the adaptation reasoning is auditable.
+    diagnosis: dict[str, Any] = field(default_factory=dict)
     valid: bool = True
     rejection_reasons: list[str] = field(default_factory=list)
 
@@ -130,10 +182,46 @@ class MutationCandidate:
             "expected_effect": self.expected_effect,
             "artifact_patch": self.artifact_patch,
             "preserved_invariants": list(self.preserved_invariants),
+            "diagnosis": dict(self.diagnosis),
             "valid": self.valid,
             "rejection_reasons": list(self.rejection_reasons),
             "cell": self.cell,
         }
+
+
+_CANDIDATE_KEY_HINTS = ("operator_name", "dimension", "strategy", "plan_steps")
+
+
+def extract_candidate_json(text: str) -> dict | None:
+    """Parse the candidate JSON object from a strategist reply, tolerant of code
+    fences and prose preambles. A strong planner (e.g. Claude) routinely wraps the
+    JSON in ```json … ``` or a sentence, which a bare ``json.loads`` rejects — that
+    dropped every field (empty plan_steps / expected_effect, default operator) and
+    made the planner split look like it wasn't helping. Tries a direct parse, then
+    the first balanced ``{...}`` block that looks candidate-shaped."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, dict):
+            return obj
+    except (TypeError, json.JSONDecodeError):
+        pass
+    from advtest_ext.attacks._attacker_json import iter_balanced_json_blocks
+
+    parsed: list[dict] = []
+    for block in iter_balanced_json_blocks(text):
+        try:
+            obj = json.loads(block)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if isinstance(obj, dict):
+            parsed.append(obj)
+    for obj in parsed:
+        if any(hint in obj for hint in _CANDIDATE_KEY_HINTS):
+            return obj
+    return parsed[0] if parsed else None
 
 
 def parse_candidate(
@@ -150,10 +238,7 @@ def parse_candidate(
         else MutationOperator(MutationDimension.WORDING, "wording")
     )
     text = (raw or "").strip()
-    try:
-        payload = json.loads(text)
-    except (TypeError, json.JSONDecodeError):
-        payload = None
+    payload = extract_candidate_json(text)
     if not isinstance(payload, dict):
         # Legacy/manual suggestions are trusted inputs, but still become typed
         # candidates and therefore participate in archive duplicate checks.
@@ -165,17 +250,28 @@ def parse_candidate(
             feature_value=default.cell_values[0] if default.cell_values else "manual",
             preserved_invariants=tuple(invariants),
         )
-    dimension_raw = str(payload.get("dimension") or default.dimension.value)
-    try:
-        dimension = MutationDimension(dimension_raw)
-    except ValueError:
-        dimension = default.dimension
+    operator_name = str(payload.get("operator_name") or default.name)
+    # The OPERATOR is the source of truth for the dimension — never the attacker's
+    # separately self-reported ``dimension`` field. Trusting the latter let a reply
+    # claim dimension=persona while naming operator=escalation_speed, which produced
+    # corrupted cell keys like ``persona:escalation_speed:…``. Bind the dimension to
+    # the named operator when it exists; otherwise fall back (validate_candidate then
+    # rejects it as an unknown scheduled operator).
+    named = next((operator for operator in operators if operator.name == operator_name), None)
+    if named is not None:
+        dimension = named.dimension
+    else:
+        dimension_raw = str(payload.get("dimension") or default.dimension.value)
+        try:
+            dimension = MutationDimension(dimension_raw)
+        except ValueError:
+            dimension = default.dimension
     preserved = payload.get("preserved_invariants")
     return MutationCandidate(
         strategy=str(payload.get("strategy") or "").strip(),
         dimension=dimension,
         mutation=str(payload.get("mutation") or "").strip(),
-        operator_name=str(payload.get("operator_name") or default.name),
+        operator_name=operator_name,
         feature_value=str(payload.get("feature_value") or "unspecified"),
         plan_steps=tuple(str(item) for item in payload.get("plan_steps", []))
         if isinstance(payload.get("plan_steps"), list)
@@ -187,6 +283,9 @@ def parse_candidate(
         preserved_invariants=tuple(str(item) for item in preserved)
         if isinstance(preserved, list)
         else (),
+        diagnosis=dict(payload.get("diagnosis"))
+        if isinstance(payload.get("diagnosis"), dict)
+        else ({"note": str(payload["diagnosis"])} if payload.get("diagnosis") else {}),
     )
 
 
@@ -303,6 +402,7 @@ class DiversityArchive:
         self._elites: dict[str, ArchiveElite] = {}
         self._rejections: list[dict[str, Any]] = []
         self._cell_attempts: dict[str, int] = {}
+        self._successful_cells: set[str] = set()
         self._load()
 
     def _load(self) -> None:
@@ -318,6 +418,7 @@ class DiversityArchive:
         self._cell_attempts = {
             str(key): int(value) for key, value in data.get("cell_attempts", {}).items()
         }
+        self._successful_cells = {str(item) for item in data.get("successful_cells", [])}
         for cell, raw in data.get("elites", {}).items():
             candidate = parse_candidate(
                 json.dumps(raw.get("candidate", {})), operators=[], invariants=[]
@@ -343,6 +444,7 @@ class DiversityArchive:
             "attempted": self._attempted,
             "rejections": self._rejections[-500:],
             "cell_attempts": self._cell_attempts,
+            "successful_cells": sorted(self._successful_cells),
             "elites": {
                 cell: {
                     "candidate": elite.candidate.as_metadata()
@@ -387,9 +489,18 @@ class DiversityArchive:
         )
         self._persist()
 
-    def update(self, candidate: MutationCandidate, *, score: float, node_id: str) -> bool:
+    def update(
+        self,
+        candidate: MutationCandidate,
+        *,
+        score: float,
+        node_id: str,
+        succeeded: bool = False,
+    ) -> bool:
         self.record_attempt(candidate.strategy)
         self._cell_attempts[candidate.cell] = self._cell_attempts.get(candidate.cell, 0) + 1
+        if succeeded:
+            self._successful_cells.add(candidate.cell)
         current = self._elites.get(candidate.cell)
         if current is None or score > current.score:
             self._elites[candidate.cell] = ArchiveElite(candidate, score, node_id)
@@ -402,6 +513,7 @@ class DiversityArchive:
         return self._cell_attempts.get(cell, 0)
 
     def coverage(self, operators: list[MutationOperator]) -> float:
+        """Fraction of declared cells with an elite, regardless of outcome."""
         possible = {
             f"{operator.dimension.value}:{operator.name}:"
             f"{re.sub(r'[^a-z0-9]+', '-', value.lower()).strip('-') or 'unspecified'}"
@@ -409,6 +521,16 @@ class DiversityArchive:
             for value in (operator.cell_values or ("unspecified",))
         }
         return len(set(self._elites) & possible) / len(possible) if possible else 0.0
+
+    def successful_coverage(self, operators: list[MutationOperator]) -> float:
+        """Fraction of declared cells with a search-level successful node."""
+        possible = {
+            f"{operator.dimension.value}:{operator.name}:"
+            f"{re.sub(r'[^a-z0-9]+', '-', value.lower()).strip('-') or 'unspecified'}"
+            for operator in operators
+            for value in (operator.cell_values or ("unspecified",))
+        }
+        return len(self._successful_cells & possible) / len(possible) if possible else 0.0
 
     def report(self, operators: list[MutationOperator]) -> dict[str, Any]:
         possible = {
@@ -421,6 +543,9 @@ class DiversityArchive:
         return {
             "scope": self.scope,
             "coverage": self.coverage(operators),
+            "search_coverage": self.coverage(operators),
+            "search_success_coverage": self.successful_coverage(operators),
+            "successful_cells": sorted(self._successful_cells),
             "possible_cells": sorted(possible),
             "attempted_cells": sorted(attempted_cells),
             "unexplored_cells": sorted(possible - attempted_cells),
@@ -595,21 +720,47 @@ def _pool_adjacent_violators(values: list[float], weights: list[float]) -> list[
 
 
 class SearchCheckpointStore:
-    """Atomic per-node checkpoints for resumable TAP runs."""
+    """Atomic checkpoints reusable only under an explicitly attested identity.
 
-    def __init__(self, path: str | Path | None, scope: str) -> None:
+    Identity values are caller-supplied immutable versions or fingerprints, not
+    display names. Missing identity (including legacy checkpoints) disables reuse;
+    a scope alone never establishes that an experiment is still the same.
+    """
+
+    REQUIRED_IDENTITY_FIELDS = frozenset({"guide", "models", "evaluator", "config", "environment"})
+
+    def __init__(
+        self,
+        path: str | Path | None,
+        scope: str,
+        *,
+        identity: dict[str, str] | None = None,
+    ) -> None:
         self.path = Path(path) if path else None
         self.scope = scope
-        self.state: dict[str, Any] = {"nodes": {}, "operator_cursor": 0}
+        self.identity = dict(identity or {})
+        self.identity_complete = self.REQUIRED_IDENTITY_FIELDS.issubset(self.identity) and all(
+            isinstance(value, str) and bool(value.strip()) for value in self.identity.values()
+        )
+        self.state: dict[str, Any] = {
+            "nodes": {}, "operator_cursor": 0, "identity": self.identity,
+        }
         if self.path and self.path.exists():
             try:
                 root = json.loads(self.path.read_text(encoding="utf-8"))
-                if isinstance(root, dict) and isinstance(root.get(scope), dict):
-                    self.state = dict(root[scope])
+                saved = root.get(scope) if isinstance(root, dict) else None
+                if (
+                    self.identity_complete
+                    and isinstance(saved, dict)
+                    and saved.get("identity") == self.identity
+                ):
+                    self.state = dict(saved)
             except (OSError, json.JSONDecodeError):
                 pass
 
     def restore_node(self, node: dict[str, Any]) -> bool:
+        if not self.identity_complete:
+            return False
         saved = self.state.get("nodes", {}).get(str(node.get("id")))
         if not isinstance(saved, dict):
             return False
@@ -617,6 +768,8 @@ class SearchCheckpointStore:
         return True
 
     def find_child(self, parent_id: str, depth: int, variant: int) -> dict[str, Any] | None:
+        if not self.identity_complete:
+            return None
         suffix = f"-{variant}"
         for node in self.state.get("nodes", {}).values():
             if (

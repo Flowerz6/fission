@@ -33,6 +33,7 @@ attack_options:
   tap_crescendo:
     entity: QUILLFEATHER
     canary: CODE-QF-4417
+    accept_output_markers: true
     handshake_token: QUILLFEATHER-ENGINEER
     # seed_chain: the ROOT node replays these EXACT prompts verbatim; child
     # nodes stay attacker-generated and adapt from it.

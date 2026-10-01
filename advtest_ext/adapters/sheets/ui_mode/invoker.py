@@ -44,6 +44,7 @@ from advtest_ext.adapters._ui_mode_common.config import (
 )
 from advtest_ext.adapters._ui_mode_common.response_assembly import (
     assemble_full_response,
+    extract_model_thoughts,
 )
 from advtest_ext.adapters.sheets.ui_mode.selectors import SELECTORS
 from advtest_ext.document.target import Response
@@ -321,7 +322,6 @@ _MODEL_THOUGHTS_CONTENT_SELECTOR = (
     '[role="complementary"][aria-label="Gemini"] [class*="ThoughtBody" i], '
     '[role="complementary"][aria-label="Gemini"] [class*="Thought" i] [class*="markdown" i]'
 )
-_MODEL_THOUGHTS_MAX_CHARS = 2000
 
 
 async def _read_model_thoughts(page: Any) -> str:
@@ -348,7 +348,7 @@ async def _read_model_thoughts(page: Any) -> str:
             body = ""
     if not body:
         return ""
-    return str(body)[:_MODEL_THOUGHTS_MAX_CHARS]
+    return str(body)  # full reasoning — evidence is never truncated at capture
 
 
 async def _run_side_panel_flow(
@@ -445,8 +445,20 @@ async def ui_mode_invoke(
                     reset_conversation=reset_conversation,
                 )
         except SidePanelUnavailable:
-            await _capture_failure(page, output_dir, trace_id)
-            raise
+            # The DOM response-bubble / loading-indicator selector drifts fairly
+            # often, so _read_response can declare "empty" while the reply actually
+            # streamed fine (we've measured the full answer + thoughts sitting in the
+            # intercept for these). The intercepted stream is the source of truth, so
+            # recover from it before giving up — the TrafficInterceptor has already
+            # flushed (the async-with exited during unwinding). Only a genuinely
+            # empty capture is a real SidePanelUnavailable.
+            recovered = assemble_full_response(intercept_path) if intercept_on else ""
+            if recovered.strip():
+                response_text = recovered
+                model_thoughts = extract_model_thoughts(intercept_path)
+            else:
+                await _capture_failure(page, output_dir, trace_id)
+                raise
     finally:
         if owns_page and page is not None:
             try:
@@ -468,6 +480,12 @@ async def ui_mode_invoke(
         full = assemble_full_response(intercept_path)
         if full and len(full) >= len(response_text):
             response_text = full
+        # The collapsible "Model thoughts" DOM scrape is fragile and frequently
+        # misses; the reasoning is also in the intercepted stream, so prefer that
+        # (falls back to the scrape when the stream carries no thought summaries).
+        stream_thoughts = extract_model_thoughts(intercept_path)
+        if stream_thoughts:
+            model_thoughts = stream_thoughts
 
     return Response(
         text=response_text,
