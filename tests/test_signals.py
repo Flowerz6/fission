@@ -316,6 +316,8 @@ def test_registry_includes_operator_facing_kinds() -> None:
         "regex_match",
         "canary_appears",
         "http_response_shape",
+        "exfil_sink",
+        "doc_diff",
     }
 
 

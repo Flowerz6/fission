@@ -16,6 +16,8 @@ from typing import Any
 
 from advtest_ext.judges.signals.base import Signal
 from advtest_ext.judges.signals.canary_appears import CanaryAppears
+from advtest_ext.judges.signals.doc_diff import DocDiff
+from advtest_ext.judges.signals.exfil_sink import ExfilSink
 from advtest_ext.judges.signals.http_response_shape import HttpResponseShape
 from advtest_ext.judges.signals.regex_match import RegexMatch
 from advtest_ext.judges.signals.token_appears import TokenAppears
@@ -23,7 +25,8 @@ from advtest_ext.judges.signals.token_appears import TokenAppears
 # Operator-configurable signal kinds. LlmJudgeVerdict is omitted —
 # orchestrator constructs it from the existing ``judges:`` block.
 SIGNAL_REGISTRY: dict[str, type[Signal]] = {
-    cls.KIND: cls for cls in (TokenAppears, RegexMatch, CanaryAppears, HttpResponseShape)
+    cls.KIND: cls
+    for cls in (TokenAppears, RegexMatch, CanaryAppears, HttpResponseShape, ExfilSink, DocDiff)
 }
 
 

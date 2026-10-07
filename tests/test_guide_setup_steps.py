@@ -56,7 +56,16 @@ def test_every_shipped_guide_setup_step_is_a_real_registered_operation() -> None
 
 
 def test_guides_without_setup_steps_default_empty_and_skip_validation() -> None:
-    g = load_guide(_GUIDES / "sheets_skill_leak.yaml")
+    # A guide with no setup_steps defaults to an empty list and skips setup-op
+    # validation. Built inline rather than pinned to a shipped guide, which can
+    # later gain setup_steps (sheets_skill_leak did) and silently break this.
+    g = Guide(
+        id="no_setup",
+        objective="x",
+        target=GuideTarget(app="google_sheets"),
+        success=GuideSuccess(rubric="x"),
+        provenance=GuideProvenance(source="test"),
+    )
     assert g.setup_steps == []
     validate_setup_operations(g)  # no-op, must not raise or need the registry
 
