@@ -138,3 +138,14 @@ clean:
 	@echo "Removing local SQLite databases and out/ tree."
 	rm -f advtest.db benchmark_*.db *.db-journal
 	rm -rf out/
+
+pilot:
+	@echo "============================================================"
+	@echo "Google-pilot pipeline (DRY-RUN): select -> assemble -> coverage."
+	@echo "Flip to live with:"
+	@echo "  make pilot-live   (needs a logged-in Playwright profile + keys)"
+	@echo "============================================================"
+	$(PY) $(REPO_ROOT)/scripts/run_pilot_pipeline.py --select gaps
+
+pilot-live:
+	$(PY) $(REPO_ROOT)/scripts/run_pilot_pipeline.py --select gaps --live --repeats 3 --export
