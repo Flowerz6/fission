@@ -127,3 +127,31 @@ def test_grounding_registered_and_builds() -> None:
 )
 def test_classify_outcome(grounded: bool, success: bool, expected: str) -> None:
     assert classify_outcome(grounded=grounded, success=success) == expected
+
+
+# ---------------------------- palette gate ----------------------------
+
+class _Op:
+    def __init__(self, carrier_role, cell_values):
+        self.carrier_role = carrier_role
+        self.cell_values = cell_values
+
+
+def test_cover_offpalette_rejected() -> None:
+    from advtest_ext.guides.mutation_runtime import cover_offpalette_fields
+    op = _Op("cover", ["vendor renewal thread", "onboarding thread", "incident postmortem thread"])
+    # footwear shares no content word with the business-thread palette -> off
+    assert cover_offpalette_fields(op, {"carrier_payload": "a sustainable footwear product pitch"}) == ["carrier_payload"]
+
+
+def test_cover_onpalette_passes() -> None:
+    from advtest_ext.guides.mutation_runtime import cover_offpalette_fields
+    op = _Op("cover", ["vendor renewal thread", "onboarding thread"])
+    assert cover_offpalette_fields(op, {"carrier_payload": "the new-hire onboarding thread, full history"}) == []
+
+
+def test_payload_operator_not_palette_checked() -> None:
+    from advtest_ext.guides.mutation_runtime import cover_offpalette_fields
+    op = _Op("payload", ["fake end-of-quote marker", "latest header"])
+    # payload/format operators vary structure, not topic -> never off-palette
+    assert cover_offpalette_fields(op, {"carrier_payload": "totally unrelated words here"}) == []

@@ -286,6 +286,11 @@ class Guide(BaseModel):
     entity: str | None = None
     canary: str | None = None
     focus: str | None = None
+    # Benign, stable strings a FAITHFUL summary/response would reflect if the assistant
+    # actually read our planted carrier (e.g. a ticket ref, a party name). The grounding
+    # gate uses these to tell "defended" (grounded, no success) from "inconclusive" (the
+    # assistant never read our content) — so staging failures don't count as defences.
+    grounding_anchors: list[str] = Field(default_factory=list)
 
     # --- lifecycle tier ---
     # "discovery": a new/unproven attack — success is judged by the LLM rubric, its

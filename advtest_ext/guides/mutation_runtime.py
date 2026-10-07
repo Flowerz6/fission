@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +16,43 @@ from advtest_ext.guides.stage import (
 )
 
 _log = structlog.get_logger(__name__)
+
+_PALETTE_STOP = {
+    "the", "a", "an", "and", "or", "of", "to", "then", "with", "no", "not", "all",
+    "that", "this", "into", "from", "when", "which", "there", "here", "them",
+}
+
+
+def _content_words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z]{4,}", text.lower()) if w not in _PALETTE_STOP}
+
+
+def cover_offpalette_fields(operator: Any, patch: dict[str, Any]) -> list[str]:
+    """Reject a COVER mutation that drifted off the operator's palette.
+
+    The cover operator is meant to vary the benign scenario *within* its
+    ``cell_values`` (e.g. vendor-renewal / onboarding / postmortem). A weak model
+    ignores the palette and invents an unrelated document ("a sustainable footwear
+    product pitch"), which Gemini then summarises instead of our scenario — noise,
+    not an attack. A mutated field whose text shares NO content word with any
+    cell_value has left the palette; reject-and-don't-record. Only cover-role
+    operators with a palette are checked (payload/format operators vary structure,
+    not topic, so a word-overlap rule would false-reject them).
+    """
+    if operator is None or getattr(operator, "carrier_role", "full") != "cover":
+        return []
+    cells = getattr(operator, "cell_values", None) or []
+    palette: set[str] = set()
+    for cell in cells:
+        if isinstance(cell, str):
+            palette |= _content_words(cell)
+    if not palette:
+        return []
+    off: list[str] = []
+    for path, value in patch.items():
+        if isinstance(value, str) and value.strip() and not (_content_words(value) & palette):
+            off.append(path)
+    return off
 
 
 def carrier_invariant_violations(guide: Guide, variant: Guide) -> list[str]:
@@ -182,6 +220,22 @@ class GuideMutationMaterializer:
                 "verified": False,
                 "rejected": "invariant",
                 "missing": missing,
+            }
+            return None
+        # Palette gate: reject a cover mutation that drifted off its scenario palette
+        # (the "sustainable footwear" drift) before staging.
+        offpalette = cover_offpalette_fields(operator, patch)
+        if offpalette:
+            _log.warning(
+                "mutation.rejected_offpalette",
+                node=str(node["id"]),
+                operator=operator_name,
+                fields=offpalette,
+            )
+            node["materialization"] = {
+                "verified": False,
+                "rejected": "offpalette",
+                "fields": offpalette,
             }
             return None
         result = await stage_guide(

@@ -131,6 +131,10 @@ invariants:
 - egress_or_tag_required
 mutation_surface:
 - carrier_payload
+grounding_anchors:
+- Orchard vendor renewal
+- '#4471'
+- procurement
 entity: thread-archive.example
 canary: QDEPTH-DEEP-8X
 tags:
