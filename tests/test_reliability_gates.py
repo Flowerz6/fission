@@ -171,3 +171,24 @@ def test_tool_and_mutation_regexes() -> None:
     assert set(stc._TOOL_RE.findall(sample)) == {"dynamic_llm_agent:planner", "gmail_agent:send"}
     # canary-in-traffic is the ground-truth check: absent -> hallucinated claim
     assert "XUSER-TAMPER-5Q" not in "model said it applied the change"
+
+
+def test_traffic_verifier_discriminates_emitted_vs_context(tmp_path) -> None:
+    import importlib.util
+    import json
+    spec = importlib.util.spec_from_file_location("stc2", ROOT_DIR / "scripts" / "show_tool_calls.py")
+    stc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(stc)
+    f = tmp_path / "t.jsonl"
+    f.write_text(
+        json.dumps({"request_body": "planted CANARY-XYZ in context", "response_body": "benign reply"}) + "\n"
+        + json.dumps({"request_body": "ctx", "response_body": "I wrote CANARY-XYZ into the doc"}) + "\n"
+    )
+    trace = {"raw_response_data": {"intercepted_traffic_path": str(f)}}
+    full, responses = stc._traffic(trace, tmp_path)
+    assert "CANARY-XYZ" in full                     # present somewhere
+    assert "CANARY-XYZ" in responses                # emitted in a response
+    # a canary that appears ONLY in a request body must NOT count as emitted
+    f.write_text(json.dumps({"request_body": "planted ONLY-IN-CTX here", "response_body": "clean"}) + "\n")
+    _, responses2 = stc._traffic(trace, tmp_path)
+    assert "ONLY-IN-CTX" not in responses2
