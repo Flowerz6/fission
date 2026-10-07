@@ -70,6 +70,7 @@ def main() -> None:
     print(f"\nclient: {client}\ntoken → {token}\n")
     print("A browser will open — pick the account and click Allow.\n")
 
+    from google.auth.exceptions import RefreshError
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials as UserCreds
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -85,9 +86,17 @@ def main() -> None:
     if creds is not None and creds.valid and creds.has_scopes(ALL_SCOPES):
         print("cached token already covers all scopes — nothing to do.")
         return
+
+    need_consent = True
     if creds is not None and creds.expired and creds.refresh_token and creds.has_scopes(ALL_SCOPES):
-        creds.refresh(Request())
-    else:
+        # Try a silent refresh first. If the refresh token has been revoked or
+        # expired (invalid_grant), don't crash — fall back to a fresh consent.
+        try:
+            creds.refresh(Request())
+            need_consent = False
+        except RefreshError as exc:
+            print(f"cached token could not be refreshed ({exc}); opening a fresh consent …\n")
+    if need_consent:
         flow = InstalledAppFlow.from_client_secrets_file(str(client), ALL_SCOPES)
         creds = flow.run_local_server(port=0)
 
