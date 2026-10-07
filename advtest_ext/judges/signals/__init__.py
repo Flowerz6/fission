@@ -64,6 +64,7 @@ from advtest_ext.judges.signals.base import (
 from advtest_ext.judges.signals.canary_appears import CanaryAppears
 from advtest_ext.judges.signals.doc_diff import DocDiff
 from advtest_ext.judges.signals.exfil_sink import ExfilSink
+from advtest_ext.judges.signals.grounding import GroundingCheck, classify_outcome
 from advtest_ext.judges.signals.http_response_shape import HttpResponseShape
 from advtest_ext.judges.signals.llm_judge_verdict import LlmJudgeVerdict
 from advtest_ext.judges.signals.regex_match import RegexMatch
@@ -78,7 +79,9 @@ __all__ = [
     "CanaryAppears",
     "DocDiff",
     "ExfilSink",
+    "GroundingCheck",
     "HttpResponseShape",
+    "classify_outcome",
     "LlmJudgeVerdict",
     "RegexMatch",
     "Signal",

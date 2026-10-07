@@ -318,6 +318,7 @@ def test_registry_includes_operator_facing_kinds() -> None:
         "http_response_shape",
         "exfil_sink",
         "doc_diff",
+        "grounding_check",
     }
 
 

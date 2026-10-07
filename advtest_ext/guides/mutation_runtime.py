@@ -6,11 +6,52 @@ import inspect
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 from advtest_ext.guides.stage import (
     bind_setup_target_options,
     stage_guide,
     verify_setup_result,
 )
+
+_log = structlog.get_logger(__name__)
+
+
+def carrier_invariant_violations(guide: Guide, variant: Guide) -> list[str]:
+    """Anchors the attack NEEDS to survive a carrier mutation; any that are missing
+    from the mutated carrier mean the variant is inert (it can no longer fire its
+    own oracle) and must be rejected before a live run is spent on it.
+
+    Drift (a weak mutator dropping the canary / egress sink / success token while
+    "mutating" the payload) is the dominant waste in un-gated fan-out — this is the
+    reject-and-don't-record gate. Anchors are the literal strings the guide's success
+    depends on: its canary, its entity (e.g. the attacker sink host), and every
+    ``token_appears`` / ``canary_appears`` signal's literal. Non-literal signals
+    (regex, exfil_sink shape) are not checkable here and are left to live scoring.
+    """
+    anchors: list[str] = []
+    for value in (getattr(guide, "canary", None), getattr(guide, "entity", None)):
+        if isinstance(value, str):
+            anchors.append(value)
+    for spec in guide.success.signals:
+        if not isinstance(spec, dict):
+            continue
+        if spec.get("kind") == "token_appears" and isinstance(spec.get("token"), str):
+            anchors.append(spec["token"])
+        if spec.get("kind") == "canary_appears":
+            canary = spec.get("canary") or spec.get("token")
+            if isinstance(canary, str):
+                anchors.append(canary)
+    anchors = [a for a in dict.fromkeys(anchors) if a and len(a) >= 3]
+    if not anchors:
+        return []
+    texts = [getattr(variant, "carrier_payload", "") or ""]
+    for step in getattr(variant, "setup_steps", []) or []:
+        for value in (getattr(step, "params", None) or {}).values():
+            if isinstance(value, str):
+                texts.append(value)
+    blob = "\n".join(texts)
+    return [a for a in anchors if a not in blob]
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -126,6 +167,23 @@ class GuideMutationMaterializer:
                     patch[path] = f"{value.rstrip()}\n\n{payload}".strip()
         for path, value in patch.items():
             _set_guide_path(variant, path, value)
+        # Invariant gate: reject-and-don't-record a mutation that dropped the
+        # attack's success-bearing anchors (drift). Done BEFORE staging so a
+        # drifted variant never costs a live browser run and never pollutes ASR.
+        missing = carrier_invariant_violations(self.guide, variant)
+        if missing:
+            _log.warning(
+                "mutation.rejected_invariant",
+                node=str(node["id"]),
+                operator=operator_name,
+                missing=missing,
+            )
+            node["materialization"] = {
+                "verified": False,
+                "rejected": "invariant",
+                "missing": missing,
+            }
+            return None
         result = await stage_guide(
             variant,
             variables=self.variables,

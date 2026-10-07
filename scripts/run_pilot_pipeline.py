@@ -85,7 +85,13 @@ def main() -> int:
     ap.add_argument("--repeats", type=int, default=3, help="live reruns per family (Google wants >=3)")
     ap.add_argument("--live", action="store_true", help="drive families on live Gemini (needs a profile)")
     ap.add_argument("--export", action="store_true", help="regenerate the Google-schema dataset after")
-    ap.add_argument("--provider-config", type=Path, default=ROOT / "configs" / "providers.yaml")
+    ap.add_argument("--provider-config", type=Path, default=ROOT / "configs" / "hybrid.yaml")
+    ap.add_argument(
+        "--planner-role",
+        default="CLAUDE_PLANNER",
+        help="strategist role that plans mutations (reliability default: CLAUDE_PLANNER; "
+        "the local model only executes turn content). Pass '' to disable.",
+    )
     ap.add_argument("--limit", type=int, default=0, help="cap the number of families (0 = no cap)")
     args = ap.parse_args()
 
@@ -176,8 +182,16 @@ def _run_live(ready: list, args: argparse.Namespace) -> int:
             print(f"  · {g.id}: {args.repeats} runs …")
             for i in range(args.repeats):
                 try:
-                    await run_guide(g, provider_config=args.provider_config,
-                                    output_dir=ROOT / "out" / "pilot" / g.id / f"run{i}")
+                    # CLAUDE_PLANNER = the strategist (picks operator/cell, writes the
+                    # mutation plan); the local model only executes turn content. Without
+                    # it the weak local model does strategy too and drifts (the
+                    # "sustainable footwear" fan-out). Empty string disables it.
+                    await run_guide(
+                        g,
+                        provider_config=args.provider_config,
+                        planner_role=args.planner_role or None,
+                        output_dir=ROOT / "out" / "pilot" / g.id / f"run{i}",
+                    )
                 except Exception as exc:
                     print(f"      run {i} error: {str(exc)[:80]}")
 
