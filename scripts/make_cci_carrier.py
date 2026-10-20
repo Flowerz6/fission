@@ -69,7 +69,7 @@ def build_carrier(*, canary: str, host: str, password: str) -> tuple[str, dict[s
         f'salt = base64.b64decode("{b64_salt}")\n'
         f'nonce = base64.b64decode("{b64_nonce}")\n'
         f'data = base64.b64decode("{b64_ct}")\n'
-        f'key = PBKDF2HMAC(algorithm=SHA256(), length=32, salt=salt, iterations={_ITER})'
+        f"key = PBKDF2HMAC(algorithm=SHA256(), length=32, salt=salt, iterations={_ITER})"
         f'.derive(b"{password}")\n'
         "cfg = json.loads(AESGCM(key).decrypt(nonce, data, None))\n"
         "print(cfg)\n"
@@ -103,9 +103,12 @@ def main() -> None:
 
     carrier, meta = build_carrier(canary=args.canary, host=args.host, password=args.password)
     if args.json:
+        # lgtm[py/clear-text-logging-sensitive-data] — operator tool emitting a
+        # red-team carrier built from a FAKE passphrase; printing it is the point.
         print(json.dumps({"carrier": carrier, **meta}, ensure_ascii=False))
     else:
         print(carrier)
+        # lgtm[py/clear-text-logging-sensitive-data] — fake passphrase, see above.
         print("\n--- (benign) decrypted plaintext ---\n" + meta["plaintext"])
         print(f"\ncanary (success oracle): {meta['canary']}")
 

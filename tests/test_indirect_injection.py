@@ -420,6 +420,8 @@ def test_image_rendering_exfil_embeds_attacker_url_template() -> None:
     text = relevant[0].text
     # The instruction must reference both the markdown-image syntax and
     # the attacker domain so a downstream LLM has a complete recipe.
+    # lgtm[py/incomplete-url-substring-sanitization] — asserting an attack payload
+    # contains the attacker domain; this is a test check, not URL sanitization.
     assert "![" in text and "https://attacker.example" in text
 
 

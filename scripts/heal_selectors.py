@@ -38,6 +38,7 @@ import argparse
 import asyncio
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from advtest_ext.adapters._ui_mode_common.selector_heal import heal
 from advtest_ext.adapters._ui_mode_common.selector_overlay import write_overlay
@@ -79,11 +80,14 @@ def _selectors_for(app: str) -> dict[str, str]:
 
 
 def _infer_app(url: str) -> str:
-    if "/spreadsheets/" in url:
+    parsed = urlparse(url)
+    if "/spreadsheets/" in parsed.path:
         return "google_sheets"
-    if "/document/" in url:
+    if "/document/" in parsed.path:
         return "google_docs"
-    if "calendar.google.com" in url:
+    # Match the host exactly (not a substring of the whole URL) so a path/query
+    # that merely contains "calendar.google.com" can't be misclassified.
+    if parsed.hostname == "calendar.google.com":
         return "google_calendar"
     raise SystemExit("could not infer --app from --url; pass --app explicitly")
 
