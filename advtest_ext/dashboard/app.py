@@ -1193,7 +1193,9 @@ def create_app(
                 return False
 
         guides_dir = Path(__file__).resolve().parents[2] / "guides"
-        guides = [g for g in (load_guides(guides_dir) if guides_dir.exists() else []) if _runnable_live(g)]
+        guides = [
+            g for g in (load_guides(guides_dir) if guides_dir.exists() else []) if _runnable_live(g)
+        ]
         guide_opts: list[dict[str, Any]] = []
         for g in guides:
             target = canon_surface(g.target.app)
