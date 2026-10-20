@@ -263,7 +263,7 @@ SELECTORS: SidePanelSelectors = cast(
 )
 
 
-EXPECTED_KEYS: frozenset[str] = frozenset(
+COMMON_SELECTOR_KEYS: frozenset[str] = frozenset(
     {
         "side_panel_button",
         "side_panel_container",
@@ -274,14 +274,23 @@ EXPECTED_KEYS: frozenset[str] = frozenset(
         "side_panel_new_conversation",
         "side_panel_close",
         "side_panel_send",
+    }
+)
+"""The Gemini side-panel keys shared by every Workspace surface. Sheets and
+Calendar pin against this set (they have no suggested-edit / confirm UI)."""
+
+EXPECTED_KEYS: frozenset[str] = COMMON_SELECTOR_KEYS | frozenset(
+    {
+        # Docs-only: the track-changes suggested-edit accept/reject controls
+        # and the action-confirm button Gemini surfaces when it writes to the doc.
         "suggestion_accept",
         "suggestion_reject",
         "action_confirm",
     }
 )
-"""Source of truth for the SELECTORS keys. The invoker's lookups
+"""Source of truth for the Docs SELECTORS keys. The invoker's lookups
 and the unit test both pin against this set, so missing or stray
 keys fail loudly rather than at run time."""
 
 
-__all__ = ["EXPECTED_KEYS", "SELECTORS", "SidePanelSelectors"]
+__all__ = ["COMMON_SELECTOR_KEYS", "EXPECTED_KEYS", "SELECTORS", "SidePanelSelectors"]

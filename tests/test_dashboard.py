@@ -177,7 +177,7 @@ def test_runs_index_renders(client: TestClient) -> None:
     assert "<h1>Runs</h1>" in resp.text
 
 
-def test_zero_asr_runs_are_hidden_from_run_history_and_overview() -> None:
+def test_zero_asr_runs_hidden_from_overview_and_success_filter() -> None:
     engine = make_engine("sqlite:///:memory:")
     factory = make_session_factory(engine)
     _seed_run(factory)
@@ -201,10 +201,17 @@ def test_zero_asr_runs_are_hidden_from_run_history_and_overview() -> None:
     app = create_app(engine=engine)
     with TestClient(app) as c:
         runs_body = c.get("/runs").text
+        runs_success_body = c.get("/runs?only=success").text
         overview_body = c.get("/").text
 
+    # The run history shows EVERY run by default — a run is visible the moment it
+    # exists, including a finished no-success run.
     assert "run-seed" in runs_body
-    assert "run-zero-asr" not in runs_body
+    assert "run-zero-asr" in runs_body
+    # ...but ?only=success narrows to runs with at least one green.
+    assert "run-seed" in runs_success_body
+    assert "run-zero-asr" not in runs_success_body
+    # The presentation-facing overview omits zero-ASR runs.
     assert "run-seed" in overview_body
     assert "run-zero-asr" not in overview_body
 

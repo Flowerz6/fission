@@ -358,14 +358,32 @@ def test_version_change_carry_forward_and_prioritise() -> None:
 # --- Acceptance 9: all new routes under /target_drift, none shadow operational ---
 
 
+def _all_route_paths(app: object) -> list[str]:
+    """Collect every registered route path, unwrapping FastAPI 0.138+ lazy
+    ``_IncludedRouter`` wrappers (``include_router`` no longer flattens its
+    routes into ``app.routes``; it stores a wrapper holding the original
+    router). Falls back to flat enumeration on older FastAPI."""
+    try:
+        from fastapi.routing import _IncludedRouter
+    except ImportError:  # pragma: no cover - older FastAPI flattens eagerly
+        _IncludedRouter = ()  # type: ignore[assignment,misc]  # noqa: N806 — mirrors the class name
+    paths: list[str] = []
+    for r in app.routes:  # type: ignore[attr-defined]
+        if _IncludedRouter and isinstance(r, _IncludedRouter):
+            paths.extend(getattr(x, "path", "") for x in r.original_router.routes)
+        else:
+            paths.append(getattr(r, "path", ""))
+    return paths
+
+
 def test_routes_under_target_drift_prefix_no_shadow(engine_and_session: tuple) -> None:
     engine, _ = engine_and_session
     app = create_app(engine=engine)
-    td_routes = [r.path for r in app.routes if getattr(r, "path", "").startswith("/target_drift")]
+    all_paths = _all_route_paths(app)
+    td_routes = [p for p in all_paths if p.startswith("/target_drift")]
     assert td_routes, "no target_drift routes registered"
     # Every drift-namespaced NEW route is under /target_drift...
     assert all(p.startswith("/target_drift") for p in td_routes)
     # ...and the operational-drift route (/drift) is untouched and separate.
-    all_paths = [getattr(r, "path", "") for r in app.routes]
     assert "/drift" in all_paths
     assert "/drift" not in td_routes  # not shadowed / not reused

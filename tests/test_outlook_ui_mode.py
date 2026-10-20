@@ -146,20 +146,19 @@ async def test_outlook_compose_walks_send_sequence() -> None:
     # Navigate to the inbox.
     assert ("goto", SELECTORS["inbox_url"], 20000) in page.calls
 
-    # Click New mail and wait for the Compose pane to mount.
-    assert (
-        "wait_for",
-        SELECTORS["new_mail_button"],
-        "visible",
-        20000,
-    ) in page.calls
+    # Click New mail, then wait for the Compose surface to mount. The invoker
+    # tries several New-mail locator strategies with a per-try timeout, and
+    # waits on a UNION of the compose pane / To / Subject fields ("whichever
+    # mounts first"), so assert on the selectors rather than the exact timeout.
+    assert any(
+        c[0] == "wait_for" and c[1] == SELECTORS["new_mail_button"] and c[2] == "visible"
+        for c in page.calls
+    )
     assert any(c[0] == "click" and c[1] == SELECTORS["new_mail_button"] for c in page.calls)
-    assert (
-        "wait_for",
-        SELECTORS["compose_pane"],
-        "visible",
-        20000,
-    ) in page.calls
+    assert any(
+        c[0] == "wait_for" and SELECTORS["compose_pane"] in c[1] and c[2] == "visible"
+        for c in page.calls
+    )
 
     # Each field: visible-wait → click (focuses) → keyboard.type.
     for field_selector, expected_value in [
@@ -226,7 +225,12 @@ async def test_new_mail_button_missing_raises_compose_unavailable() -> None:
 @pytest.mark.asyncio
 async def test_compose_pane_missing_raises_compose_unavailable() -> None:
     page = _FakePage()
-    page.wait_for_failures[SELECTORS["compose_pane"]] = TimeoutError("Compose pane not mounted")
+    # The invoker waits on a UNION "compose is open" signal (pane / To / Subject),
+    # so fail the whole union — the compose surface never registers as mounted.
+    open_signal = ", ".join(
+        (SELECTORS["compose_pane"], SELECTORS["to_field"], SELECTORS["subject_field"])
+    )
+    page.wait_for_failures[open_signal] = TimeoutError("Compose pane not mounted")
     factory = await _build_factory(page)
 
     with pytest.raises(OutlookComposeUnavailable, match="Compose pane"):
