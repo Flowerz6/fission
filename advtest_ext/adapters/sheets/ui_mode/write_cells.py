@@ -60,7 +60,7 @@ async def _select_a1(page: Any, cell: str, timeout_ms: int) -> None:
         await nb.click()
         await nb.fill(cell)
         await page.keyboard.press("Enter")
-    except Exception as exc:  # noqa: BLE001 — normalise to the drift signal
+    except Exception as exc:
         raise _drift("sheets Name Box not found (cannot position cursor)") from exc
     await asyncio.sleep(0.3)
 

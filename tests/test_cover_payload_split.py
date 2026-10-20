@@ -102,7 +102,7 @@ async def test_cover_role_regenerates_cover_and_keeps_payload() -> None:
 @pytest.mark.asyncio
 async def test_payload_role_regenerates_payload_and_keeps_cover() -> None:
     guide = _split_guide(carrier_role="payload", dimension="wording")
-    body, record = await _staged_body(guide, "A BRAND NEW INJECTION")
+    body, _record = await _staged_body(guide, "A BRAND NEW INJECTION")
     # Seed cover is kept; only the injection is replaced.
     assert body == "COVER TEXT\n\nA BRAND NEW INJECTION"
     assert "COVER TEXT" in body

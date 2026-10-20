@@ -81,7 +81,6 @@ __all__ = [
     "ExfilSink",
     "GroundingCheck",
     "HttpResponseShape",
-    "classify_outcome",
     "LlmJudgeVerdict",
     "RegexMatch",
     "Signal",
@@ -90,4 +89,5 @@ __all__ = [
     "Surface",
     "TokenAppears",
     "build_signal",
+    "classify_outcome",
 ]

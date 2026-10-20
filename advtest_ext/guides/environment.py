@@ -114,7 +114,7 @@ class EnvironmentSeeder:
             self._last_cell = cell_value
             logger.info("environment.reseeded", app=self._app, cell=cell_value)
             return True
-        except Exception as exc:  # noqa: BLE001 — never fail the run over a re-seed
+        except Exception as exc:
             logger.warning("environment.reseed_failed", app=self._app, cell=cell_value, err=str(exc)[:120])
             return False
 

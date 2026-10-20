@@ -95,7 +95,7 @@ async def _fill_first_match(page: Any, selector: str, text: str, *, what: str, t
     locator = page.locator(selector).first
     try:
         await locator.wait_for(state="visible", timeout=timeout_ms)
-    except Exception as exc:  # noqa: BLE001 — normalise to the drift signal
+    except Exception as exc:
         raise _drift(f"calendar event-editor {what} field not found") from exc
     await human_type(page, locator, text)
 
@@ -104,7 +104,7 @@ async def calendar_ui_create_event(
     *,
     title: str,
     description: str = "",
-    date: str | None = None,  # noqa: ARG001 — accepted for API parity; the
+    date: str | None = None,
     #     editor defaults to today and the day-view journey reads today.
     profile_dir: Path | None = None,
     timeout_ms: int | None = None,
@@ -165,7 +165,7 @@ async def calendar_ui_create_event(
         save = page.locator(_SAVE_SELECTOR).first
         try:
             await save.wait_for(state="visible", timeout=timeout)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise _drift("calendar event-editor Save button not found") from exc
         await human_click(save)
 

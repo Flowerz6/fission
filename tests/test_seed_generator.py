@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from advtest_ext.guides.seed_generator import (
     _EXEMPLARS,
     generate_seed,

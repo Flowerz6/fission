@@ -52,10 +52,10 @@ from advtest_ext.core.orch_budget import BudgetExceeded, _BudgetTracker
 from advtest_ext.core.orch_summary import summarise
 from advtest_ext.core.orch_trace_meta import (
     _classify_verdict,
-    guide_node_role,
-    resolve_guide_verdict,
     _extract_tap_node_id,
     _hoist_parent_and_depth,
+    guide_node_role,
+    resolve_guide_verdict,
     upgrade_verdict_for_signals,
 )
 from advtest_ext.core.sampling import stratified_sample

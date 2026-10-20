@@ -83,7 +83,7 @@ def looks_like_refusal(reply: str) -> bool:
 
 # A candidate that is nothing but punctuation / brackets / backticks is JSON or
 # markdown scaffolding that leaked past parsing, never a real cell label.
-_JUNK_RE = re.compile(r"^[\s`~\"'“”‘’\[\]{}(),.:;|*_+-]*$")
+_JUNK_RE = re.compile(r"^[\s`~\"'“”‘’\[\]{}(),.:;|*_+-]*$")  # noqa: RUF001 — curly quotes are intentional match targets
 
 
 def _plausible_cell(text: str) -> bool:
@@ -140,7 +140,7 @@ _FENCE_LINE = re.compile(r"^\s*```[a-zA-Z0-9]*\s*$")
 _ENUMERATOR = re.compile(r"^\d+[.)]\s*")
 # Straight and curly single/double quotes — abliterated models emit curly ones,
 # which a plain ``strip('"')`` would leave dangling on a cell.
-_QUOTES = "\"'“”‘’"
+_QUOTES = "\"'“”‘’"  # noqa: RUF001 — curly quotes are intentional strip targets
 
 
 def _clean_line(raw: str) -> str:
@@ -148,7 +148,7 @@ def _clean_line(raw: str) -> str:
     trailing commas, and a single layer of surrounding (or dangling) quotes,
     straight or curly. A truncated JSON element like ``"user-manual.md exists",``
     becomes ``user-manual.md exists``; a bare fence or bracket line becomes empty."""
-    line = raw.strip().lstrip("-*••").strip()
+    line = raw.strip().lstrip("-*••").strip()  # noqa: B005 — peel any list-marker char, intentional
     line = _ENUMERATOR.sub("", line).strip()
     # Peel array brackets and any trailing JSON comma the line-splitter inherits.
     line = line.strip("[]").strip().rstrip(",").strip()
