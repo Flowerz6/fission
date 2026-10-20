@@ -29,8 +29,20 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import uuid
 from pathlib import Path
+
+
+def _load_dotenv() -> None:
+    """Load repo-local .env into the process (real env wins), so this
+    standalone script sees ADVTEST_AUTH_MODE / profile dir / keys the same
+    way the dashboard does when it spawns a run."""
+    from advtest_ext.dashboard.live_tests import _REPO_ROOT, _read_env_file
+
+    for key, value in _read_env_file(_REPO_ROOT / ".env").items():
+        if value and not os.environ.get(key):
+            os.environ[key] = value
 
 
 async def _run(output_dir: Path, prompt: str) -> int:
@@ -93,6 +105,7 @@ def main() -> None:
         help="The benign user prompt to type into the side panel.",
     )
     args = ap.parse_args()
+    _load_dotenv()
     raise SystemExit(asyncio.run(_run(Path(args.output_dir), args.prompt)))
 
 
