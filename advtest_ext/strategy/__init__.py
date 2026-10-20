@@ -43,6 +43,13 @@ from advtest_ext.strategy.digester import (
     ScriptedDecider,
 )
 from advtest_ext.strategy.export import build_dataset_from_strategy_runs
+from advtest_ext.strategy.harvest import (
+    decider_from_config,
+    digest_enabled,
+    digest_traces,
+    extract_hits_from_traces,
+    maybe_digest_run,
+)
 from advtest_ext.strategy.library import Strategy, cold_start_doc, discover
 from advtest_ext.strategy.loop import (
     Rollout,
@@ -101,10 +108,15 @@ __all__ = [
     "assemble_strategy_doc",
     "build_dataset_from_strategy_runs",
     "cold_start_doc",
+    "decider_from_config",
+    "digest_enabled",
+    "digest_traces",
     "discover",
+    "extract_hits_from_traces",
     "iterate_sample",
     "lineage_id_for",
     "load_strategies",
+    "maybe_digest_run",
     "persist_replays",
     "persist_run",
     "render_seed_strategy",

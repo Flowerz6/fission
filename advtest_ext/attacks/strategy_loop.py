@@ -235,6 +235,17 @@ class StrategyLoopAttack(AttackPlugin):
                         "judge_score": res.extra.get("judge_score"),
                         "security": step.attempt.security,
                         "sample_key": sample.sample_key,
+                        # Self-describing: carry the full sample so the
+                        # post-run digester can reconstruct the Hit from the
+                        # persisted trace alone (no strategy RunResult needed).
+                        "sample": {
+                            "suite_name": sample.suite_name,
+                            "user_task_id": sample.user_task_id,
+                            "injection_task_id": sample.injection_task_id,
+                            "user_task_prompt": sample.user_task_prompt,
+                            "injection_task_goal": sample.injection_task_goal,
+                            "context_with_placeholder": sample.context_with_placeholder,
+                        },
                     }
                 },
             )

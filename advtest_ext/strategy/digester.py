@@ -224,13 +224,32 @@ class Digester:
         library_dir: str | Path,
         audit_dir: str | Path | None = None,
     ) -> DigestReport:
+        """Digest the hits of a standalone strategy :class:`RunResult`."""
+        return await self.digest_hits(
+            extract_hits(run, samples), library_dir=library_dir, audit_dir=audit_dir
+        )
+
+    async def digest_hits(
+        self,
+        hits: list[Hit],
+        *,
+        library_dir: str | Path,
+        audit_dir: str | Path | None = None,
+    ) -> DigestReport:
+        """Digest a pre-extracted list of :class:`Hit`s into the library.
+
+        The ``RunResult``-based :meth:`digest` is the standalone-runner
+        entry; this one lets the integrated (attack-plugin) path feed hits
+        reconstructed from persisted traces through the identical
+        novel/fits/widens logic — one digester, two sources of hits.
+        """
         root = Path(library_dir)
         root.mkdir(parents=True, exist_ok=True)
         strategies = discover(root)
         by_id = {s.id: s for s in strategies}
         report = DigestReport()
 
-        for hit in extract_hits(run, samples):
+        for hit in hits:
             report.n_hits += 1
             decision = await self._decider.decide(hit, strategies)
 

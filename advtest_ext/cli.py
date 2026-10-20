@@ -373,6 +373,32 @@ def run(
             session_factory=session_factory,
         )
     )
+    # Post-run strategy digest: feed any signal-verified strategy_loop
+    # winners back into the markdown strategy library. Off unless
+    # ADVTEST_DIGEST_STRATEGY is set; best-effort — never fails the run.
+    strategy_digest: dict[str, Any] | None = None
+    if session_factory is not None:
+        from advtest_ext.strategy.harvest import digest_enabled, maybe_digest_run
+
+        if digest_enabled():
+            from advtest_ext._cli_providers import _resolve_provider_config_path
+
+            try:
+                cfg_path = _resolve_provider_config_path(
+                    missing_roles_hint="a CLAUDE_DIGESTER role"
+                )
+                report = asyncio.run(
+                    maybe_digest_run(session_factory, result.run_id, config_path=cfg_path)
+                )
+                if report is not None:
+                    strategy_digest = {
+                        "hits": report.n_hits,
+                        "created": report.created,
+                        "appended": report.appended,
+                        "widened": report.widened,
+                    }
+            except Exception:  # pragma: no cover - best-effort boundary
+                strategy_digest = None
     typer.echo(
         json.dumps(
             {
@@ -383,6 +409,7 @@ def run(
                 "overall_asr": round(result.summary_stats.overall_asr, 4),
                 "output_dir": str(out / result.run_id) if out is not None else None,
                 "db_url": resolved_db or None,
+                "strategy_digest": strategy_digest,
             },
             indent=2,
         )
