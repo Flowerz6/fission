@@ -149,6 +149,51 @@ async def test_budget_caps_iterations_on_all_misses() -> None:
     assert all(a.metadata["strategy_loop"]["security"] is False for a in attempts)
 
 
+def test_router_defaults_to_provider_router_when_library_present(tmp_path) -> None:
+    from advtest_ext.strategy.router import ColdStartRouter, ProviderRouter
+
+    # No library -> cold-start (nothing to route over).
+    cold = StrategyLoopAttack(attacker=_FakeProvider([]), judge=_FakeJudge(), library_dir=None)
+    assert isinstance(cold._router, ColdStartRouter)
+
+    # Library present -> route over it with the attacker provider by default.
+    routed = StrategyLoopAttack(
+        attacker=_FakeProvider([]), judge=_FakeJudge(), library_dir=str(tmp_path)
+    )
+    assert isinstance(routed._router, ProviderRouter)
+
+    # Dedicated router provider is used when supplied.
+    rp = _FakeProvider([])
+    with_rp = StrategyLoopAttack(
+        attacker=_FakeProvider([]),
+        judge=_FakeJudge(),
+        library_dir=str(tmp_path),
+        router_provider=rp,
+    )
+    assert isinstance(with_rp._router, ProviderRouter)
+    assert with_rp._router._provider is rp
+
+
+@pytest.mark.asyncio
+async def test_explicit_router_choice_flows_into_metadata() -> None:
+    class _FakeRouter:
+        async def route(self, sample: Any, strategies: Any) -> list[str]:
+            return ["chosen_strategy_a", "chosen_strategy_b"]
+
+    target = _FakeTarget()
+    plugin = StrategyLoopAttack(
+        attacker=_FakeProvider([_script("go WIN")]),
+        judge=_FakeJudge(),
+        library_dir=None,
+        router=_FakeRouter(),
+    )
+    attempts = await _run(plugin, target)
+    assert attempts[-1].metadata["strategy_loop"]["strategy_ids"] == [
+        "chosen_strategy_a",
+        "chosen_strategy_b",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_context_overrides_carrier_and_trigger() -> None:
     target = _FakeTarget()
