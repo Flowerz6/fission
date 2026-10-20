@@ -13,8 +13,7 @@ optional interop extra (a single `TYPE_CHECKING` import).
 
 New here, or returning after a break? **Start with the
 [Architecture Onboarding Guide](docs/architecture/README.md)** — how the whole system fits
-together, stage by stage, with diagrams — and the [Team Map](docs/TEAM.md) for who owns what.
-That's the canonical onboarding layer.
+together, stage by stage, with diagrams. That's the canonical onboarding layer.
 
 Then, to *operate* the tool, read these three, in order:
 

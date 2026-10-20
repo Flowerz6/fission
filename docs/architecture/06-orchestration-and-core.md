@@ -1,6 +1,5 @@
 # Stage 6 — Orchestration & Core
 
-> **Owner role:** [Core Platform / Orchestration Engineer](../TEAM.md#2-core-platform--orchestration-engineer) ·
 > **Neighbours:** drives [4 · Attack Search](04-attack-search.md), persists to storage,
 > feeds [5 · Oracle](05-oracle-and-scoring.md) & [7 · Measurement](07-measurement-spine.md) ·
 > **Deep reference:** `docs/CODEBASE_MAP.md`, `core/orchestrator.py` docstring
@@ -169,7 +168,6 @@ attack).
 
 ## 10. Owner & neighbours
 
-- **Owner:** [Core Platform / Orchestration Engineer](../TEAM.md#2-core-platform--orchestration-engineer).
 - **Drives:** [4 · Attack Search](04-attack-search.md) (calls `attack.generate`).
 - **Feeds:** [5 · Oracle](05-oracle-and-scoring.md) (per-trace scoring),
   [7 · Measurement](07-measurement-spine.md) (uncertainty + review sample),

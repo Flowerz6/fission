@@ -1,6 +1,5 @@
 # Stage 2 — Staging & Recipes
 
-> **Owner role:** [Core Platform / Orchestration Engineer](../TEAM.md#2-core-platform--orchestration-engineer) ·
 > **Neighbours:** [1 · Corpus](01-corpus-and-seeds.md) (authors `setup_steps`) → **Staging** →
 > [3 · Adapters](03-target-adapters.md) (plants via UI) → [4 · Attack Search](04-attack-search.md) ·
 > **Deep reference:** `docs/ACCOUNTS_AND_AUTH.md`, `docs/INTEGRATION_CONTRACT.md`
@@ -152,7 +151,6 @@ print(build_setup_recipe(load_guide('guides/<id>.yaml')))"
 
 ## 10. Owner & neighbours
 
-- **Owner:** [Core Platform / Orchestration Engineer](../TEAM.md#2-core-platform--orchestration-engineer).
 - **Upstream:** [1 · Corpus](01-corpus-and-seeds.md) authors `setup_steps`/`carrier_payload`.
 - **Peer:** [3 · Adapters](03-target-adapters.md) implements the plant handlers.
 - **Downstream:** [4 · Attack Search](04-attack-search.md) runs once the carrier is planted +

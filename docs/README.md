@@ -6,7 +6,7 @@
 
 > 🧭 **New engineer?** The canonical onboarding layer is
 > **[architecture/README.md](architecture/README.md)** — the system stage by stage, with
-> diagrams — plus **[TEAM.md](TEAM.md)** (components as owned units). Start there.
+> diagrams. Start there.
 
 ## Start here (operating the tool)
 
@@ -21,7 +21,6 @@
 | Doc | For |
 |---|---|
 | [architecture/README.md](architecture/README.md) | The onboarding guide — the whole system, stage by stage (01–09), with diagrams. |
-| [TEAM.md](TEAM.md) | The codebase as owned components — who/what owns each area. |
 | [INTEGRATION_CONTRACT.md](INTEGRATION_CONTRACT.md) | The typed measurement-layer contract (`AttackTrace`/signals/verdicts) between the orchestrator and the oracle. |
 | [FISSION_MEASUREMENT_SPINE.md](FISSION_MEASUREMENT_SPINE.md) | The oracle grading + ASR ± CI measurement design the code implements (cited by `core/`, `storage/`, `judges/`). |
 

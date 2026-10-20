@@ -1,6 +1,5 @@
 # Stage 3 — Target Adapters
 
-> **Owner role:** [Browser-Automation / Adapters Engineer](../TEAM.md#3-browser-automation--adapters-engineer) ·
 > **Neighbours:** [2 · Staging](02-staging-and-recipes.md) (plants carriers through here) →
 > **Target Adapters** ← [4 · Attack Search](04-attack-search.md) (calls `target.invoke()`) ·
 > **Deep reference:** `docs/SHEETS_UI_MODE_RUNBOOK.md`, `docs/ACCOUNTS_AND_AUTH.md`
@@ -188,7 +187,6 @@ mocked).
 
 ## 10. Owner & neighbours
 
-- **Owner:** [Browser-Automation / Adapters Engineer](../TEAM.md#3-browser-automation--adapters-engineer).
 - **Upstream:** [2 · Staging](02-staging-and-recipes.md) calls `recipe_ops` to plant carriers.
 - **Peer:** [4 · Attack Search](04-attack-search.md) calls `invoke()`/`reset()`.
 - **Downstream:** the captured `Response` (reply + `model_thoughts`) is what the

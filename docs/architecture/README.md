@@ -3,8 +3,7 @@
 > **New here? Start with this page.** It is the canonical map of the system for
 > someone joining the team with no prior context. Each **stage** below has its own
 > deep-dive doc that explains *why* it exists, *what* it does, *how* it works, with
-> diagrams. The companion [TEAM.md](../TEAM.md) shows who would own each stage if we
-> were a full team, and which files are theirs.
+> diagrams.
 >
 > This set is the *entry point*. Reference/deep-dive docs (e.g. `CODEBASE_MAP.md`,
 > `INTEGRATION_CONTRACT.md`, `FISSION_MEASUREMENT_SPINE.md`) are linked from the
@@ -53,8 +52,7 @@ flowchart LR
 
 ## The stages (deep-dive docs)
 
-Read them in this order for a full mental model. Each links to its owning role in
-[TEAM.md](../TEAM.md).
+Read them in this order for a full mental model.
 
 | # | Stage | What it answers | Doc | Owner role |
 |---|-------|-----------------|-----|-----------|
@@ -84,11 +82,10 @@ Every `NN-*.md` follows the same shape, so once you've read one you know how to 
 7. **Design decisions & trade-offs** — why it's built this way.
 8. **Gotchas** — footguns and non-obvious behaviour.
 9. **How to work in it** — run it, test it, extend it (runnable commands).
-10. **Owner & neighbours** — the TEAM.md role and the adjacent stages.
+10. **Neighbours** — the adjacent stages and how work hands off.
 
 ## New-hire reading path
 
 1. This page (the pipeline + mental model).
-2. [TEAM.md](../TEAM.md) — see the whole system as owned components.
-3. Stages 1 → 9 in order. If you own a stage, read yours twice and its two neighbours once.
+2. Stages 1 → 9 in order. If you focus on one stage, read yours twice and its two neighbours once.
 4. Then `docs/GETTING_STARTED.md` (run your first attack) and `docs/ACCOUNTS_AND_AUTH.md` (sign in).

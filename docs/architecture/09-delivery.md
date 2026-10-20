@@ -1,6 +1,5 @@
 # Stage 9 — Delivery
 
-> **Owner role:** [Delivery & Reporting Engineer](../TEAM.md#7-delivery--reporting-engineer) ·
 > **Neighbours:** reads storage (findings/traces) written by
 > [6 · Orchestration](06-orchestration-and-core.md); shares report layout with
 > [8 · Dashboard](08-dashboard.md) · **Deep reference:** `docs/PILOT_DELIVERY_FORMAT.md`
@@ -157,7 +156,6 @@ distributions and warns on `unspecified` harm types needing manual tagging.
 
 ## 10. Owner & neighbours
 
-- **Owner:** [Delivery & Reporting Engineer](../TEAM.md#7-delivery--reporting-engineer).
 - **Upstream:** [6 · Orchestration](06-orchestration-and-core.md) persists the traces/findings;
   [5 · Oracle](05-oracle-and-scoring.md) supplies the verdicts/decomposition this reads.
 - **Sibling:** [8 · Dashboard](08-dashboard.md) renders the client-facing PDFs and shares the

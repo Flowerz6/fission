@@ -1,6 +1,5 @@
 # Stage 7 — Measurement Spine
 
-> **Owner role:** [Oracle & Measurement Scientist](../TEAM.md#5-oracle--measurement-scientist) ·
 > **Neighbours:** [5 · Oracle](05-oracle-and-scoring.md) (labels every attempt) →
 > **Measurement Spine** → [8 · Dashboard](08-dashboard.md) (shows the numbers) ·
 > **Deep reference:** `docs/FISSION_MEASUREMENT_SPINE.md`
@@ -167,7 +166,6 @@ ingestable sets) → `scripts/run_calibration.py` (runs the judge over examples 
 
 ## 10. Owner & neighbours
 
-- **Owner:** [Oracle & Measurement Scientist](../TEAM.md#5-oracle--measurement-scientist).
 - **Upstream:** [5 · Oracle](05-oracle-and-scoring.md) produces the verdicts + uncertainty this
   stage consumes; [6 · Orchestration](06-orchestration-and-core.md) enqueues the review sample.
 - **Downstream:** [8 · Dashboard](08-dashboard.md) renders ASR ± CI and the judge-quality panel;

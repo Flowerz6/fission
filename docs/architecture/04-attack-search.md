@@ -1,6 +1,5 @@
 # Stage 4 — Attack Search
 
-> **Owner role:** [Attack-Search Engineer](../TEAM.md#4-attack-search-engineer) ·
 > **Neighbours:** [3 · Target Adapters](03-target-adapters.md) (delivers the turns) →
 > **Attack Search** → [5 · Oracle & Scoring](05-oracle-and-scoring.md) (scores them) ·
 > **Deep reference:** `docs/SEARCH_TREE_DESIGN.md`, `docs/MUTATION_AXES_TAXONOMY.md`
@@ -286,7 +285,6 @@ for attempt in attack.generate(behavior=plan.behavior, target=..., budget=...):
 
 ## 10. Owner & neighbours
 
-- **Owner:** [Attack-Search Engineer](../TEAM.md#4-attack-search-engineer).
 - **Upstream:** [1 · Corpus & Seeds](01-corpus-and-seeds.md) (authors guides) and
   [2 · Staging & Recipes](02-staging-and-recipes.md) (plants the carrier `map_guide` assumes).
 - **Peer:** [3 · Target Adapters](03-target-adapters.md) — this stage calls `target.invoke()`;

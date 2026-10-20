@@ -1,6 +1,5 @@
 # Stage 5 — Oracle & Scoring
 
-> **Owner role:** [Oracle & Measurement Scientist](../TEAM.md#5-oracle--measurement-scientist) ·
 > **Neighbours:** [4 · Attack Search](04-attack-search.md) (asks "did this turn work?") →
 > **Oracle** → [7 · Measurement Spine](07-measurement-spine.md) (turns verdicts into ASR) ·
 > **Deep reference:** `docs/FISSION_MEASUREMENT_SPINE.md`, `judges/` docstrings
@@ -183,7 +182,6 @@ poetry run python scripts/diagnose_judge.py <trace...>
 
 ## 10. Owner & neighbours
 
-- **Owner:** [Oracle & Measurement Scientist](../TEAM.md#5-oracle--measurement-scientist).
 - **Upstream:** [4 · Attack Search](04-attack-search.md) supplies the heuristic + confirm
   judges and the guide's signals; [1 · Corpus](01-corpus-and-seeds.md) authors those signals.
 - **Downstream:** [7 · Measurement Spine](07-measurement-spine.md) converts verdicts (and their

@@ -1,6 +1,5 @@
 # Stage 8 — Dashboard
 
-> **Owner role:** [Product Engineer (Dashboard)](../TEAM.md#6-product-engineer-dashboard) ·
 > **Neighbours:** reads storage (written by [6 · Orchestration](06-orchestration-and-core.md)),
 > renders [5 · Oracle](05-oracle-and-scoring.md) verdicts & [7 · Measurement](07-measurement-spine.md) ASR ·
 > **Deep reference:** `docs/INTEGRATION_CONTRACT.md`, `docs/GETTING_STARTED.md`
@@ -157,7 +156,6 @@ builder, and a Jinja template (partials `_`-prefixed).
 
 ## 10. Owner & neighbours
 
-- **Owner:** [Product Engineer (Dashboard)](../TEAM.md#6-product-engineer-dashboard).
 - **Upstream:** [6 · Orchestration](06-orchestration-and-core.md) writes the rows (and, for live
   runs, the launched subprocess streams them).
 - **Renders:** [5 · Oracle](05-oracle-and-scoring.md) verdicts/badges and

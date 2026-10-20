@@ -1,6 +1,5 @@
 # Stage 1 — Corpus & Seeds
 
-> **Owner role:** [Corpus & Seeds Engineer](../TEAM.md#1-corpus--seeds-engineer) ·
 > **Neighbours:** **Corpus & Seeds** → [2 · Staging](02-staging-and-recipes.md) &
 > [4 · Attack Search](04-attack-search.md) (both consume a guide) ·
 > **Deep reference:** `docs/SEED_AUTHORING_GUIDE.md`, `docs/FISSION_GUIDE_FORMAT.md`
@@ -121,7 +120,7 @@ what makes a search tree explore breadth rather than re-hashing one framing.
 | `scripts/generate_seeds.py`, `scripts/ingest_seeds.py` | Author / ingest at the command line. |
 
 > Note: `guides/stage.py` (staging) and `guides/to_tap_crescendo.py` (the attack bridge) live
-> in the same package folder but belong to other roles — see the [Seams note](../TEAM.md#seams--where-ownership-crosses-directory-lines).
+> in the same package folder but belong to other concerns (staging and the attack bridge).
 
 ## 6. Key concepts
 
@@ -176,7 +175,6 @@ poetry run python scripts/generate_seeds.py --write   # needs ANTHROPIC_API_KEY 
 
 ## 10. Owner & neighbours
 
-- **Owner:** [Corpus & Seeds Engineer](../TEAM.md#1-corpus--seeds-engineer).
 - **Downstream:** [2 · Staging](02-staging-and-recipes.md) reads `setup_steps`/`carrier_payload`;
   [4 · Attack Search](04-attack-search.md) reads `objective`/`exemplar_turns`/`mutation_operators`;
   [5 · Oracle](05-oracle-and-scoring.md) enforces `success`.
