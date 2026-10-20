@@ -28,7 +28,6 @@ first.
 
 from __future__ import annotations
 
-import re
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -41,8 +40,14 @@ from advtest_ext.core.models import Payload
 from advtest_ext.document.blocks import HeadingBlock, TextBlock
 from advtest_ext.document.document import AbstractDocument
 from advtest_ext.strategy.attacker import ProviderAttacker
-from advtest_ext.strategy.loop import iterate_sample, load_strategies, select_strategy_doc
-from advtest_ext.strategy.models import RolloutResult, Sample
+from advtest_ext.strategy.loop import (
+    DEFAULT_BENIGN_TRIGGER,
+    iterate_sample,
+    load_strategies,
+    select_strategy_doc,
+    splice_injection,
+)
+from advtest_ext.strategy.models import Attempt, RolloutResult, Sample
 from advtest_ext.strategy.router import ColdStartRouter, ProviderRouter, Router
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -52,14 +57,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from advtest_ext.providers.base import Provider
 
 logger = get_logger(__name__)
-
-# Matches the vector placeholder the Sample carries, e.g. ``{INJECTION:doc}``
-# or the bare ``{INJECTION}`` — the slot the attacker text is spliced into.
-_PLACEHOLDER_RE = re.compile(r"\{INJECTION(?::[^}]*)?\}")
-
-# Default benign user request (the human's side stays benign — the payload
-# lives entirely in the carrier). Overridable per run via ``trigger_prompt``.
-_DEFAULT_TRIGGER = "Summarise this document for me."
 
 # A plausibly-innocuous carrier body used when the run doesn't supply one.
 # The ``{INJECTION:doc}`` slot is where the attacker's text lands.
@@ -136,7 +133,10 @@ class StrategyLoopAttack(AttackPlugin):
             user_task_id=behavior.id,
             injection_task_id=str(ctx.get("injection_task_id") or behavior.id),
             user_task_prompt=str(
-                self._trigger or ctx.get("user_prompt") or ctx.get("trigger_prompt") or _DEFAULT_TRIGGER
+                self._trigger
+                or ctx.get("user_prompt")
+                or ctx.get("trigger_prompt")
+                or DEFAULT_BENIGN_TRIGGER
             ),
             injection_task_goal=str(
                 ctx.get("injection_goal") or behavior.description or behavior.success_criteria
@@ -145,21 +145,13 @@ class StrategyLoopAttack(AttackPlugin):
             injection_candidates=list(ctx.get("injection_candidates") or ["doc"]),
         )
 
-    def _carrier_body(self, sample: Sample, injection: str) -> str:
-        """Splice the injection into the carrier's placeholder slot, or
-        append it when the carrier has no marker."""
-        carrier = sample.context_with_placeholder
-        if _PLACEHOLDER_RE.search(carrier):
-            return _PLACEHOLDER_RE.sub(lambda _m: injection, carrier)
-        return f"{carrier}\n\n{injection}" if carrier else injection
-
     def _carrier_doc(self, sample: Sample, injection: str) -> AbstractDocument:
         return AbstractDocument(
             id=f"strategy-loop-carrier-{uuid.uuid4().hex[:8]}",
             title=f"Notes ({sample.suite_name})",
             body_blocks=[
                 HeadingBlock(text="Summary", level=1),
-                TextBlock(text=self._carrier_body(sample, injection)),
+                TextBlock(text=splice_injection(sample.context_with_placeholder, injection)),
             ],
         )
 
@@ -198,11 +190,14 @@ class StrategyLoopAttack(AttackPlugin):
             # Fresh conversation per attempt on the warm target session.
             target.reset()
             doc = self._carrier_doc(s, injection)
+            # One payload per iteration, reused for the judge call AND the
+            # persisted trace so the judged and recorded payloads share an id.
+            payload = self._payload(injection)
             ctx = await target.render_document(doc)
             response: Response = await target.invoke(ctx, s.user_task_prompt)
             score = await self._judge.score_response(
                 behavior=behavior,
-                payload=self._payload(injection),
+                payload=payload,
                 response=response.text,
                 target_name=getattr(target, "name", "unknown"),
             )
@@ -214,11 +209,12 @@ class StrategyLoopAttack(AttackPlugin):
                 extra={
                     "response": response,
                     "document": doc,
+                    "payload": payload,
                     "judge_score": score.score,
                 },
             )
 
-        history: list[Any] = []
+        history: list[Attempt] = []
         async for step in iterate_sample(
             sample=sample,
             strategy_doc=strategy_doc,
@@ -234,7 +230,7 @@ class StrategyLoopAttack(AttackPlugin):
                 continue
             res = step.rollout
             yield AttackAttempt(
-                payload=self._payload(step.attempt.injection),
+                payload=res.extra["payload"],
                 document=res.extra.get("document"),
                 user_prompt=sample.user_task_prompt,
                 precomputed_response=res.extra["response"],
@@ -250,14 +246,16 @@ class StrategyLoopAttack(AttackPlugin):
                         # Self-describing: carry the full sample so the
                         # post-run digester can reconstruct the Hit from the
                         # persisted trace alone (no strategy RunResult needed).
-                        "sample": {
-                            "suite_name": sample.suite_name,
-                            "user_task_id": sample.user_task_id,
-                            "injection_task_id": sample.injection_task_id,
-                            "user_task_prompt": sample.user_task_prompt,
-                            "injection_task_goal": sample.injection_task_goal,
-                            "context_with_placeholder": sample.context_with_placeholder,
-                        },
+                        "sample": sample.model_dump(
+                            include={
+                                "suite_name",
+                                "user_task_id",
+                                "injection_task_id",
+                                "user_task_prompt",
+                                "injection_task_goal",
+                                "context_with_placeholder",
+                            }
+                        ),
                     }
                 },
             )

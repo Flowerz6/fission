@@ -26,7 +26,7 @@ from typing import Any
 
 from structlog import get_logger
 
-from advtest_ext.strategy.digester import Digester, Hit, ProviderDecider
+from advtest_ext.strategy.digester import Decider, Digester, DigestReport, Hit, ProviderDecider
 from advtest_ext.strategy.models import Attempt, Sample
 
 logger = get_logger(__name__)
@@ -39,6 +39,20 @@ _DEFAULT_LIBRARY = Path("advtest_ext") / "strategy" / "library"
 # ``Trace.extra_metadata``). Keep in lockstep with
 # ``advtest_ext/attacks/strategy_loop.py``.
 _META_KEY = "strategy_loop"
+
+
+class _TraceSnapshot:
+    """A detached read-only view of the trace fields the digest needs, so hit
+    reconstruction happens after the DB session has closed."""
+
+    __slots__ = ("extra_metadata", "raw_response", "verdict")
+
+    def __init__(
+        self, *, verdict: str | None, extra_metadata: dict[str, Any], raw_response: str
+    ) -> None:
+        self.verdict = verdict
+        self.extra_metadata = extra_metadata
+        self.raw_response = raw_response
 
 
 def digest_enabled() -> bool:
@@ -98,10 +112,10 @@ def extract_hits_from_traces(traces: list[Any]) -> list[Hit]:
 async def digest_traces(
     traces: list[Any],
     *,
-    decider: Any,
+    decider: Decider,
     library_dir: str | Path = _DEFAULT_LIBRARY,
     audit_dir: str | Path | None = None,
-) -> Any:
+) -> DigestReport:
     """Digest the strategy-loop winners among ``traces`` into the library.
 
     Returns a :class:`~advtest_ext.strategy.digester.DigestReport` (with
@@ -135,7 +149,7 @@ async def maybe_digest_run(
     audit_dir: str | Path | None = None,
     role: str = "CLAUDE_DIGESTER",
     require_verified_signal: bool = True,
-) -> Any | None:
+) -> DigestReport | None:
     """Run the post-run strategy digest for ``run_id`` — the one call a run
     caller wires in. A no-op (returns ``None``) when the gate is off, the
     run has no strategy-loop winners, or the decider can't be built.
@@ -198,15 +212,3 @@ async def maybe_digest_run(
         widened=len(report.widened),
     )
     return report
-
-
-class _TraceSnapshot:
-    """A detached read-only view of the trace fields the digest needs, so
-    reconstruction happens after the DB session has closed."""
-
-    __slots__ = ("extra_metadata", "raw_response", "verdict")
-
-    def __init__(self, *, verdict: str | None, extra_metadata: dict[str, Any], raw_response: str) -> None:
-        self.verdict = verdict
-        self.extra_metadata = extra_metadata
-        self.raw_response = raw_response

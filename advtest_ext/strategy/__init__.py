@@ -52,12 +52,15 @@ from advtest_ext.strategy.harvest import (
 )
 from advtest_ext.strategy.library import Strategy, cold_start_doc, discover
 from advtest_ext.strategy.loop import (
+    DEFAULT_BENIGN_TRIGGER,
+    INJECTION_PLACEHOLDER_RE,
     Rollout,
     Step,
     assemble_strategy_doc,
     iterate_sample,
     load_strategies,
     select_strategy_doc,
+    splice_injection,
 )
 from advtest_ext.strategy.models import Attempt, RolloutResult, Sample
 from advtest_ext.strategy.orchestrator import (
@@ -82,6 +85,8 @@ from advtest_ext.strategy.targets import AttackTarget, OfflineMarkerTarget
 
 __all__ = [
     "COLD_START_ID",
+    "DEFAULT_BENIGN_TRIGGER",
+    "INJECTION_PLACEHOLDER_RE",
     "AgentDojoTarget",
     "AttackTarget",
     "Attempt",
@@ -124,6 +129,7 @@ __all__ = [
     "replay_run",
     "seed_library",
     "select_strategy_doc",
+    "splice_injection",
     "strategy_id_for_guide",
 ]
 
