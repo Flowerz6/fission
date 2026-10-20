@@ -747,6 +747,7 @@ def create_app(
     engine: Engine | None = None,
     auth_token: str | None = None,
     live_test_controller: LiveTestController | None = None,
+    strategy_controller: Any | None = None,
 ) -> FastAPI:
     """Construct the FastAPI dashboard app.
 
@@ -900,6 +901,11 @@ def create_app(
     from advtest_ext.dashboard.target_drift import build_target_drift_router
 
     app.include_router(build_target_drift_router(templates, get_session))
+
+    from advtest_ext.dashboard.strategy import StrategyController, build_strategy_router
+
+    strategy_ctl = strategy_controller or StrategyController(effective_db_url)
+    app.include_router(build_strategy_router(templates, get_session, strategy_ctl))
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

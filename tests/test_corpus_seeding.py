@@ -258,6 +258,29 @@ def test_docs_plant_creates_doc_and_white_styles_injection_range() -> None:
     assert style_req["updateTextStyle"]["fields"] == "foregroundColor"
 
 
+def test_docs_plant_empty_injection_omits_style_request() -> None:
+    # The strategy-loop workspace backend splices the payload into the
+    # visible body and calls plant(injection=""). An empty injection must
+    # NOT emit an updateTextStyle with a zero-length range — Docs rejects
+    # that with HTTP 400 "The range should not be empty."
+    docs, drive = _FakeDocs(), _FakeDrive()
+    seeder = DocsCorpusSeeder(docs_service=docs, drive_service=drive)
+
+    art = seeder.plant(
+        visible_body="Benign body with the payload already inside.",
+        injection="",
+        canary="CC-0",
+        unique_entity="Project EMPTY",
+    )
+
+    assert art.kind == "gdoc"
+    requests = docs.batches[0]["body"]["requests"]
+    # Only the insert — no style request at all.
+    assert len(requests) == 1
+    assert "insertText" in requests[0]
+    assert not any("updateTextStyle" in r for r in requests)
+
+
 def test_docs_teardown_deletes_file() -> None:
     docs, drive = _FakeDocs(), _FakeDrive()
     seeder = DocsCorpusSeeder(docs_service=docs, drive_service=drive)

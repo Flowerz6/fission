@@ -666,6 +666,17 @@ async def _capture_failure_artefact(
         body_text = await page.locator("body").inner_text()
     except Exception:
         pass
+    # The Gemini side-panel container's outerHTML — the single most
+    # useful thing for diagnosing selector drift. inner_text proves the
+    # reply rendered; the markup shows WHICH class/attribute to target
+    # once Google renames the obfuscated ``appsElementsSidekick…`` hooks.
+    panel_html = ""
+    try:
+        panel = page.locator(SELECTORS["side_panel_container"]).last
+        if await panel.count():
+            panel_html = await panel.evaluate("el => el.outerHTML")
+    except Exception:
+        pass
     # Underlying-cause excerpt: SidePanelUnavailable wraps the
     # original Playwright exception, but its canonical message
     # ("Selector drift suspected; …") hides the actual reason. Pull
@@ -686,7 +697,9 @@ async def _capture_failure_artefact(
                 f"URL: {url}\nTitle: {title}\n\n"
                 f"--- underlying cause chain ---\n{cause_block}\n\n"
                 f"--- body inner_text (first 2000 chars) ---\n"
-                f"{body_text[:2000]}"
+                f"{body_text[:2000]}\n\n"
+                f"--- side panel container outerHTML ---\n"
+                f"{panel_html or '(container not found)'}"
             ),
             encoding="utf-8",
         )

@@ -2548,6 +2548,27 @@ class TapCrescendoAttack(AttackPlugin):
                 invariants=self._invariants,
                 fallback_index=variant - 1,
             )
+            # Repair loosely-structured patches from local/open planners: a model
+            # may return the rewritten content under an arbitrary key (e.g.
+            # {"source": "<field path>", "key_instruction": "<the payload>"})
+            # instead of keying on the mutable field. When the scheduled operator
+            # owns exactly one mutable field and the patch doesn't key on it, map
+            # the main content value onto that field so a usable proposal isn't
+            # thrown away on formatting alone.
+            if (
+                operator is not None
+                and len(operator.mutable_fields) == 1
+                and candidate.artifact_patch
+                and not (set(candidate.artifact_patch) & set(operator.mutable_fields))
+            ):
+                field = operator.mutable_fields[0]
+                vals = [
+                    v for v in candidate.artifact_patch.values()
+                    if isinstance(v, str) and v.strip() and v not in operator.mutable_fields
+                    and "." not in v[:60]
+                ]
+                if vals:
+                    candidate.artifact_patch = {field: max(vals, key=len)}
             structured_missing = False
             if self._hard_invariant_validation and (self._operators or self._invariants):
                 structured = extract_candidate_json(resp.text or "")

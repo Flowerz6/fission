@@ -144,25 +144,35 @@ class DocsCorpusSeeder:
         """
         full_text = f"{cover}\n{injection}\n"
 
-        # Body content starts at index 1 (index 0 is the implicit
-        # segment header). The injection begins right after the cover
-        # text and its separating newline.
-        injection_start = 1 + len(cover) + 1
-        injection_end = injection_start + len(injection)
-
-        return [
+        requests: list[dict[str, Any]] = [
             {"insertText": {"location": {"index": 1}, "text": full_text}},
-            {
-                "updateTextStyle": {
-                    "range": {
-                        "startIndex": injection_start,
-                        "endIndex": injection_end,
-                    },
-                    "textStyle": {"foregroundColor": {"color": {"rgbColor": _WHITE_RGB}}},
-                    "fields": "foregroundColor",
-                }
-            },
         ]
+
+        # Only paint a white-text range when there IS an injection to hide.
+        # The strategy-loop workspace backend splices the payload straight
+        # into ``visible_body`` and calls ``plant(injection="")``; an empty
+        # injection yields a zero-length range, which Docs rejects with
+        # "The range should not be empty." (HTTP 400).
+        if injection:
+            # Body content starts at index 1 (index 0 is the implicit
+            # segment header). The injection begins right after the cover
+            # text and its separating newline.
+            injection_start = 1 + len(cover) + 1
+            injection_end = injection_start + len(injection)
+            requests.append(
+                {
+                    "updateTextStyle": {
+                        "range": {
+                            "startIndex": injection_start,
+                            "endIndex": injection_end,
+                        },
+                        "textStyle": {"foregroundColor": {"color": {"rgbColor": _WHITE_RGB}}},
+                        "fields": "foregroundColor",
+                    }
+                }
+            )
+
+        return requests
 
 
 __all__ = ["DocsCorpusSeeder", "default_injection"]

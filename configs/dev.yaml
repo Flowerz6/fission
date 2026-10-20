@@ -6,15 +6,15 @@
 
 ATTACKER_MODEL:
   provider_type: local_vllm
-  endpoint: http://localhost:11434/v1
-  model_id: qwen2.5:7b-instruct
+  endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
+  model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
   max_tokens: 1024
   temperature: 0.7
 
 JUDGE_MODEL:
   provider_type: local_vllm
-  endpoint: http://localhost:11434/v1
-  model_id: qwen2.5:7b-instruct
+  endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
+  model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
   max_tokens: 256
   temperature: 0.0
 
@@ -25,15 +25,15 @@ JUDGE_MODEL:
 # model is ample. Local, so per-turn drift checking is effectively free.
 CHECKER_MODEL:
   provider_type: local_vllm
-  endpoint: http://localhost:11434/v1
-  model_id: qwen2.5:7b-instruct
+  endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
+  model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
   max_tokens: 8
   temperature: 0.0
 
 TARGET_MODEL_DEV:
   provider_type: local_vllm
-  endpoint: http://localhost:11434/v1
-  model_id: qwen2.5:7b-instruct
+  endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
+  model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
   max_tokens: 1024
   temperature: 0.7
 
@@ -107,4 +107,33 @@ CLAUDE_PLANNER:
   api_key_env: ANTHROPIC_API_KEY
   model_id: claude-opus-5-5
   max_tokens: 8192
+  temperature: 1.0
+
+# Abliterated open model (RunPod) for AUTHORING adversarial payloads the Claude
+# roles refuse (jailbreak personas, no-refusals blocks). Point the PLANNER at
+# this for persona-hijack / jailbreak-repurposed guides:
+#   run_guide.py --guide <id> --planner-role MUTATOR_MODEL
+# FILL IN the RunPod endpoint + model_id below; set RUNPOD_API_KEY in .env if the
+# endpoint requires auth.
+MUTATOR_MODEL:
+  provider_type: local_vllm
+  endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
+  model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
+  max_tokens: 8192
+  temperature: 1.0
+
+# Claude-as-DIGESTER (post-run strategy-library maintainer for
+# advtest_ext/strategy/). The digester reads COMPLETED attack results and
+# files each into the strategy catalogue (fits-as-is / widens / novel). The
+# 5.x aligned models (opus-5-5, sonnet-5-5) REFUSE this cataloguing task at
+# the safety-classifier level (stop_reason=refusal, empty reply) even with
+# authorized-research framing; claude-opus-4-8 performs it cleanly. max_tokens
+# is generous because 5.x/4.x thinking shares the budget and the reply is a
+# short JSON object after the reasoning. If this role is unreachable the
+# ProviderDecider falls back to filing hits as novel-for-review.
+CLAUDE_DIGESTER:
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-opus-4-8
+  max_tokens: 4096
   temperature: 1.0

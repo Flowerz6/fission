@@ -224,6 +224,35 @@ def extract_candidate_json(text: str) -> dict | None:
     return parsed[0] if parsed else None
 
 
+def _flatten_artifact_patch(patch: dict) -> dict:
+    """Flatten a nested artifact_patch into dotted field paths.
+
+    Local / open models often emit the patch as a nested object
+    (``{"setup_steps": {"plant_poisoned_doc": {"params": {"body": X}}}}``)
+    instead of the flat dotted key the validator expects
+    (``{"setup_steps.plant_poisoned_doc.params.body": X}``). Flattening here
+    keeps those proposals usable instead of failing the mutable-fields gate.
+    Keys that already contain '.' or map to a non-dict are kept as-is.
+    """
+    if not isinstance(patch, dict):
+        return {}
+    out: dict = {}
+
+    def walk(prefix: str, value: Any) -> None:
+        if isinstance(value, dict) and value and "." not in prefix.split(".")[-1]:
+            for k, v in value.items():
+                walk(f"{prefix}.{k}" if prefix else str(k), v)
+        else:
+            out[prefix] = value
+
+    for k, v in patch.items():
+        if "." in k or not isinstance(v, dict):
+            out[k] = v
+        else:
+            walk(str(k), v)
+    return out
+
+
 def parse_candidate(
     raw: str,
     *,
@@ -277,7 +306,7 @@ def parse_candidate(
         if isinstance(payload.get("plan_steps"), list)
         else (),
         expected_effect=str(payload.get("expected_effect") or ""),
-        artifact_patch=dict(payload.get("artifact_patch") or {})
+        artifact_patch=_flatten_artifact_patch(payload.get("artifact_patch") or {})
         if isinstance(payload.get("artifact_patch"), dict)
         else {},
         preserved_invariants=tuple(str(item) for item in preserved)

@@ -823,6 +823,99 @@ class FingerprintSnapshot(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
+class StrategyRun(Base):
+    """One PIMiner-style strategy-loop run (advtest_ext/strategy/).
+
+    Self-contained — deliberately NOT the TAP/guide ``runs`` table, whose
+    shape is tied to ``RunConfig``. ``summary`` carries ASR/hits so the run
+    renders without a join.
+    """
+
+    __tablename__ = "strategy_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    target: Mapped[str] = mapped_column(String(128), default="")
+    target_model: Mapped[str] = mapped_column(String(128), default="")
+    threat_model: Mapped[str] = mapped_column(String(32), default="black_box")
+    library_dir: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    n_samples: Mapped[int] = mapped_column(Integer, default=0)
+    hits: Mapped[int] = mapped_column(Integer, default=0)
+    asr: Mapped[float] = mapped_column(Float, default=0.0)
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    attempts: Mapped[list[StrategyAttempt]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class StrategyAttempt(Base):
+    """One attacker iteration in a strategy run.
+
+    ``lineage_id`` groups a variant family by the strategy it descends from
+    (the routed strategy, or ``cold_start:<sample_key>`` for a from-scratch
+    discovery) so a big family of related variants traces to one origin and
+    is not over-counted. ``parent_id`` self-joins the refinement chain within
+    a sample (iter N's parent is iter N-1), mirroring ``Trace.parent_id``.
+    """
+
+    __tablename__ = "strategy_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("strategy_runs.id", ondelete="CASCADE"), index=True
+    )
+    sample_key: Mapped[str] = mapped_column(String(256), index=True)
+    lineage_id: Mapped[str] = mapped_column(String(256), index=True)
+    strategy_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), index=True)  # hit | miss (sample-level)
+    iter: Mapped[int] = mapped_column(Integer, default=0)
+    parent_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("strategy_attempts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    analysis: Mapped[str] = mapped_column(Text, default="")
+    injection: Mapped[str] = mapped_column(Text, default="")
+    utility: Mapped[bool] = mapped_column(Boolean, default=False)
+    security: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    final_output: Mapped[str] = mapped_column(Text, default="")
+    target_model: Mapped[str] = mapped_column(String(128), default="")
+    extra_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+    run: Mapped[StrategyRun] = relationship(back_populates="attempts")
+
+
+class StrategyReplay(Base):
+    """Repeated-trial validation of ONE winning injection (a candidate).
+
+    The strategy loop's within-run attempts are refinement iterations, not
+    independent trials, so they can't give the pilot's M/N. A replay re-runs
+    the exact winning injection ``trials_n`` times in fresh target sessions
+    and records how many produced the verified effect (``successes_m``) —
+    the real repeated-trial M/N for pilot schema field 7. Keyed by
+    (run_id, sample_key) so the exporter can prefer it over the iteration
+    count.
+    """
+
+    __tablename__ = "strategy_replays"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("strategy_runs.id", ondelete="CASCADE"), index=True
+    )
+    sample_key: Mapped[str] = mapped_column(String(256), index=True)
+    lineage_id: Mapped[str] = mapped_column(String(256), index=True)
+    injection: Mapped[str] = mapped_column(Text, default="")
+    trials_n: Mapped[int] = mapped_column(Integer, default=0)
+    successes_m: Mapped[int] = mapped_column(Integer, default=0)
+    asr: Mapped[float] = mapped_column(Float, default=0.0)
+    verdicts: Mapped[list[Any]] = mapped_column(JSON, default=list)  # per-trial security bools
+    target_model: Mapped[str] = mapped_column(String(128), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
 __all__ = [
     "Base",
     "BoundaryModelRow",
@@ -841,6 +934,9 @@ __all__ = [
     "SeedReliability",
     "SeedRow",
     "SignalRecord",
+    "StrategyAttempt",
+    "StrategyReplay",
+    "StrategyRun",
     "TargetDriftAlert",
     "TargetDriftSentinel",
     "TargetDriftSentinelObservation",
