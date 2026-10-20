@@ -313,6 +313,44 @@ def _crescendo_attack_factory(options: dict[str, Any] | None = None) -> AttackPl
     )
 
 
+def _strategy_loop_attack_factory(options: dict[str, Any] | None = None) -> AttackPlugin:
+    """Build a ``StrategyLoopAttack`` (PIMiner adaptive loop) for the
+    orchestrator. Routes over the markdown strategy library, then refines
+    an indirect injection against the live target, learning from each
+    reply until a hit or ``n_max``.
+
+    attack_options (all optional): ``library_dir`` (markdown strategy
+    library; defaults to ``advtest_ext/strategy/library``), ``n_max``
+    (10), ``success_threshold`` (0.7), ``trigger_prompt`` (the benign user
+    request; defaults to a summarise ask), ``threat_model``
+    (``black_box``), ``attacker_max_tokens``, plus the retrieval-judge
+    knobs ``entity`` / ``canary`` / ``handshake_token`` used for the
+    in-loop refinement signal. Pair with a live Workspace target."""
+    from advtest_ext.attacks.strategy_loop import StrategyLoopAttack
+
+    cfg_path = _resolve_provider_config_path(missing_roles_hint="a CLAUDE_ATTACKER role")
+    attacker = _load_provider_role(
+        cfg_path,
+        "CLAUDE_ATTACKER",
+        missing_role_hint="add one (provider_type: anthropic, model_id: …)",
+    )
+    opts = options or {}
+    library_dir = opts.get("library_dir")
+    if library_dir is None and opts.get("no_library") is not True:
+        library_dir = str(Path("advtest_ext") / "strategy" / "library")
+    max_tokens = opts.get("attacker_max_tokens")
+    return StrategyLoopAttack(
+        attacker=attacker,
+        judge=_retrieval_judge_from_opts(opts),
+        library_dir=library_dir,
+        n_max=int(opts.get("n_max", 10)),
+        success_threshold=float(opts.get("success_threshold", 0.7)),
+        threat_model=str(opts.get("threat_model", "black_box")),
+        trigger_prompt=opts.get("trigger_prompt"),
+        attacker_max_tokens=int(max_tokens) if max_tokens is not None else None,
+    )
+
+
 def _tap_chain_attack_factory(options: dict[str, Any] | None = None) -> AttackPlugin:
     """Build a ``TapChainAttack`` (trajectory refinement) for the
     orchestrator. Drives a live multi-turn target, persisting every
@@ -561,6 +599,7 @@ _ATTACK_REGISTRY: dict[str, Callable[[dict[str, Any] | None], AttackPlugin]] = {
     "crescendo": _crescendo_attack_factory,
     "tap_chain": _tap_chain_attack_factory,
     "tap_crescendo": _tap_crescendo_attack_factory,
+    "strategy_loop": _strategy_loop_attack_factory,
 }
 
 _WORKSPACE_TARGET_OPTION_KEYS: frozenset[str] = frozenset({"mode", "ui_output_dir", "thread_id"})
