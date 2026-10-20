@@ -26,9 +26,12 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: python
-          # security-and-quality = the security queries plus maintainability/
-          # reliability checks. Use "security-extended" for security only.
-          queries: security-and-quality
+          # security-extended = the security queries only (vulnerabilities), with
+          # higher recall than the default suite. We deliberately do NOT use
+          # "security-and-quality" here — its maintainability/style recommendations
+          # (implicit string-concat, etc.) add ~160 non-security findings that bury
+          # the real signal on a PR. Run the quality suite ad hoc if you want it.
+          queries: security-extended
 
       # Python needs no build step (CodeQL extracts the source directly).
       - name: Perform CodeQL Analysis

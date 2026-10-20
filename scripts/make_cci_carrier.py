@@ -102,13 +102,15 @@ def main() -> None:
     args = ap.parse_args()
 
     carrier, meta = build_carrier(canary=args.canary, host=args.host, password=args.password)
+    # This operator tool emits a red-team CCI carrier built from a FAKE
+    # passphrase; printing the carrier (which embeds it) is the tool's purpose,
+    # not a credential leak — hence the same-line CodeQL suppressions.
     if args.json:
-        # lgtm[py/clear-text-logging-sensitive-data] — operator tool emitting a
-        # red-team carrier built from a FAKE passphrase; printing it is the point.
-        print(json.dumps({"carrier": carrier, **meta}, ensure_ascii=False))
+        print(
+            json.dumps({"carrier": carrier, **meta}, ensure_ascii=False)
+        )  # lgtm[py/clear-text-logging-sensitive-data]
     else:
-        print(carrier)
-        # lgtm[py/clear-text-logging-sensitive-data] — fake passphrase, see above.
+        print(carrier)  # lgtm[py/clear-text-logging-sensitive-data]
         print("\n--- (benign) decrypted plaintext ---\n" + meta["plaintext"])
         print(f"\ncanary (success oracle): {meta['canary']}")
 
