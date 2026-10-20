@@ -420,8 +420,7 @@ Turn 8
   `/seeds` view of the dashboard.
 - If a chain is disputed or ambiguous, it routes to a PhD rater, you may be asked for the
   original session detail, so keep your raw transcripts.
-- **Reporting cadence:** send a short daily summary and a Friday weekly update. See the
-  one-page [Targets & Reporting sheet](SEED_AUTHOR_REPORTING.md).
+- **Reporting cadence:** send a short daily summary and a Friday weekly update.
 
 ### 9.1 From capture to the stored YAML seed
 

@@ -1,7 +1,7 @@
 # Search-tree design: category fan-out → compounding, deduped
 
 Status: draft spec (2026-09-27). Owner: search/attacks.
-Related: `docs/TAP_ATTACK_SUCCESS_UPGRADES.md`, `docs/FISSION_GUIDE_FORMAT.md`,
+Related: `docs/FISSION_GUIDE_FORMAT.md`,
 `advtest_ext/attacks/tap_search.py`, `advtest_ext/attacks/tap_crescendo.py`,
 `advtest_ext/mutate/engine.py`, `advtest_ext/archive/signature.py`.
 

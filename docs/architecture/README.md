@@ -6,9 +6,9 @@
 > diagrams. The companion [TEAM.md](../TEAM.md) shows who would own each stage if we
 > were a full team, and which files are theirs.
 >
-> This set supersedes the scattered older docs as the *entry point*. The older docs
-> (e.g. `CODEBASE_MAP.md`, `FISSION_HLD.md`, `FISSION_ARCHITECTURE_AND_PRODUCTION.md`)
-> remain as reference/deep-dives and are linked from the relevant stage.
+> This set is the *entry point*. Reference/deep-dive docs (e.g. `CODEBASE_MAP.md`,
+> `INTEGRATION_CONTRACT.md`, `FISSION_MEASUREMENT_SPINE.md`) are linked from the
+> relevant stage.
 
 ---
 

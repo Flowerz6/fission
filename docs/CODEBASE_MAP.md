@@ -6,8 +6,8 @@
 >
 > Companion docs: [GETTING_STARTED.md](GETTING_STARTED.md) (how to run) ·
 > [ACCOUNTS_AND_AUTH.md](ACCOUNTS_AND_AUTH.md) (how to sign in) ·
-> [FISSION_ARCHITECTURE_AND_PRODUCTION.md](FISSION_ARCHITECTURE_AND_PRODUCTION.md)
-> (the deep architecture write-up).
+> [architecture/README.md](architecture/README.md)
+> (the system stage by stage).
 
 ## The one-paragraph mental model
 

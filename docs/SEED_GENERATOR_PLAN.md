@@ -2,7 +2,7 @@
 
 Status: active (2026-10-07). Owner: search/attacks.
 Related: `docs/SEARCH_TREE_DESIGN.md`, `docs/MUTATION_AXES_TAXONOMY.md`,
-`docs/RED_TEAM_RESEARCH_UPGRADES.md`, `advtest_ext/guides/seed_generator.py`,
+`advtest_ext/guides/seed_generator.py`,
 `advtest_ext/judges/decomposed_ipi.py`, `advtest_ext/attacks/tap_search.py`.
 
 ## Goal
