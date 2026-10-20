@@ -486,30 +486,61 @@ async def _read_response(page: Any, timeout_ms: int, prev_count: int = 0) -> str
     bubble, or a test double without ``nth``).
     """
     try:
-        loading_locator = page.locator(SELECTORS["side_panel_loading_indicator"])
+        text = await _read_response_once(page, timeout_ms, prev_count)
+    except Exception:
+        # One more, longer attempt. A read timeout here is far more often a
+        # slow / throttled panel than an actual DOM rename — the response is
+        # still rendering, or an "unusual activity" throttle slowed it past the
+        # first window. Retrying recovers that transient case; only if THIS also
+        # fails do we treat it as drift (the panel DOM is captured in the
+        # failure artefact so the real selector can be re-pinned).
         try:
-            await loading_locator.wait_for(state="visible", timeout=LOADING_VISIBLE_PROBE_MS)
-        except Exception:
-            # Indicator never showed — fast / synchronous reply.
-            pass
-        else:
-            await loading_locator.wait_for(state="hidden", timeout=timeout_ms)
-        sel = SELECTORS["side_panel_response"]
-        # Confirm THIS turn's response exists (a new bubble at prev_count).
-        # Fall back to ``.last`` if the index never materialises.
-        try:
-            await page.locator(sel).nth(prev_count).wait_for(state="visible", timeout=timeout_ms)
-        except Exception:
-            await page.locator(sel).last.wait_for(state="visible", timeout=timeout_ms)
-        # A long structured reply renders as MULTIPLE bubble blocks, and the
-        # loading indicator can hide before they finish — so read ALL new
-        # blocks (index >= prev_count) and poll until the joined text stops
-        # growing. inner_text isn't viewport-limited, so this captures the
-        # COMPLETE reply at any length (no screenshot needed).
-        text = await _read_new_blocks_settled(page, sel, prev_count)
-    except Exception as exc:
-        raise SidePanelUnavailable(SELECTOR_DRIFT_MESSAGE) from exc
+            text = await _read_response_once(
+                page, int(timeout_ms * _READ_RETRY_TIMEOUT_MULT), prev_count
+            )
+        except Exception as exc:
+            raise SidePanelUnavailable(_READ_TIMEOUT_MESSAGE) from exc
     return text or ""
+
+
+# One retry of the response read, with a longer window, before giving up.
+_READ_RETRY_TIMEOUT_MULT = 1.5
+_READ_TIMEOUT_MESSAGE = (
+    # Keeps the "Selector drift suspected" phrase (the SidePanelUnavailable
+    # contract other callers/tests key on) but states the likelier cause first.
+    "Selector drift suspected: timed out reading the side-panel response even "
+    "after a retry. This is most often a transient slow / throttled panel; if it "
+    "persists, the response selector has drifted — the panel DOM is captured in "
+    "<output_dir>/failures/, and scripts/dump_side_panel_dom.py re-checks it live."
+)
+
+
+async def _read_response_once(page: Any, timeout_ms: int, prev_count: int) -> str:
+    """One attempt at reading THIS turn's reply (see :func:`_read_response`).
+
+    Raises on any wait/read failure so the caller can decide whether to retry.
+    """
+    loading_locator = page.locator(SELECTORS["side_panel_loading_indicator"])
+    try:
+        await loading_locator.wait_for(state="visible", timeout=LOADING_VISIBLE_PROBE_MS)
+    except Exception:
+        # Indicator never showed — fast / synchronous reply.
+        pass
+    else:
+        await loading_locator.wait_for(state="hidden", timeout=timeout_ms)
+    sel = SELECTORS["side_panel_response"]
+    # Confirm THIS turn's response exists (a new bubble at prev_count).
+    # Fall back to ``.last`` if the index never materialises.
+    try:
+        await page.locator(sel).nth(prev_count).wait_for(state="visible", timeout=timeout_ms)
+    except Exception:
+        await page.locator(sel).last.wait_for(state="visible", timeout=timeout_ms)
+    # A long structured reply renders as MULTIPLE bubble blocks, and the
+    # loading indicator can hide before they finish — so read ALL new
+    # blocks (index >= prev_count) and poll until the joined text stops
+    # growing. inner_text isn't viewport-limited, so this captures the
+    # COMPLETE reply at any length (no screenshot needed).
+    return await _read_new_blocks_settled(page, sel, prev_count)
 
 
 # Settle-poll bounds for the streamed reply (see _read_new_blocks_settled).
