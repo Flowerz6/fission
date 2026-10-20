@@ -1447,3 +1447,30 @@ def test_report_view_generates_from_selected_findings(client: TestClient) -> Non
     excluded = client.get("/reports/view?severity=low")
     assert excluded.context["total"] == 0
     assert "No findings match" in excluded.text
+
+
+def test_new_run_modal_offers_only_workspace_guides() -> None:
+    """The new-run dialog offers only guides that run live against a Gemini
+    Workspace UI target. finsummary_secret_exfil was re-targeted to Docs and is
+    offered; the code-generation agent guides (tool_use_agent) are not."""
+    from advtest_ext.dashboard.live_tests import LiveTestController
+    from advtest_ext.guides.run import default_target_name
+
+    engine = make_engine("sqlite:///:memory:")
+    controller = LiveTestController("sqlite:///:memory:", enabled=True)
+    app = create_app(engine=engine, live_test_controller=controller)
+    with TestClient(app) as c:
+        guides = c.get("/live-tests/options").json()["guides"]
+
+    ids = {g["id"] for g in guides}
+    assert "finsummary_secret_exfil" in ids  # re-targeted to Gemini Docs
+    assert "finsummary_pretext_keylogger" not in ids  # code-gen agent, off-surface
+    assert "insecure_code_default" not in ids
+
+    from pathlib import Path
+
+    from advtest_ext.guides.corpus import load_guides
+
+    by_id = {g.id: g for g in load_guides(Path(__file__).resolve().parents[1] / "guides")}
+    for opt in guides:
+        default_target_name(by_id[opt["id"]])  # raises if not a live Workspace target
