@@ -237,10 +237,12 @@ class _FakePage:
 
 
 def _fast_settle(monkeypatch: Any) -> Any:
+    from advtest_ext.adapters._ui_mode_common import response_read
     from advtest_ext.adapters.sheets.ui_mode import invoker as inv
 
-    monkeypatch.setattr(inv, "_SETTLE_MAX_ROUNDS", 3)
-    monkeypatch.setattr(inv, "_SETTLE_POLL_S", 0)
+    # The settle loop now lives in the shared response_read module.
+    monkeypatch.setattr(response_read, "_SETTLE_MAX_ROUNDS", 3)
+    monkeypatch.setattr(response_read, "_SETTLE_POLL_S", 0)
     return inv
 
 

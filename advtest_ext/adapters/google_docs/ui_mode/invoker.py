@@ -51,7 +51,6 @@ from advtest_ext.adapters._ui_mode_common.config import (
     AUTO_SUMMARY_SETTLE_MS,
     HUMAN_ACTION_PAUSE_S,
     HUMAN_HOVER_PAUSE_S,
-    LOADING_VISIBLE_PROBE_MS,
     MAIN_PANE_READY_MS,
     OPEN_RETRY_DELAY_S,
     PANEL_OPEN_PROBE_MS,
@@ -65,6 +64,7 @@ from advtest_ext.adapters._ui_mode_common.response_assembly import (
     assemble_full_response,
     extract_model_thoughts,
 )
+from advtest_ext.adapters._ui_mode_common.response_read import read_response
 from advtest_ext.adapters.google_docs.ui_mode.selectors import SELECTORS
 from advtest_ext.document.target import Response
 
@@ -469,138 +469,15 @@ async def _count_responses(page: Any) -> int:
 
 
 async def _read_response(page: Any, timeout_ms: int, prev_count: int = 0) -> str:
-    """Read ``inner_text`` from the assistant bubble produced by THIS turn.
+    """Read THIS turn's assistant reply, retrying once on a transient timeout.
 
-    The hard part is a continuing conversation: the panel already holds
-    the previous turns' bubbles (and the panel-open auto-summary). The
-    old code waited briefly for the loading indicator and, on a miss,
-    read ``.last`` immediately — but ``.last`` is still the PREVIOUS
-    bubble until the new response renders, so the captured "reply" was
-    routinely stale (a prior turn's answer, or even the auto-summary).
-
-    Fix: ``prev_count`` is the bubble count captured before submit, so
-    the new bubble is at index ``prev_count`` (0-based). We wait for
-    THAT bubble to appear — that's the unambiguous "the new response
-    exists" signal, independent of whether the loading indicator was
-    caught. Falls back to ``.last`` when the count can't grow (no new
-    bubble, or a test double without ``nth``).
+    ``prev_count`` is the bubble count captured before submit, so the new reply
+    is the bubble at that index — waiting for THAT (not ``.last``) avoids
+    returning a stale previous turn. The read + settle + retry logic is shared
+    across the Workspace invokers in
+    :mod:`advtest_ext.adapters._ui_mode_common.response_read`.
     """
-    try:
-        text = await _read_response_once(page, timeout_ms, prev_count)
-    except Exception:
-        # One more, longer attempt. A read timeout here is far more often a
-        # slow / throttled panel than an actual DOM rename — the response is
-        # still rendering, or an "unusual activity" throttle slowed it past the
-        # first window. Retrying recovers that transient case; only if THIS also
-        # fails do we treat it as drift (the panel DOM is captured in the
-        # failure artefact so the real selector can be re-pinned).
-        try:
-            text = await _read_response_once(
-                page, int(timeout_ms * _READ_RETRY_TIMEOUT_MULT), prev_count
-            )
-        except Exception as exc:
-            raise SidePanelUnavailable(_READ_TIMEOUT_MESSAGE) from exc
-    return text or ""
-
-
-# One retry of the response read, with a longer window, before giving up.
-_READ_RETRY_TIMEOUT_MULT = 1.5
-_READ_TIMEOUT_MESSAGE = (
-    # Keeps the "Selector drift suspected" phrase (the SidePanelUnavailable
-    # contract other callers/tests key on) but states the likelier cause first.
-    "Selector drift suspected: timed out reading the side-panel response even "
-    "after a retry. This is most often a transient slow / throttled panel; if it "
-    "persists, the response selector has drifted — the panel DOM is captured in "
-    "<output_dir>/failures/, and scripts/dump_side_panel_dom.py re-checks it live."
-)
-
-
-async def _read_response_once(page: Any, timeout_ms: int, prev_count: int) -> str:
-    """One attempt at reading THIS turn's reply (see :func:`_read_response`).
-
-    Raises on any wait/read failure so the caller can decide whether to retry.
-    """
-    loading_locator = page.locator(SELECTORS["side_panel_loading_indicator"])
-    try:
-        await loading_locator.wait_for(state="visible", timeout=LOADING_VISIBLE_PROBE_MS)
-    except Exception:
-        # Indicator never showed — fast / synchronous reply.
-        pass
-    else:
-        await loading_locator.wait_for(state="hidden", timeout=timeout_ms)
-    sel = SELECTORS["side_panel_response"]
-    # Confirm THIS turn's response exists (a new bubble at prev_count).
-    # Fall back to ``.last`` if the index never materialises.
-    try:
-        await page.locator(sel).nth(prev_count).wait_for(state="visible", timeout=timeout_ms)
-    except Exception:
-        await page.locator(sel).last.wait_for(state="visible", timeout=timeout_ms)
-    # A long structured reply renders as MULTIPLE bubble blocks, and the
-    # loading indicator can hide before they finish — so read ALL new
-    # blocks (index >= prev_count) and poll until the joined text stops
-    # growing. inner_text isn't viewport-limited, so this captures the
-    # COMPLETE reply at any length (no screenshot needed).
-    return await _read_new_blocks_settled(page, sel, prev_count)
-
-
-# Settle-poll bounds for the streamed reply (see _read_new_blocks_settled).
-_SETTLE_POLL_S = 0.6
-_SETTLE_STABLE_ROUNDS = 2
-_SETTLE_MAX_ROUNDS = 40  # ~24s ceiling for very long dumps
-
-
-async def _join_new_blocks(page: Any, sel: str, prev_count: int) -> str:
-    """Concatenate every NEW agent bubble block (index >= prev_count).
-
-    A structured reply (headings + lists) mounts as several bubble-content
-    elements; reading just one truncates it. We read each new block's
-    inner_text and join. When the element count can't be read (a test
-    double) or hasn't grown, fall back to the single new bubble so the
-    original behaviour is preserved."""
-    loc = page.locator(sel)
-    try:
-        count = int(await loc.count())
-    except Exception:
-        count = 0
-    if count <= prev_count:
-        # Construct the locator INSIDE the try so a test double whose
-        # ``.nth``/``.last`` raises falls through to the next candidate
-        # rather than escaping.
-        for use_last in (False, True):
-            try:
-                locator = loc.last if use_last else loc.nth(prev_count)
-                return (await locator.inner_text()) or ""
-            except Exception:
-                continue
-        return ""
-    parts: list[str] = []
-    for i in range(prev_count, count):
-        try:
-            block = await loc.nth(i).inner_text()
-        except Exception:
-            continue
-        if block:
-            parts.append(block)
-    return "\n\n".join(parts).strip()
-
-
-async def _read_new_blocks_settled(page: Any, sel: str, prev_count: int) -> str:
-    """Poll :func:`_join_new_blocks` until the joined text stops growing
-    for ``_SETTLE_STABLE_ROUNDS`` consecutive reads (or the ceiling),
-    so we persist the FULL streamed reply rather than a partial render."""
-    last = ""
-    stable = 0
-    for _ in range(_SETTLE_MAX_ROUNDS):
-        current = await _join_new_blocks(page, sel, prev_count)
-        if current == last and current:
-            stable += 1
-            if stable >= _SETTLE_STABLE_ROUNDS:
-                return current
-        else:
-            stable = 0
-            last = current
-        await asyncio.sleep(_SETTLE_POLL_S)
-    return last
+    return await read_response(page, SELECTORS, timeout_ms, prev_count)
 
 
 async def _screenshot_side_panel(
