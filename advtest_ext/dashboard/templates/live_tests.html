@@ -59,6 +59,23 @@
   .turns-empty{padding:1.1rem .85rem;color:var(--muted);font-size:.84rem}
   @media (max-width:1100px){.test-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
   @media (max-width:640px){.test-grid{grid-template-columns:1fr}.assessment-options{grid-template-columns:1fr}}
+  /* back-to-back batch queue */
+  .batch-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-sm);margin:0 0 2rem;overflow:hidden}
+  .batch-head{padding:.7rem 1rem;border-bottom:1px solid var(--border);background:var(--surface-2);font:600 .8rem var(--sans)}
+  .batch-body{padding:1rem;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:1.2rem}
+  @media (max-width:820px){.batch-body{grid-template-columns:1fr}}
+  .batch-guides{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.25rem .8rem;max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:var(--r-sm);padding:.6rem}
+  .batch-guide{display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--ink-soft);cursor:pointer}
+  .batch-actions{margin-top:.6rem;display:flex;gap:.6rem;align-items:center}
+  .batch-progress{border-top:1px solid var(--border);padding:.6rem 1rem;display:flex;flex-direction:column;gap:.15rem}
+  .batch-item{display:grid;grid-template-columns:22px 1fr 92px 56px;gap:.5rem;align-items:center;font-size:.8rem;padding:.26rem 0}
+  .batch-item .bi-n{font:.72rem var(--mono,ui-monospace,monospace);color:var(--muted)}
+  .batch-item .bi-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .batch-badge{justify-self:start;font:600 .62rem var(--sans);text-transform:uppercase;letter-spacing:.03em;padding:.12rem .42rem;border-radius:var(--r-sm);border:1px solid var(--border);color:var(--muted);background:var(--surface-2)}
+  .batch-badge.running{color:#805b00;background:#fff2c7;border-color:#ecd68a}
+  .batch-badge.succeeded{color:#176b42;background:#dcf6e9;border-color:#a6e0c2}
+  .batch-badge.failed{color:#a12b31;background:#fde5e6}
+  .batch-badge.stopped{color:var(--muted)}
 </style>
 
 <div class="page-head">
@@ -112,6 +129,36 @@
 {% endfor %}
 </div>
 
+<div class="batch-panel">
+  <div class="batch-head">Queue multiple guides · back-to-back tree runs</div>
+  <div class="batch-body">
+    <div>
+      <div class="lbl" style="margin-bottom:.4rem">Select guides (launched in listed order)</div>
+      <div class="batch-guides">
+      {% for playbook in playbooks %}
+        <label class="batch-guide"><input type="checkbox" class="batch-check" value="{{ playbook }}">{{ playbook | replace("_", " ") | title }}</label>
+      {% endfor %}
+      </div>
+    </div>
+    <div>
+      <div class="assessment-options" style="grid-template-columns:1fr 1fr">
+        <label>Branching factor
+          <input class="batch-bf" type="number" min="1" max="5" value="3" inputmode="numeric"></label>
+        <label>Tree depth
+          <input class="batch-depth" type="number" min="1" max="12" value="6" inputmode="numeric"></label>
+        <label>Node budget / seed
+          <input class="batch-nodes" type="number" min="1" max="400" value="80" inputmode="numeric"></label>
+      </div>
+      <p class="hint">Shared settings apply to every queued guide. Runs execute one at a time; the next starts automatically when the previous finishes. Stop cancels the current run and the rest of the queue.</p>
+      <div class="batch-actions">
+        <button class="launch" id="queue-batch" type="button" {% if not state.enabled %}disabled{% endif %}>Queue selected runs</button>
+        <span class="muted" id="batch-note"></span>
+      </div>
+    </div>
+  </div>
+  <div class="batch-progress" id="batch-progress" hidden></div>
+</div>
+
 <h2>Live progress</h2>
 <div class="summary-strip" id="summary-strip">
   <div class="stat"><div class="n" id="stat-turns">0</div><div class="k">Turns run</div></div>
@@ -158,7 +205,12 @@
   const activeEl = document.getElementById("active-test");
   const stopEl = document.getElementById("stop-run");
   const treeEl = document.getElementById("live-tree-link");
-  const buttons = [...document.querySelectorAll(".launch")];
+  // Only the per-card launch buttons — NOT the batch queue button (which lives
+  // outside .test-card and has its own handler).
+  const buttons = [...document.querySelectorAll(".test-card .launch")];
+  const queueBtn = document.getElementById("queue-batch");
+  const batchProgress = document.getElementById("batch-progress");
+  const batchNote = document.getElementById("batch-note");
   const statusLabels = {idle: "Ready", starting: "Starting", running: "In progress", stopping: "Stopping", stopped: "Stopped", succeeded: "Completed", failed: "Needs attention"};
 
   function render(state) {
@@ -176,6 +228,29 @@
     stopEl.hidden = !stoppable;
     stopEl.disabled = !stoppable;
     buttons.forEach(button => button.disabled = {{ "false" if state.enabled else "true" }} || busy);
+    if (queueBtn) queueBtn.disabled = {{ "false" if state.enabled else "true" }} || busy;
+    renderBatch(state);
+  }
+
+  function renderBatch(state) {
+    const batch = state.batch || [];
+    if (!batchProgress) return;
+    batchProgress.hidden = batch.length === 0;
+    if (!batch.length) { batchProgress.innerHTML = ""; return; }
+    const label = {queued: "Queued", running: "Running", succeeded: "Done", failed: "Failed", stopped: "Stopped"};
+    batchProgress.innerHTML = batch.map((it, i) => {
+      const st = esc((it.status || "queued").toLowerCase());
+      const linkable = (st === "running" || st === "succeeded" || st === "failed") && it.run_id;
+      const link = linkable
+        ? `<a class="live-tree-link" href="/runs/${esc(it.run_id)}#run-attack-tree">tree ↗</a>`
+        : '<span class="muted" style="font-size:.7rem"> </span>';
+      return `<div class="batch-item">
+        <span class="bi-n">${i + 1}</span>
+        <span class="bi-name">${esc(it.label || it.playbook)}</span>
+        <span class="batch-badge ${st}">${esc(label[st] || st)}</span>
+        ${link}
+      </div>`;
+    }).join("");
   }
 
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -296,6 +371,43 @@
     }
     render(payload);
   }));
+
+  if (queueBtn) queueBtn.addEventListener("click", async () => {
+    const picks = [...document.querySelectorAll(".batch-check:checked")].map(c => c.value);
+    if (!picks.length) { batchNote.textContent = "Select at least one guide to queue."; return; }
+    const clampWarn = (v, lo, hi, name) => {
+      if (v !== null && (v < lo || v > hi)) { batchNote.textContent = `${name} must be between ${lo} and ${hi}.`; return true; }
+      return false;
+    };
+    const bf = document.querySelector(".batch-bf")?.valueAsNumber || null;
+    const depth = document.querySelector(".batch-depth")?.valueAsNumber || null;
+    const nodes = document.querySelector(".batch-nodes")?.valueAsNumber || null;
+    if (clampWarn(bf, 1, 5, "Branching factor") || clampWarn(depth, 1, 12, "Tree depth") || clampWarn(nodes, 1, 400, "Node budget")) return;
+    if (!window.confirm(`Queue ${picks.length} run(s) back-to-back? Each will interact with the configured test accounts, one after another.`)) return;
+    const items = picks.map(p => ({playbook: p, branching_factor: bf, max_depth: depth, max_nodes_per_seed: nodes}));
+    queueBtn.disabled = true;
+    batchNote.textContent = "Queuing…";
+    consoleEl.textContent = "Starting first queued run…";
+    try {
+      const response = await fetch("/live-tests/batch/start", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({confirmed: true, items})
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        batchNote.textContent = payload.detail || "Unable to queue runs.";
+        queueBtn.disabled = false;
+        return;
+      }
+      batchNote.textContent = `Queued ${picks.length} run(s).`;
+      render(payload);
+      renderProgress(payload);
+    } catch (e) {
+      batchNote.textContent = "Unable to queue runs.";
+      queueBtn.disabled = false;
+    }
+  });
 
   const playbookSelect = document.querySelector(".playbook-select");
   if (playbookSelect) {

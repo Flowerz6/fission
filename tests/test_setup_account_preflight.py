@@ -43,6 +43,32 @@ def test_provisioned_second_account_passes(tmp_path: Path) -> None:
     preflight_setup_accounts(_pool(tmp_path, token_exists=True))  # no error
 
 
+def _ui_pool(tmp_path: Path, *, profile_exists: bool) -> AccountPool:
+    """A UI-mode-only staging account (outlook_sender): a signed-in Chrome
+    profile, no OAuth token."""
+    prof = tmp_path / "profile-outlook-sender"
+    if profile_exists:
+        prof.mkdir()
+    return AccountPool(
+        slots=[AccountSlot(role="outlook_sender", profile_dir=prof, token_cache=None, label=None)]
+    )
+
+
+def test_ui_mode_role_passes_with_profile(tmp_path: Path) -> None:
+    """A UI-mode role is verified by its profile, not a token — a present
+    profile with no token must pass (an OAuth check would wrongly fail it)."""
+    preflight_setup_accounts(_ui_pool(tmp_path, profile_exists=True))  # no error
+
+
+def test_ui_mode_role_missing_profile_fails_loudly(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError) as exc:
+        preflight_setup_accounts(_ui_pool(tmp_path, profile_exists=False))
+    msg = str(exc.value)
+    assert "outlook_sender" in msg
+    assert "ADVTEST_PROFILE_OUTLOOK_SENDER" in msg  # names the profile env, not a token
+    assert "browser profile" in msg
+
+
 def test_recipient_slot_is_skipped(tmp_path: Path) -> None:
     """The recipient legitimately uses the default identity — no token required."""
     pool = AccountPool(

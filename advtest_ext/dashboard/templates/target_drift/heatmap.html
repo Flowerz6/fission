@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}fingerprint · target drift{% endblock %}
+{% block content %}
+<div class="page-head"><p class="eyebrow">Fingerprint over time</p><h1>Vulnerability fingerprint</h1></div>
+<form method="get" class="td-cycle"><label>Cycle
+  <select name="cycle" onchange="this.form.submit()">
+  {% for label in cycle_labels %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == cycle else '' }}>{{ loop.index0 }} — {{ label }}</option>{% endfor %}
+  </select></label> <span class="muted">({{ n_cycles }} snapshots)</span>
+</form>
+<div class="td-grid">
+{% for c in cells %}
+  <div class="td-cell {{ 'res-coarse' if c.coarse else 'res-native' }}"
+       style="--m: {{ c.mean }}" title="{{ c.cell_key }}">
+    <span class="td-mean">{{ '%.2f'|format(c.mean) }}</span>
+    <span class="td-ess">ESS {{ '%.1f'|format(c.ess) }}</span>
+    <span class="td-res">{{ 'coarse (weak prior)' if c.coarse else 'native' }}</span>
+  </div>
+{% endfor %}
+</div>
+<p class="muted">Coarse (backfilled) cells are shown hatched — a weak prior, not measured coverage.</p>
+{% endblock %}

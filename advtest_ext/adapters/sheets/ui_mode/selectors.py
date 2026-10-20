@@ -27,9 +27,13 @@ from typing import cast
 
 from advtest_ext.adapters._ui_mode_common.selector_overlay import resolve_selectors
 from advtest_ext.adapters.google_docs.ui_mode.selectors import (
-    EXPECTED_KEYS,
+    COMMON_SELECTOR_KEYS,
     SidePanelSelectors,
 )
+
+# Sheets has no suggested-edit / confirm UI, so it pins against the common
+# side-panel keys only (not the Docs-only suggestion/confirm keys).
+EXPECTED_KEYS = COMMON_SELECTOR_KEYS
 
 # Seeded from the Docs registry — the shared Gemini-panel selectors. The panel
 # container and every child selector are scoped under the Gemini complementary

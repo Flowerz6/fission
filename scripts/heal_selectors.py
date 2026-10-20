@@ -38,6 +38,7 @@ import argparse
 import asyncio
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from advtest_ext.adapters._ui_mode_common.selector_heal import heal
 from advtest_ext.adapters._ui_mode_common.selector_overlay import write_overlay
@@ -68,16 +69,26 @@ def _selectors_for(app: str) -> dict[str, str]:
         from advtest_ext.adapters.sheets.ui_mode.selectors import SELECTORS
 
         return {k: str(v) for k, v in SELECTORS.items()}
+    if app == "google_calendar":
+        from advtest_ext.adapters.calendar.ui_mode.selectors import SELECTORS
+
+        return {k: str(v) for k, v in SELECTORS.items()}
     raise SystemExit(
-        f"no selector registry wired for app {app!r} yet (supported: google_docs, google_sheets)"
+        f"no selector registry wired for app {app!r} yet "
+        "(supported: google_docs, google_sheets, google_calendar)"
     )
 
 
 def _infer_app(url: str) -> str:
-    if "/spreadsheets/" in url:
+    parsed = urlparse(url)
+    if "/spreadsheets/" in parsed.path:
         return "google_sheets"
-    if "/document/" in url:
+    if "/document/" in parsed.path:
         return "google_docs"
+    # Match the host exactly (not a substring of the whole URL) so a path/query
+    # that merely contains "calendar.google.com" can't be misclassified.
+    if parsed.hostname == "calendar.google.com":
+        return "google_calendar"
     raise SystemExit("could not infer --app from --url; pass --app explicitly")
 
 

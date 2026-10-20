@@ -4,8 +4,8 @@
 > first time. After that, the **Daily loop** at the bottom is all you need.
 >
 > Signing in the test accounts is its own step — [ACCOUNTS_AND_AUTH.md](ACCOUNTS_AND_AUTH.md).
-> To find code, see [CODEBASE_MAP.md](CODEBASE_MAP.md). For what to build next,
-> [MILESTONES.md](MILESTONES.md).
+> To find code, see [CODEBASE_MAP.md](CODEBASE_MAP.md). For how the system fits together,
+> [architecture/README.md](architecture/README.md).
 
 ## 0. Prerequisites
 

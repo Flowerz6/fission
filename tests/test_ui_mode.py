@@ -364,12 +364,13 @@ async def test_ui_mode_invoke_walks_side_panel_sequence(tmp_path: Path) -> None:
     assert response.raw["screenshot_path"] == str(expected_screenshot.resolve())
     assert response.raw["ui_mode"] is True
     assert response.raw["document_id"] == "doc-abc"
-    # document_body is captured from the editor DOM before page
-    # teardown. The fake page returns ``response_text`` for every
+    # document_body snapshots are captured immediately before the action
+    # and after completion. The fake page returns ``response_text`` for every
     # ``inner_text`` call, so it surfaces here too — what we're
     # locking is that the field is populated (not empty), which
     # is the precondition the SignalContext.document_body lazy
     # property depends on.
+    assert response.raw["document_body_before"] == "Gemini says hello"
     assert response.raw["document_body"] == "Gemini says hello"
     # PNG was actually written to disk by the fake screenshot impl.
     assert expected_screenshot.exists()

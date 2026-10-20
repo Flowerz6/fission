@@ -33,6 +33,8 @@ out/
 *.sqlite
 *.sqlite3
 *.jsonl
+# ...but test fixtures under tests/data/ are committed (CI needs them).
+!tests/data/*.jsonl
 
 # ---- Generated reports / media (regenerable) ----
 *.pdf

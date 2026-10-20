@@ -47,7 +47,12 @@ def _behavior() -> Behavior:
 
 
 def _judge() -> RetrievalVerdictJudge:
-    return RetrievalVerdictJudge(entity=ENTITY, canary=CANARY, handshake_token=HANDSHAKE)
+    return RetrievalVerdictJudge(
+        entity=ENTITY,
+        canary=CANARY,
+        handshake_token=HANDSHAKE,
+        accept_output_markers=True,
+    )
 
 
 class _FakeAttacker:

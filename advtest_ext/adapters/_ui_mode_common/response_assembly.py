@@ -42,16 +42,24 @@ def assemble_full_response(jsonl_path: Path | str) -> str:
     or no fragment passes the prose filter. Never raises — bad JSON is
     skipped silently.
     """
+    fragments = _response_fragments(jsonl_path)
+    if not fragments:
+        return ""
+    return max(fragments, key=len)
+
+
+def _response_fragments(jsonl_path: Path | str) -> list[str]:
+    """Every prose-shaped fragment from all ``streamGenerate`` responses, in
+    document order. Shared by :func:`assemble_full_response` (which takes the
+    longest = the final answer) and :func:`extract_model_thoughts`."""
     path = Path(jsonl_path)
     if not path.exists():
-        return ""
-
-    fragments: list[str] = []
+        return []
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
-        return ""
-
+        return []
+    fragments: list[str] = []
     for line in text.splitlines():
         line = line.strip()
         if not line:
@@ -66,10 +74,58 @@ def assemble_full_response(jsonl_path: Path | str) -> str:
         if not body:
             continue
         _walk_body(body, fragments)
+    return fragments
 
+
+def extract_model_thoughts(jsonl_path: Path | str, *, cap: int | None = None) -> str:
+    """Gemini's streamed 'Model thoughts' (chain-of-thought summaries) from an
+    intercepted ``streamGenerate`` capture — robust where the DOM scrape misses.
+
+    The stream carries the reasoning as bold-titled summaries
+    (``**Inspecting Safety Modules**``) plus body sentences, alongside the growing
+    cumulative snapshots of the FINAL answer. The answer's snapshots are prefixes
+    of the longest fragment, so we drop the answer and anything contained in it;
+    what remains is the reasoning. Best-effort and format-defensive: returns ``""``
+    on any trouble, never raises. Kept OUT of ``Response.text`` on purpose (the
+    judge scores ``.text``; thoughts that merely NAME a forbidden skill while
+    reasoning to refuse must not trip the leak regex) — it is context for the
+    attacker only."""
+    fragments = _response_fragments(jsonl_path)
     if not fragments:
         return ""
-    return max(fragments, key=len)
+    answer = max(fragments, key=len)
+
+    # Gemini's thought summaries are the only bold-titled fragments (**Title**);
+    # everything before the first one is UI chrome (suggestion chips, capability
+    # lists), so anchor there. Stop at the final answer fragment; its cumulative
+    # streaming snapshots are prefixes and are dropped by the substring test.
+    def _is_title(fragment: str) -> bool:
+        s = fragment.strip()
+        return s.startswith("**") and s.endswith("**") and len(s) > 4
+
+    start = next((i for i, f in enumerate(fragments) if _is_title(f)), None)
+    if start is None:
+        return ""
+    seen: set[str] = set()
+    thoughts: list[str] = []
+    for fragment in fragments[start:]:
+        if fragment == answer:
+            break  # thoughts precede the final answer in the stream
+        if fragment in answer:
+            continue  # a streaming snapshot of the answer
+        cleaned = fragment.strip()
+        if _is_title(cleaned):
+            cleaned = cleaned[2:-2].strip()
+        key = " ".join(cleaned.lower().split())
+        if not cleaned or key in seen:
+            continue
+        seen.add(key)
+        thoughts.append(cleaned)
+    joined = "\n".join(thoughts).strip()
+    # Store the FULL reasoning by default — it is evidence (the dashboard shows it,
+    # the leak often runs to tens of KB). Bounding for the attacker's prompt happens
+    # at the feed site (tap_crescendo._serialise), NOT here at capture.
+    return joined[:cap] if cap else joined
 
 
 def _walk_body(body: str, out: list[str]) -> None:
@@ -107,4 +163,4 @@ def _collect_strings(node: Any, out: list[str]) -> None:
             _collect_strings(value, out)
 
 
-__all__ = ["assemble_full_response"]
+__all__ = ["assemble_full_response", "extract_model_thoughts"]

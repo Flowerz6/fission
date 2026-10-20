@@ -141,7 +141,7 @@ def main() -> None:
     rerun_successes: list[bool] = []
     with session_scope(factory) as s:
         for run_id in reruns:
-            traces = list_traces_for_run(s, run_id)
+            traces = list_traces_for_run(s, run_id, limit=100_000)
             wins = [t for t in traces if (t.verdict or "").lower() == "success"]
             rerun_artifacts.append("\n".join(t.raw_response or "" for t in wins))
             rerun_successes.append(bool(wins))

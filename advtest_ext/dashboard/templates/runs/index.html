@@ -8,7 +8,7 @@
     <p>Manage adversarial test runs across your target surfaces.</p>
   </div>
   <div class="ha">
-    <a class="btn-primary" href="/runs/new" data-open-new-run><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v10M3 8h10"/></svg>New run</a>
+    <a class="btn-primary" href="/runs?new=1" data-open-new-run><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v10M3 8h10"/></svg>New run</a>
   </div>
 </div>
 
@@ -86,11 +86,12 @@
       <div class="ld-workspaces" id="nr-workspaces" role="radiogroup" aria-label="Workspace"></div>
       <div class="ld-config" id="nr-config"></div>
     </div>
+    <div class="ld-queue" id="nr-queue" hidden></div>
     <footer class="ld-foot">
       <p class="ld-err" id="nr-error" role="alert" hidden></p>
       <div class="ld-actions">
-        <a class="ld-full" href="/runs/new">Open full launcher &amp; live console &rarr;</a>
         <button type="button" class="btn-outline" data-nr-cancel>Cancel</button>
+        <button type="button" class="btn-outline" id="nr-add">＋ Add to queue</button>
         <button type="submit" class="btn-primary" id="nr-launch">Launch run</button>
       </div>
     </footer>
@@ -103,6 +104,13 @@
  var tabs=document.getElementById('camp-tabs'),search=document.getElementById('campaign-search');
  function filter(){var f=tabs.querySelector('.on').dataset.f,q=search.value.toLowerCase();document.querySelectorAll('tr[data-status]').forEach(function(row){row.hidden=!( (f==='all'||row.dataset.status===f)&&row.textContent.toLowerCase().includes(q));});}
  tabs.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;tabs.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b)});filter();});search.addEventListener('input',filter);
+ // Cross-page "New run" links land on /runs?new=1 and pop the launcher modal.
+ window.addEventListener('DOMContentLoaded',function(){
+   if(new URLSearchParams(location.search).get('new')==='1'){
+     var opener=document.querySelector('[data-open-new-run]');
+     if(opener) opener.click();
+   }
+ });
 })();
 </script>
 {% endblock %}

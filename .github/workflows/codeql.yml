@@ -1,0 +1,40 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so findings surface even without a push.
+    - cron: "0 6 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (python)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          # security-extended = the security queries only (vulnerabilities), with
+          # higher recall than the default suite. We deliberately do NOT use
+          # "security-and-quality" here — its maintainability/style recommendations
+          # (implicit string-concat, etc.) add ~160 non-security findings that bury
+          # the real signal on a PR. Run the quality suite ad hoc if you want it.
+          queries: security-extended
+
+      # Python needs no build step (CodeQL extracts the source directly).
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"

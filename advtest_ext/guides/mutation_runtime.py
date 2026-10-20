@@ -3,14 +3,113 @@
 from __future__ import annotations
 
 import inspect
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+import structlog
 
 from advtest_ext.guides.stage import (
     bind_setup_target_options,
     stage_guide,
     verify_setup_result,
 )
+
+_log = structlog.get_logger(__name__)
+
+_PALETTE_STOP = {
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "to",
+    "then",
+    "with",
+    "no",
+    "not",
+    "all",
+    "that",
+    "this",
+    "into",
+    "from",
+    "when",
+    "which",
+    "there",
+    "here",
+    "them",
+}
+
+
+def _content_words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z]{4,}", text.lower()) if w not in _PALETTE_STOP}
+
+
+def cover_offpalette_fields(operator: Any, patch: dict[str, Any]) -> list[str]:
+    """Reject a COVER mutation that drifted off the operator's palette.
+
+    The cover operator is meant to vary the benign scenario *within* its
+    ``cell_values`` (e.g. vendor-renewal / onboarding / postmortem). A weak model
+    ignores the palette and invents an unrelated document ("a sustainable footwear
+    product pitch"), which Gemini then summarises instead of our scenario — noise,
+    not an attack. A mutated field whose text shares NO content word with any
+    cell_value has left the palette; reject-and-don't-record. Only cover-role
+    operators with a palette are checked (payload/format operators vary structure,
+    not topic, so a word-overlap rule would false-reject them).
+    """
+    if operator is None or getattr(operator, "carrier_role", "full") != "cover":
+        return []
+    cells = getattr(operator, "cell_values", None) or []
+    palette: set[str] = set()
+    for cell in cells:
+        if isinstance(cell, str):
+            palette |= _content_words(cell)
+    if not palette:
+        return []
+    off: list[str] = []
+    for path, value in patch.items():
+        if isinstance(value, str) and value.strip() and not (_content_words(value) & palette):
+            off.append(path)
+    return off
+
+
+def carrier_invariant_violations(guide: Guide, variant: Guide) -> list[str]:
+    """Anchors the attack NEEDS to survive a carrier mutation; any that are missing
+    from the mutated carrier mean the variant is inert (it can no longer fire its
+    own oracle) and must be rejected before a live run is spent on it.
+
+    Drift (a weak mutator dropping the canary / egress sink / success token while
+    "mutating" the payload) is the dominant waste in un-gated fan-out — this is the
+    reject-and-don't-record gate. Anchors are the literal strings the guide's success
+    depends on: its canary, its entity (e.g. the attacker sink host), and every
+    ``token_appears`` / ``canary_appears`` signal's literal. Non-literal signals
+    (regex, exfil_sink shape) are not checkable here and are left to live scoring.
+    """
+    anchors: list[str] = []
+    for value in (getattr(guide, "canary", None), getattr(guide, "entity", None)):
+        if isinstance(value, str):
+            anchors.append(value)
+    for spec in guide.success.signals:
+        if not isinstance(spec, dict):
+            continue
+        if spec.get("kind") == "token_appears" and isinstance(spec.get("token"), str):
+            anchors.append(spec["token"])
+        if spec.get("kind") == "canary_appears":
+            canary = spec.get("canary") or spec.get("token")
+            if isinstance(canary, str):
+                anchors.append(canary)
+    anchors = [a for a in dict.fromkeys(anchors) if a and len(a) >= 3]
+    if not anchors:
+        return []
+    texts = [getattr(variant, "carrier_payload", "") or ""]
+    for step in getattr(variant, "setup_steps", []) or []:
+        for value in (getattr(step, "params", None) or {}).values():
+            if isinstance(value, str):
+                texts.append(value)
+    blob = "\n".join(texts)
+    return [a for a in anchors if a not in blob]
+
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -126,6 +225,39 @@ class GuideMutationMaterializer:
                     patch[path] = f"{value.rstrip()}\n\n{payload}".strip()
         for path, value in patch.items():
             _set_guide_path(variant, path, value)
+        # Invariant gate: reject-and-don't-record a mutation that dropped the
+        # attack's success-bearing anchors (drift). Done BEFORE staging so a
+        # drifted variant never costs a live browser run and never pollutes ASR.
+        missing = carrier_invariant_violations(self.guide, variant)
+        if missing:
+            _log.warning(
+                "mutation.rejected_invariant",
+                node=str(node["id"]),
+                operator=operator_name,
+                missing=missing,
+            )
+            node["materialization"] = {
+                "verified": False,
+                "rejected": "invariant",
+                "missing": missing,
+            }
+            return None
+        # Palette gate: reject a cover mutation that drifted off its scenario palette
+        # (the "sustainable footwear" drift) before staging.
+        offpalette = cover_offpalette_fields(operator, patch)
+        if offpalette:
+            _log.warning(
+                "mutation.rejected_offpalette",
+                node=str(node["id"]),
+                operator=operator_name,
+                fields=offpalette,
+            )
+            node["materialization"] = {
+                "verified": False,
+                "rejected": "offpalette",
+                "fields": offpalette,
+            }
+            return None
         result = await stage_guide(
             variant,
             variables=self.variables,

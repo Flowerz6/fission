@@ -1,4 +1,4 @@
-"""Tiny BibTeX parser for the /references page.
+"""Tiny BibTeX parser for report citations (formerly the /references page).
 
 Pulls just enough out of ``references.bib`` to render a table:
 citation key, title, author, year, optional URL / note. We

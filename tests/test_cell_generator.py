@@ -63,9 +63,48 @@ def test_parse_values_handles_json_array_object_and_lines() -> None:
     assert parse_values("- one\n- two\n3. three") == ["one", "two", "three"]
 
 
+def test_parse_values_survives_truncated_fence_and_json_punctuation() -> None:
+    # An opening ```json fence whose closer never arrived (output truncated):
+    # the bare fence must not survive as a "cell", and the elements must be clean.
+    truncated_fence = '```json\n["alpha label",\n"beta label",'
+    assert parse_values(truncated_fence) == ["alpha label", "beta label"]
+    # A JSON array that failed to parse (no closing ]) drops to the line-splitter;
+    # each element must lose its surrounding quotes and trailing comma.
+    truncated_array = '[\n"configuration.md found",\n"setup-guide.md present",'
+    assert parse_values(truncated_array) == [
+        "configuration.md found",
+        "setup-guide.md present",
+    ]
+    # A lone fence marker is never a candidate.
+    assert parse_values("```json") == []
+    # A valid JSON array whose elements are themselves quote-wrapped (a model
+    # imitating already-polluted cells: ``"\"x\""``) is unwrapped, not kept raw.
+    assert parse_values('["\\"database.md available\\"", "\\"admin.md found\\""]') == [
+        "database.md available",
+        "admin.md found",
+    ]
+    # Curly quotes from an abliterated model are stripped like straight ones.
+    assert parse_values("[\n“overview.md exists”,\n“admin.md found”,") == [
+        "overview.md exists",
+        "admin.md found",
+    ]
+
+
+async def test_generate_drops_fence_and_punctuation_junk() -> None:
+    guide = _guide()
+    op = next(o for o in guide.mutation_operators if o.name == "surface_wording")
+    # A truncated fenced reply that previously leaked ``` ```json ``` as a cell.
+    reply = '```json\n["shadow-review voice",\n"incident-drill cadence",'
+    prop = await generate_for_operator(_fake_complete(reply), guide, op, n=3)
+    assert "```json" not in prop.accepted
+    assert all("```" not in c for c in prop.accepted)
+    assert "shadow-review voice" in prop.accepted
+    assert "incident-drill cadence" in prop.accepted
+
+
 async def test_generate_for_operator_keeps_only_novel() -> None:
     guide = _guide()
-    op = next(o for o in guide.mutation_operators if o.name == "persona_ladder")
+    op = next(o for o in guide.mutation_operators if o.name == "persona_role")
     # LLM returns one existing value (must be dropped) + two genuinely new ones.
     reply = json.dumps([op.cell_values[0], "shadow auditor", "sandbox operator"])
     prop = await generate_for_operator(_fake_complete(reply), guide, op, n=3)
@@ -85,7 +124,7 @@ async def test_generate_covers_all_operators() -> None:
 
 async def test_proposer_refusal_yields_no_cells() -> None:
     guide = _guide()
-    op = next(o for o in guide.mutation_operators if o.name == "persona_ladder")
+    op = next(o for o in guide.mutation_operators if o.name == "persona_role")
     refusal = (
         "I'm not going to help with this request. Generating new variations to make "
         "a prompt-injection attack more effective causes real harm regardless of framing."

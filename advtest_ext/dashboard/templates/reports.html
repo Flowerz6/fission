@@ -5,7 +5,7 @@
   <div class="ht">
     <p class="eyebrow" style="margin:0">Assessment</p>
     <h1>Reports</h1>
-    <p>Generate and share evaluation reports from your completed runs.</p>
+    <p>Prepare security assessment reports with reproduction evidence and complete transcripts.</p>
   </div>
   <div class="ha">
     <button type="button" class="btn-primary" data-open-report-builder><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 2h8v12H4z"/><path d="M6 6h4M6 9h4"/></svg>Generate report</button>
@@ -15,10 +15,16 @@
 <dialog id="report-builder-dialog" class="launch-dialog" aria-labelledby="report-builder-title">
   <form id="report-builder-form" method="get" action="/reports/view" target="_blank">
     <header class="ld-head">
-      <div><h2 id="report-builder-title">Generate a report</h2><p class="ld-sub">Pick the findings to include, give it a title, and generate.</p></div>
+      <div><h2 id="report-builder-title">Generate a report</h2><p class="ld-sub">Choose the scope and recipient. The report includes evidence, review status, and complete transcripts.</p></div>
       <button type="button" class="ld-x" data-rb-cancel aria-label="Close">&times;</button>
     </header>
     <div class="ld-config rb-config">
+      <input type="hidden" name="service" value="{{ selected_service.key }}">
+      <div class="ld-grid rb-grid">
+        <label class="ld-field"><span class="ld-lbl">Prepared for</span><input type="text" name="recipient" maxlength="160" placeholder="e.g. Google AI Security"></label>
+        <label class="ld-field"><span class="ld-lbl">Prepared by</span><input type="text" name="author" maxlength="160" placeholder="Researcher or team"></label>
+        <label class="ld-field"><span class="ld-lbl">Contact</span><input type="text" name="contact" maxlength="254" placeholder="Email or preferred contact"></label>
+      </div>
       <label class="ld-field ld-field-wide"><span class="ld-lbl">Report title</span>
         <input type="text" name="title" maxlength="120" placeholder="e.g. Gemini Workspace — May assessment" autocomplete="off"></label>
       <div class="ld-field">
@@ -67,11 +73,11 @@
   <tbody>
     {% for run in runs %}
     <tr>
-      <td><a class="fname" href="/runs/{{ run.id }}/report">{{ run_display_name(run) }} — report</a></td>
+      <td><a class="fname" href="/reports/view?run_id={{ run.id }}&amp;service={{ selected_service.key }}">{{ run_display_name(run) }} — security assessment</a></td>
       <td class="muted mono" style="font-size:0.74rem">{{ run.id }}</td>
       <td class="muted">{{ target_surface_label(run.target_name) }}</td><td class="muted">{{ run.started_at.strftime('%b %d, %Y') if run.started_at else '—' }}</td>
-      <td><a href="/runs/{{ run.id }}/report">HTML</a> · <a href="/runs/{{ run.id }}/report.pdf">PDF</a></td>
-      <td><a class="rowmenu" href="/runs/{{ run.id }}/report.pdf" aria-label="Download report">&#8943;</a></td>
+      <td><a href="/reports/view?run_id={{ run.id }}&amp;service={{ selected_service.key }}">HTML</a> · <a href="/reports/view.pdf?run_id={{ run.id }}&amp;service={{ selected_service.key }}">PDF</a></td>
+      <td><a class="rowmenu" href="/reports/view.pdf?run_id={{ run.id }}&amp;service={{ selected_service.key }}" aria-label="Download report">&#8943;</a></td>
     </tr>
     {% endfor %}
   </tbody>

@@ -177,7 +177,7 @@ def test_runs_index_renders(client: TestClient) -> None:
     assert "<h1>Runs</h1>" in resp.text
 
 
-def test_zero_asr_runs_are_hidden_from_run_history_and_overview() -> None:
+def test_zero_asr_runs_hidden_from_overview_and_success_filter() -> None:
     engine = make_engine("sqlite:///:memory:")
     factory = make_session_factory(engine)
     _seed_run(factory)
@@ -201,10 +201,17 @@ def test_zero_asr_runs_are_hidden_from_run_history_and_overview() -> None:
     app = create_app(engine=engine)
     with TestClient(app) as c:
         runs_body = c.get("/runs").text
+        runs_success_body = c.get("/runs?only=success").text
         overview_body = c.get("/").text
 
+    # The run history shows EVERY run by default — a run is visible the moment it
+    # exists, including a finished no-success run.
     assert "run-seed" in runs_body
-    assert "run-zero-asr" not in runs_body
+    assert "run-zero-asr" in runs_body
+    # ...but ?only=success narrows to runs with at least one green.
+    assert "run-seed" in runs_success_body
+    assert "run-zero-asr" not in runs_success_body
+    # The presentation-facing overview omits zero-ASR runs.
     assert "run-seed" in overview_body
     assert "run-zero-asr" not in overview_body
 
@@ -858,13 +865,11 @@ def test_run_page_shows_calibrated_ci_with_uniform_labels() -> None:
     assert "labels" in body
 
 
-def test_references_page_renders(client: TestClient) -> None:
-    resp = client.get("/references")
-    assert resp.status_code == 200
-    body = resp.text
-    # The bib has well-known anchor entries we cite all over the codebase.
-    assert "greshake2023ipi" in body
-    assert "agentvigil2025" in body
+def test_references_page_removed(client: TestClient) -> None:
+    # The standalone /references (Citations) page was removed; the bib is still
+    # parsed for report citations (advtest_ext.dashboard.references), just not
+    # served as its own page.
+    assert client.get("/references").status_code == 404
 
 
 # ----------------------------------------------------------------------
@@ -1320,8 +1325,9 @@ def test_stale_unfinished_run_is_interrupted_not_running() -> None:
 
 
 def test_runs_index_has_new_run_modal() -> None:
-    """The Runs list opens a centred launcher dialog in place of navigating to
-    the /runs/new page; the link is kept as a no-JS fallback."""
+    """The Runs list opens a centred launcher dialog; the standalone /runs/new
+    page is gone, so the no-JS fallback now points at /runs?new=1 (which auto-
+    opens the modal) rather than a separate launcher page."""
     engine = make_engine("sqlite:///:memory:")
     with session_scope(make_session_factory(engine)) as s:
         upsert_run(s, run_id="run-x", target_name="T", strategy="grid")
@@ -1330,8 +1336,48 @@ def test_runs_index_has_new_run_modal() -> None:
         body = c.get("/runs").text
     assert 'id="new-run-dialog"' in body
     assert "data-open-new-run" in body
-    assert 'href="/runs/new"' in body  # fallback link still present
+    assert 'href="/runs?new=1"' in body  # fallback opens the modal, not a page
+    assert 'href="/runs/new"' not in body  # the standalone launcher link is gone
     assert "/static/new-run.js" in body
+
+
+def test_runs_new_redirects_to_modal() -> None:
+    """/runs/new no longer renders a page — it redirects to the Runs list with
+    the launcher modal open."""
+    engine = make_engine("sqlite:///:memory:")
+    app = create_app(engine=engine)
+    with TestClient(app) as c:
+        resp = c.get("/runs/new", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/runs?new=1"
+
+
+def test_run_page_shows_stop_only_for_the_active_live_run() -> None:
+    """The Stop button appears on a run's page only while it is the run the
+    controller is actually driving — not for a finished run, nor for an active
+    run the controller isn't tracking (where /live-tests/stop couldn't act)."""
+    from advtest_ext.dashboard.live_tests import LiveTestController
+
+    engine = make_engine("sqlite:///:memory:")
+    factory = make_session_factory(engine)
+    with session_scope(factory) as s:  # active run: no finalize -> no finished_at
+        upsert_run(s, run_id="run-live", target_name="GeminiDocsMultiTurnTarget", strategy="tap")
+    controller = LiveTestController("sqlite:///:memory:", enabled=True)
+    app = create_app(engine=engine, live_test_controller=controller)
+
+    # Controller is driving THIS run -> Stop button present.
+    controller._run_id = "run-live"
+    controller._status = "running"
+    with TestClient(app) as c:
+        body = c.get("/runs/run-live").text
+    assert "Stop run" in body
+    assert 'hx-post="/live-tests/stop"' in body
+
+    # Controller is driving a different run -> no Stop button on this page.
+    controller._run_id = "run-other"
+    with TestClient(app) as c:
+        body = c.get("/runs/run-live").text
+    assert "Stop run" not in body
 
 
 def test_live_tests_options_keys_guides_by_surface_and_scope() -> None:
@@ -1347,11 +1393,25 @@ def test_live_tests_options_keys_guides_by_surface_and_scope() -> None:
     assert data["enabled"] is True
     assert data["guides"], "expected at least one guide"
     g = data["guides"][0]
-    assert {"id", "title", "surface", "surface_label", "multi_app", "maturity", "blurb"} <= set(g)
-    assert isinstance(g["multi_app"], bool)
-    # Both scopes are represented, so the Single/Multi toggle has content.
-    assert any(x["multi_app"] for x in data["guides"])
-    assert any(not x["multi_app"] for x in data["guides"])
+    assert {
+        "id",
+        "title",
+        "surface",
+        "surface_label",
+        "multi_workspace",
+        "second_accounts",
+        "maturity",
+        "blurb",
+    } <= set(g)
+    assert isinstance(g["multi_workspace"], bool)
+    # Both scopes are represented, so the Single/Across-workspaces toggle has content.
+    assert any(x["multi_workspace"] for x in data["guides"])
+    assert any(not x["multi_workspace"] for x in data["guides"])
+    # Across-workspaces guides name the extra account(s) they stage.
+    assert all(
+        x["second_accounts"] if x["multi_workspace"] else not x["second_accounts"]
+        for x in data["guides"]
+    )
     # Surface keys are canonical (no google_ prefix) and drive the workspace list.
     assert all("google_" not in x["surface"] for x in data["guides"])
     # Sorted by surface label then title, so the picker groups cleanly.

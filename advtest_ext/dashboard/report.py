@@ -124,6 +124,10 @@ def build_findings_report_context(
     date_from: str | None = None,
     date_to: str | None = None,
     run_id: str | None = None,
+    finding_id: str | None = None,
+    recipient: str | None = None,
+    author: str | None = None,
+    contact: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the context for a findings-selection report: the findings that
     match the chosen severities / scenarios / workspace / date range / run,
@@ -146,13 +150,21 @@ def build_findings_report_context(
     def _parse(value: str | None) -> date | None:
         try:
             return date.fromisoformat(value) if value else None
-        except ValueError:
-            return None
+        except ValueError as exc:
+            from fastapi import HTTPException
+
+            raise HTTPException(422, "Dates must be valid ISO dates (YYYY-MM-DD)") from exc
 
     d_from, d_to = _parse(date_from), _parse(date_to)
+    if d_from and d_to and d_from > d_to:
+        from fastapi import HTTPException
+
+        raise HTTPException(422, "Start date must be on or before end date")
 
     selected: list[tuple[str, Any]] = []
-    for f in list_findings(session, run_id=run_id or None):
+    for f in list_findings(session, run_id=run_id or None, limit=None):
+        if finding_id and f.id != finding_id:
+            continue
         sev = finding_severity(f)
         if sev_set and sev not in sev_set:
             continue
@@ -181,7 +193,7 @@ def build_findings_report_context(
     for sev, _ in selected:
         counts[sev] = counts.get(sev, 0) + 1
 
-    return {
+    context = {
         "report_title": (title or "").strip() or "Findings report",
         "findings": [f for _, f in selected],
         "counts": counts,
@@ -196,6 +208,12 @@ def build_findings_report_context(
             "run_id": run_id or None,
         },
     }
+
+    from advtest_ext.dashboard.disclosure import enrich_disclosure_context
+
+    return enrich_disclosure_context(
+        session, context, recipient=recipient, author=author, contact=contact
+    )
 
 
 def render_pdf(html: str, *, base_url: str | None = None) -> bytes:

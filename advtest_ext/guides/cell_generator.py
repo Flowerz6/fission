@@ -81,10 +81,17 @@ def looks_like_refusal(reply: str) -> bool:
     return _has_refusal_marker(reply)
 
 
+# A candidate that is nothing but punctuation / brackets / backticks is JSON or
+# markdown scaffolding that leaked past parsing, never a real cell label.
+_JUNK_RE = re.compile(r"^[\s`~\"'“”‘’\[\]{}(),.:;|*_+-]*$")  # noqa: RUF001 — curly quotes are intentional match targets
+
+
 def _plausible_cell(text: str) -> bool:
     """A real cell is a short label with no refusal prose in it."""
     cand = normalize_cell(text)
     if not cand or len(cand.split()) > _MAX_CELL_WORDS:
+        return False
+    if "```" in cand or _JUNK_RE.match(cand):
         return False
     return not _has_refusal_marker(cand)
 
@@ -129,25 +136,60 @@ def filter_novel(
     return kept
 
 
+_FENCE_LINE = re.compile(r"^\s*```[a-zA-Z0-9]*\s*$")
+_ENUMERATOR = re.compile(r"^\d+[.)]\s*")
+# Straight and curly single/double quotes — abliterated models emit curly ones,
+# which a plain ``strip('"')`` would leave dangling on a cell.
+_QUOTES = "\"'“”‘’"  # noqa: RUF001 — curly quotes are intentional strip targets
+
+
+def _clean_line(raw: str) -> str:
+    """Strip one list line down to its label — list markers, JSON array brackets,
+    trailing commas, and a single layer of surrounding (or dangling) quotes,
+    straight or curly. A truncated JSON element like ``"user-manual.md exists",``
+    becomes ``user-manual.md exists``; a bare fence or bracket line becomes empty."""
+    line = raw.strip().lstrip("-*••").strip()  # noqa: B005 — peel any list-marker char, intentional
+    line = _ENUMERATOR.sub("", line).strip()
+    # Peel array brackets and any trailing JSON comma the line-splitter inherits.
+    line = line.strip("[]").strip().rstrip(",").strip()
+    # A cleanly quoted element: drop the matching pair. Otherwise strip dangling
+    # quotes left over from a split JSON array element.
+    if len(line) >= 2 and line[0] in _QUOTES and line[-1] in _QUOTES:
+        line = line[1:-1]
+    return line.strip().strip(_QUOTES).strip().rstrip(",").strip()
+
+
 def parse_values(text: str) -> list[str]:
     """Parse the LLM reply into a list of candidate cell strings.
 
     Accepts a JSON array, a JSON object with a ``values`` array, or a plain
-    bulleted / newline list. Robust to code fences and stray prose."""
+    bulleted / newline list. Robust to code fences (including a truncated reply
+    whose closing fence never arrived), stray prose, and JSON punctuation the
+    line-splitter would otherwise inherit."""
     fenced = re.search(r"```(?:json)?\s*(.*?)```", text, flags=re.S)
-    body = fenced.group(1) if fenced else text
+    if fenced:
+        body = fenced.group(1)
+    else:
+        # No closing fence (common on truncated output): take everything after an
+        # opening fence if there is one, else the whole reply.
+        opened = re.search(r"```(?:json)?\s*(.*)$", text, flags=re.S)
+        body = opened.group(1) if opened else text
     try:
-        data = json.loads(body)
+        data = json.loads(body.strip())
         if isinstance(data, dict):
             data = data.get("values", [])
         if isinstance(data, list):
-            return [str(x).strip() for x in data if str(x).strip()]
+            # Trim edges on each element too: a model imitating already-polluted
+            # existing cells will wrap values in literal quotes (``"\"x\""``).
+            return [c for c in (_clean_line(str(x)) for x in data) if c]
     except (json.JSONDecodeError, ValueError):
         pass
     out: list[str] = []
     for raw in body.splitlines():
-        line = raw.strip().lstrip("-*0123456789.) ").strip().strip('"').strip("'")
-        if line and not line.startswith(("{", "}", "[", "]")):
+        if _FENCE_LINE.match(raw):
+            continue
+        line = _clean_line(raw)
+        if line and not line.startswith(("{", "}")):
             out.append(line)
     return out
 

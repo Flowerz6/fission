@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}strategy run · advtest{% endblock %}
+{% block content %}
+<div class="page-head">
+  <p class="eyebrow"><a href="/strategy">Strategy runs</a></p>
+  <h1 class="mono">{{ run.id }}</h1>
+  <p>
+    target <strong>{{ run.target or '—' }}</strong>
+    {% if run.target_model %}· model <strong>{{ run.target_model }}</strong>{% endif %}
+    · {{ run.threat_model }} · {{ run.n_samples }} samples ·
+    <strong>{{ run.hits }}</strong> hit(s) · ASR <strong>{{ '%.2f'|format(run.asr) }}</strong>
+  </p>
+  {% if run.summary and run.summary.lineages %}
+    <p class="muted">lineages: {% for l in run.summary.lineages %}<code>{{ l }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+</div>
+
+{% for case in cases %}
+<section class="card" style="margin-bottom:1rem;padding:0.9rem 1.1rem;">
+  <h2 style="margin:0 0 0.4rem;font-size:0.95rem;">
+    <span class="mono">{{ case.sample_key }}</span>
+    <span class="badge {{ 'ok' if case.status == 'hit' else 'muted' }}">{{ case.status }}</span>
+  </h2>
+  <p class="muted" style="margin:0 0 0.5rem;">lineage <code>{{ case.lineage_id }}</code>
+    {% if case.replay %}· replay M/N <strong>{{ case.replay.successes_m }}/{{ case.replay.trials_n }}</strong>
+      (ASR {{ '%.2f'|format(case.replay.asr) }}){% endif %}
+  </p>
+  <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+    <thead><tr>
+      <th style="text-align:left;">iter</th><th>sec</th><th>util</th>
+      <th style="text-align:left;">injection</th>
+    </tr></thead>
+    <tbody>
+    {% for a in case.attempts %}
+      <tr>
+        <td>{{ a.iter }}{% if a.parent_id %} <span class="muted">←</span>{% endif %}</td>
+        <td>{{ '✓' if a.security else '·' }}</td>
+        <td>{{ '✓' if a.utility else '·' }}</td>
+        <td style="text-align:left;" class="mono">{{ (a.injection or '(none)')[:140] }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+  <p class="muted">No attempts recorded for this run.</p>
+{% endfor %}
+{% endblock %}

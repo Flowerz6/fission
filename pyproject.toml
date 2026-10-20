@@ -149,6 +149,15 @@ module = "pyrit.*"
 follow_imports = "skip"
 ignore_errors = true
 
+# numpy 2.x ships stubs that use PEP 695 `type` statements, which mypy rejects
+# under python_version = 3.11 (halting before it checks our code). We already
+# ignore_missing_imports, so skip following numpy entirely.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
+ignore_errors = true
+
 [[tool.mypy.overrides]]
 module = "tests.*"
 # The test suite leans on lightweight duck-typed fakes and un-annotated

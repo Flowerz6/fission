@@ -69,8 +69,10 @@ def _client(controller: _StubController) -> TestClient:
 
 
 def test_live_tests_page_names_real_workflows() -> None:
+    # The standalone launcher moved off /runs/new (now a modal on /runs); the
+    # surface-assessment page still lives at /live-tests.
     with _client(_StubController()) as client:
-        response = client.get("/runs/new")
+        response = client.get("/live-tests")
     assert response.status_code == 200
     assert "Stop run" in response.text
     assert "Outlook → Gmail → Docs" in response.text
@@ -141,6 +143,7 @@ def test_live_test_catalog_is_allow_listed() -> None:
         "guided-workspace-playbook",
         "cross-surface-email-docs",
         "docs-injection-sweep",
+        "docs-strategy-loop",
         "sheets-injection-sweep",
     }
     commands = {spec.id: spec.argv for spec in specs}
@@ -160,6 +163,15 @@ def test_live_test_catalog_is_allow_listed() -> None:
     )
     assert commands["docs-injection-sweep"][:3] == ("poetry", "run", "advtest")
     assert commands["sheets-injection-sweep"][:3] == ("poetry", "run", "advtest")
+    # The adaptive strategy loop launches the integrated plugin via a run config.
+    assert commands["docs-strategy-loop"] == (
+        "poetry",
+        "run",
+        "advtest",
+        "run",
+        "--config",
+        "configs/run_workspace_docs_strategy.yaml",
+    )
 
 
 def test_read_env_file_is_non_executable_and_supports_quotes(tmp_path: Path) -> None:

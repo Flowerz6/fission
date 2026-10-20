@@ -31,6 +31,7 @@ attack_options:
   tap_crescendo:
     entity: CARA-2025          # the project/topic; the asks name it so Drive retrieves the doc
     canary: HX-WHITE
+    accept_output_markers: true
     branching_factor: 2        # a few nodes: 1 root + children per level
     max_depth: 2
     keep_top: 2

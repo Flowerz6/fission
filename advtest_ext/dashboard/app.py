@@ -14,7 +14,6 @@ Pages:
 * ``/findings`` — flagged traces (severity-filterable via HTMX).
 * ``/findings/{id}`` — full trace + replay-bundle download link.
 * ``/hitl`` — judge-disagreement queue with resolution form.
-* ``/references`` — references.bib rendered.
 
 PDF export of /runs/{id} is handled by :mod:`report`; the route
 returns 501 with a friendly install hint when ``weasyprint`` isn't
@@ -41,6 +40,7 @@ from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     PlainTextResponse,
+    RedirectResponse,
     Response,
 )
 from fastapi.staticfiles import StaticFiles
@@ -130,6 +130,57 @@ _STATIC_DIR = Path(__file__).resolve().parent / "static"
 # implementation and can't drift on family-bucketing or aggregation.
 
 
+def _highlight_html(text: str | None, patterns: list[str]) -> str:
+    """HTML-escape ``text`` and wrap every substring matched by ``patterns`` in
+    ``<mark class="sig-hit">`` so the exact text a signal fired on is coloured
+    in place. Matching is done on the raw text (indices intact); each segment is
+    escaped so the result is safe to render with ``| safe``."""
+    import html as _h
+    import re as _re
+
+    if not text:
+        return ""
+    if not patterns:
+        return _h.escape(text)
+    try:
+        combined = _re.compile("|".join(f"(?:{p})" for p in patterns), _re.IGNORECASE)
+    except _re.error:
+        return _h.escape(text)
+    out: list[str] = []
+    last = 0
+    for m in combined.finditer(text):
+        if m.start() == m.end():  # skip zero-width matches
+            continue
+        out.append(_h.escape(text[last : m.start()]))
+        out.append('<mark class="sig-hit">' + _h.escape(m.group(0)) + "</mark>")
+        last = m.end()
+    out.append(_h.escape(text[last:]))
+    return "".join(out)
+
+
+def _signal_highlight_patterns(signals: list[Any]) -> tuple[list[str], list[str]]:
+    """From a trace's fired signals, the regex patterns to highlight in the
+    (response, model_thoughts) surfaces respectively."""
+    resp: list[str] = []
+    thoughts: list[str] = []
+    for s in signals:
+        if not getattr(s, "fired", False):
+            continue
+        ev = s.evidence if isinstance(getattr(s, "evidence", None), dict) else {}
+        pat = ev.get("pattern")
+        if not pat:
+            tok = ev.get("token") or ev.get("canary") or ev.get("first_match")
+            if tok:
+                import re as _re
+
+                pat = _re.escape(str(tok))
+        if not pat:
+            continue
+        surface = ev.get("surface") or getattr(s, "surface", None)
+        (thoughts if surface == "model_thoughts" else resp).append(str(pat))
+    return resp, thoughts
+
+
 def _full_responses_for_traces(traces: list[Any]) -> dict[str, str]:
     """Return the best response text for each trace.
 
@@ -212,6 +263,22 @@ class LiveTestStart(BaseModel):
     branching_factor: int | None = Field(default=None, ge=1, le=5)
     max_depth: int | None = Field(default=None, ge=1, le=12)
     max_nodes_per_seed: int | None = Field(default=None, ge=1, le=400)
+
+
+class LiveTestBatchItem(BaseModel):
+    """One guide run in a back-to-back batch, with its own tree knobs."""
+
+    playbook: str
+    branching_factor: int | None = Field(default=None, ge=1, le=5)
+    max_depth: int | None = Field(default=None, ge=1, le=12)
+    max_nodes_per_seed: int | None = Field(default=None, ge=1, le=400)
+
+
+class LiveTestBatchStart(BaseModel):
+    """Queue several guide runs to execute one after another."""
+
+    confirmed: bool = False
+    items: list[LiveTestBatchItem] = Field(default_factory=list, max_length=50)
 
 
 def _hitl_blind_pct() -> int:
@@ -680,6 +747,7 @@ def create_app(
     engine: Engine | None = None,
     auth_token: str | None = None,
     live_test_controller: LiveTestController | None = None,
+    strategy_controller: Any | None = None,
 ) -> FastAPI:
     """Construct the FastAPI dashboard app.
 
@@ -827,6 +895,18 @@ def create_app(
     # Routes
     # ------------------------------------------------------------------
 
+    # Target-version drift views (Part F1), under the /target_drift prefix —
+    # distinct from the operational-drift routes below. Registered as its own
+    # router so it never shadows an operational-drift route/template.
+    from advtest_ext.dashboard.target_drift import build_target_drift_router
+
+    app.include_router(build_target_drift_router(templates, get_session))
+
+    from advtest_ext.dashboard.strategy import StrategyController, build_strategy_router
+
+    strategy_ctl = strategy_controller or StrategyController(effective_db_url)
+    app.include_router(build_strategy_router(templates, get_session, strategy_ctl))
+
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         """Liveness probe: the process is up and serving. No dependencies —
@@ -865,7 +945,13 @@ def create_app(
         from advtest_ext.storage.repository import hydrate_missing_summaries
 
         all_runs = hydrate_missing_summaries(session, list_runs(session))
-        runs = [run for run in all_runs if run_has_success(run)]
+        # Show EVERY run by default (including partial / no-success runs, so a run
+        # is visible the moment it exists). ?only=success narrows to runs that
+        # have at least one green, which was the old default.
+        if request.query_params.get("only") == "success":
+            runs = [run for run in all_runs if run_has_success(run)]
+        else:
+            runs = list(all_runs)
         group_order = ("sheets", "docs", "cross-surface", "other")
         groups = []
         for key in group_order:
@@ -939,9 +1025,14 @@ def create_app(
         session.commit()
         return Response(status_code=204)
 
+    @app.get("/runs/new", include_in_schema=False)
+    async def runs_new_redirect() -> Response:
+        """The standalone launcher page is gone — the New-run modal on /runs is the
+        launcher now. Redirect any old link/bookmark there with the modal open."""
+        return RedirectResponse("/runs?new=1", status_code=302)
+
     @app.get("/live-tests", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/assessments/new", response_class=HTMLResponse)
-    @app.get("/runs/new", response_class=HTMLResponse)
     async def live_tests_index(request: Request) -> Response:
         """Launch a named, allow-listed surface assessment."""
         return templates.TemplateResponse(
@@ -1059,8 +1150,9 @@ def create_app(
     async def live_tests_options() -> dict[str, Any]:
         """Everything the New-run dialog needs to choose and configure a run
         without leaving the runs list: the guide catalogue keyed by Workspace
-        surface, flagged single- vs multi-app, each with a one-line blurb, so
-        the picker reads as scenarios per app, not filenames."""
+        surface, flagged single-workspace vs across-workspaces (whether the run
+        drives a second account), each with a one-line blurb, so the picker
+        reads as scenarios per surface, not filenames."""
         from advtest_ext.guides.corpus import load_guides
         from advtest_ext.guides.models import display_title
 
@@ -1091,18 +1183,24 @@ def create_app(
         guide_opts: list[dict[str, Any]] = []
         for g in guides:
             target = canon_surface(g.target.app)
-            apps = {target} | {
-                canon_surface(str(getattr(st, "region", None) or getattr(st, "app", None) or ""))
-                for st in g.setup_steps
+            # "Across workspaces" = the run drives more than one account (e.g. an
+            # attacker_sender that mails the victim, who then talks to Gemini in
+            # their own Docs/Gmail). That needs a second signed-in profile, so it
+            # is the account axis, NOT how many apps the flow touches.
+            victim_role = str(getattr(g.target, "account_role", None) or "recipient")
+            roles = {victim_role} | {
+                str(getattr(st, "account_role", None) or "") for st in g.setup_steps
             }
-            apps.discard("other")
+            roles.discard("")
+            extra_accounts = sorted(roles - {victim_role})
             guide_opts.append(
                 {
                     "id": g.id,
                     "title": display_title(g),
                     "surface": target,
                     "surface_label": surface_label(target),
-                    "multi_app": len(apps) > 1,
+                    "multi_workspace": len(roles) > 1,
+                    "second_accounts": extra_accounts,
                     "maturity": (getattr(g, "maturity", None) or "").lower(),
                     "blurb": blurb_of(g),
                 }
@@ -1116,6 +1214,23 @@ def create_app(
             state = live_tests.stop()
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
+        return JSONResponse(state, status_code=202)
+
+    # NOTE: registered BEFORE the "/live-tests/{test_id}/start" catch-all so the
+    # literal "batch" path isn't swallowed as test_id="batch".
+    @app.post("/live-tests/batch/start")
+    async def live_tests_batch_start(submission: LiveTestBatchStart) -> JSONResponse:
+        """Queue several guide runs to execute back-to-back (one at a time)."""
+        if not submission.confirmed:
+            raise HTTPException(422, "confirm the live-account prerequisites before starting")
+        try:
+            state = live_tests.start_batch([item.model_dump() for item in submission.items])
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
         return JSONResponse(state, status_code=202)
 
     @app.post("/live-tests/{test_id}/start")
@@ -1354,10 +1469,20 @@ def create_app(
             "scenarios": len({trace.behavior_id for trace in traces if trace.behavior_id}),
             "duration_seconds": duration_seconds,
         }
+        # A run is stoppable only when it is THE live test the controller is
+        # currently driving — otherwise /live-tests/stop would target the wrong
+        # process (or none). Gate the Stop button on that, not just "active".
+        _live = live_tests.snapshot()
+        is_stoppable = bool(
+            run_is_active(run)
+            and _live.get("run_id") == run.id
+            and _live.get("status") in {"starting", "running", "stopping"}
+        )
         return {
             "run": run,
             "run_name": run_display_name(run),
             "surface_name": target_identity(run.target_name)[2],
+            "is_stoppable": is_stoppable,
             "run_metrics": run_metrics,
             "traces": traces,
             "heatmap": heatmap,
@@ -1622,6 +1747,21 @@ def create_app(
         # so the template can render the typed-signal panel alongside
         # the existing judge-scores table.
         signals = list_signals_for_trace(session, trace_id)
+        # Per-turn signal highlighting: colour the exact text each fired signal
+        # matched, in place in the conversation. Each turn is its own trace, so
+        # load its signals and re-apply the matched patterns to the reply/thoughts.
+        highlights: dict[str, dict[str, str]] = {}
+        for _turn in node_turns:
+            _sigs = (
+                signals
+                if _turn.trace_id == trace_id
+                else list_signals_for_trace(session, _turn.trace_id)
+            )
+            _rp, _tp = _signal_highlight_patterns(_sigs)
+            highlights[_turn.trace_id] = {
+                "response": _highlight_html(_turn.response, _rp),
+                "thoughts": _highlight_html(_turn.thoughts, _tp),
+            }
         return templates.TemplateResponse(
             request,
             "traces/show.html",
@@ -1631,6 +1771,7 @@ def create_app(
                 "full_response": full_response,
                 "node_turns": node_turns,
                 "signals": signals,
+                "highlights": highlights,
             },
         )
 
@@ -2253,12 +2394,6 @@ def create_app(
             raise HTTPException(404, f"surface {target_name!r} has no traces")
         return templates.TemplateResponse(request, "surfaces/_panel.html", ctx)
 
-    @app.get("/references", response_class=HTMLResponse)
-    async def references_index(request: Request) -> Response:
-        from advtest_ext.dashboard.references import parse_bibfile
-
-        return templates.TemplateResponse(request, "references.html", {"entries": parse_bibfile()})
-
     @app.get("/reports", response_class=HTMLResponse)
     async def reports_index(
         request: Request,
@@ -2306,9 +2441,12 @@ def create_app(
         date_from: str | None = None,
         date_to: str | None = None,
         run_id: str | None = None,
+        finding_id: str | None = None,
+        recipient: str | None = Query(default=None, max_length=160),
+        author: str | None = Query(default=None, max_length=160),
+        contact: str | None = Query(default=None, max_length=254),
     ) -> Response:
         from advtest_ext.dashboard.report import (
-            WEASYPRINT_INSTALLED,
             build_findings_report_context,
         )
 
@@ -2321,8 +2459,12 @@ def create_app(
             date_from=date_from,
             date_to=date_to,
             run_id=run_id,
+            finding_id=finding_id,
+            recipient=recipient,
+            author=author,
+            contact=contact,
         )
-        ctx["pdf_available"] = WEASYPRINT_INSTALLED
+        ctx["pdf_available"] = True
         return templates.TemplateResponse(request, "reports/document.html", ctx)
 
     @app.get("/reports/view.pdf")
@@ -2336,20 +2478,15 @@ def create_app(
         date_from: str | None = None,
         date_to: str | None = None,
         run_id: str | None = None,
+        finding_id: str | None = None,
+        recipient: str | None = Query(default=None, max_length=160),
+        author: str | None = Query(default=None, max_length=160),
+        contact: str | None = Query(default=None, max_length=254),
     ) -> Response:
         from advtest_ext.dashboard.report import (
-            WEASYPRINT_INSTALLED,
             build_findings_report_context,
-            render_pdf,
         )
 
-        if not WEASYPRINT_INSTALLED:
-            return PlainTextResponse(
-                "PDF rendering requires the optional 'pdf' extra:\n"
-                "    poetry install --extras pdf\n"
-                "The HTML version is available at /reports/view.",
-                status_code=501,
-            )
         ctx = build_findings_report_context(
             session,
             title=title,
@@ -2359,14 +2496,21 @@ def create_app(
             date_from=date_from,
             date_to=date_to,
             run_id=run_id,
+            finding_id=finding_id,
+            recipient=recipient,
+            author=author,
+            contact=contact,
         )
         ctx["pdf_available"] = True
-        html = templates.get_template("reports/document.html").render(request=request, **ctx)
-        pdf_bytes = render_pdf(html, base_url=str(_TEMPLATE_DIR))
+        from advtest_ext.dashboard.disclosure_pdf import render_disclosure_pdf
+
+        pdf_bytes = render_disclosure_pdf(ctx)
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": 'inline; filename="fission-findings-report.pdf"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="fission-{ctx["report_id"]}.pdf"'
+            },
         )
 
     @app.get("/settings", response_class=HTMLResponse)

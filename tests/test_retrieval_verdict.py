@@ -130,7 +130,7 @@ def test_verdict_french_override_fires() -> None:
     )
     assert v.french
     assert v.retrieved
-    assert v.any_injection
+    assert not v.any_injection
 
 
 def test_verdict_handshake_token_is_strongest_persona_signal() -> None:

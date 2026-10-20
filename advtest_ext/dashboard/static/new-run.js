@@ -1,10 +1,11 @@
 /* ============================================================================
    New-run launcher — a centred modal over the Runs list.
 
-   Choose a Workspace surface (left), pick single- or multi-app, choose a guide
-   for that surface, set the tree-search width, and launch. Options come from
-   /live-tests/options (guides keyed by surface, flagged single/multi-app, each
-   with a one-line blurb). Every launch runs the guided-workspace workflow with
+   Choose a Workspace surface (left), pick single-workspace or across-workspaces
+   (whether the run drives a second account), choose a guide for that surface,
+   set the tree-search width, and launch. Options come from /live-tests/options
+   (guides keyed by surface, flagged single- vs across-workspaces, each with a
+   one-line blurb). Every launch runs the guided-workspace workflow with
    the chosen guide and returns to the new run's live page. The <a href="/runs/
    new"> still works with no JS — this only intercepts the click.
    ============================================================================ */
@@ -20,6 +21,9 @@
   var errEl = document.getElementById("nr-error");
   var lockedEl = document.getElementById("nr-locked");
   var launchBtn = document.getElementById("nr-launch");
+  var addBtn = document.getElementById("nr-add");
+  var queueEl = document.getElementById("nr-queue");
+  var queue = []; // [{playbook,label,branching_factor,max_depth,max_nodes_per_seed}]
 
   var GUIDED_WORKFLOW = "guided-workspace-playbook";
   var ICONS = {
@@ -27,8 +31,8 @@
     slides: "google-slides", drive: "google-drive", calendar: "google-calendar",
   };
 
-  var options = null; // { enabled, guides:[{id,title,surface,surface_label,multi_app,maturity,blurb}] }
-  var mode = "single"; // "single" | "multi"
+  var options = null; // { enabled, guides:[{id,title,surface,surface_label,multi_workspace,second_accounts,maturity,blurb}] }
+  var mode = "single"; // "single" | "multi"  (single-workspace | across-workspaces)
   var workspace = null; // surface key
   var guideId = null;
 
@@ -42,6 +46,8 @@
   // ---- open / close -------------------------------------------------------
   function open() {
     showError("");
+    queue = [];
+    renderQueue();
     dialog.showModal();
     if (options) return;
     wsEl.innerHTML = "";
@@ -50,7 +56,7 @@
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (data) { options = data; init(); })
       .catch(function () {
-        cfgEl.innerHTML = '<p class="ld-loading">Could not load run options. <a href="/runs/new">Open the full launcher →</a></p>';
+        cfgEl.innerHTML = '<p class="ld-loading">Could not load run options. </p>';
       });
   }
   function close() { dialog.close(); }
@@ -64,7 +70,7 @@
 
   // ---- data helpers -------------------------------------------------------
   function guidesFor(m) {
-    return options.guides.filter(function (g) { return !!g.multi_app === (m === "multi"); });
+    return options.guides.filter(function (g) { return !!g.multi_workspace === (m === "multi"); });
   }
   function surfacesFor(m) {
     var seen = {}, order = [];
@@ -111,15 +117,15 @@
     var modeToggle =
       '<div class="ld-modes" role="tablist" aria-label="Scope">' +
       '<button type="button" role="tab" class="ld-mode' + (mode === "single" ? " on" : "") +
-      '" data-mode="single" aria-selected="' + (mode === "single") + '">Single app</button>' +
+      '" data-mode="single" aria-selected="' + (mode === "single") + '">Single workspace</button>' +
       '<button type="button" role="tab" class="ld-mode' + (mode === "multi" ? " on" : "") +
-      '" data-mode="multi" aria-selected="' + (mode === "multi") + '">Multi app</button></div>';
+      '" data-mode="multi" aria-selected="' + (mode === "multi") + '">Across workspaces</button></div>';
 
     if (!guides.length) {
       cfgEl.innerHTML =
         modeToggle +
-        '<p class="ld-empty">No ' + (mode === "multi" ? "multi-app" : "single-app") +
-        " guides for this workspace yet.</p>";
+        '<p class="ld-empty">No ' + (mode === "multi" ? "cross-workspace" : "single-workspace") +
+        " guides for this surface yet.</p>";
       launchBtn.disabled = true;
       return;
     }
@@ -156,7 +162,12 @@
     var el = document.getElementById("nr-blurb");
     if (!el) return;
     var g = options.guides.filter(function (x) { return x.id === guideId; })[0];
-    el.textContent = g ? g.blurb : "";
+    var text = g ? g.blurb : "";
+    if (g && g.second_accounts && g.second_accounts.length) {
+      text += (text ? "  ·  " : "") + "Across workspaces: needs a second signed-in account (" +
+        g.second_accounts.join(", ") + ").";
+    }
+    el.textContent = text;
   }
 
   // Delegated: workspace pick + mode switch (both re-render the panel).
@@ -177,38 +188,100 @@
     return v;
   }
 
-  // ---- launch -------------------------------------------------------------
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    if (!options || !options.enabled || !guideId) { showError("Choose a guide to run."); return; }
-    showError("");
-    var body = { confirmed: true, playbook: guideId };
-    try {
-      body.branching_factor = intInRange("nr-bf", 1, 5, "Branching");
-      body.max_depth = intInRange("nr-depth", 1, 12, "Depth");
-      body.max_nodes_per_seed = intInRange("nr-nodes", 1, 400, "Node budget");
-    } catch (msg) { showError(msg); return; }
-    launchBtn.disabled = true;
-    launchBtn.textContent = "Launching…";
-    fetch("/live-tests/" + GUIDED_WORKFLOW + "/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
+  // ---- queue + launch -----------------------------------------------------
+  // Read the current form into one run config (validated), or throw a message.
+  function readConfig() {
+    if (!options || !options.enabled || !guideId) throw "Choose a guide to run.";
+    var g = options.guides.filter(function (x) { return x.id === guideId; })[0];
+    return {
+      playbook: guideId,
+      label: g ? g.title : guideId,
+      branching_factor: intInRange("nr-bf", 1, 5, "Branching"),
+      max_depth: intInRange("nr-depth", 1, 12, "Depth"),
+      max_nodes_per_seed: intInRange("nr-nodes", 1, 400, "Node budget"),
+    };
+  }
+
+  // Strip the display-only label before sending to the server models.
+  function toItem(cfg) {
+    return {
+      playbook: cfg.playbook,
+      branching_factor: cfg.branching_factor,
+      max_depth: cfg.max_depth,
+      max_nodes_per_seed: cfg.max_nodes_per_seed,
+    };
+  }
+
+  function renderQueue() {
+    if (!queueEl) return;
+    if (!queue.length) {
+      queueEl.hidden = true;
+      queueEl.innerHTML = "";
+      launchBtn.textContent = "Launch run";
+      return;
+    }
+    queueEl.hidden = false;
+    queueEl.innerHTML =
+      '<p class="ld-queue-h">Queued (' + queue.length + ") — runs execute one after another</p>" +
+      queue.map(function (it, i) {
+        return '<div class="ld-queue-item"><span class="ld-queue-label">' + esc(it.label) +
+          '</span><button type="button" class="ld-queue-x" data-q="' + i + '" aria-label="Remove from queue">&times;</button></div>';
+      }).join("");
+    launchBtn.textContent = "Launch " + queue.length + " run" + (queue.length > 1 ? "s" : "");
+  }
+
+  if (addBtn) {
+    addBtn.addEventListener("click", function () {
+      var cfg;
+      try { cfg = readConfig(); } catch (msg) { showError(msg); return; }
+      showError("");
+      queue.push(cfg);
+      renderQueue();
+    });
+  }
+  if (queueEl) {
+    queueEl.addEventListener("click", function (e) {
+      var x = e.target.closest("[data-q]");
+      if (!x) return;
+      queue.splice(parseInt(x.getAttribute("data-q"), 10), 1);
+      renderQueue();
+    });
+  }
+
+  function launchFailed(msg) {
+    showError(msg);
+    launchBtn.disabled = false;
+    renderQueue(); // restore the correct button label
+  }
+
+  function post(url, payload, pick) {
+    fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       .then(function (r) { return r.json().then(function (p) { return { ok: r.ok, payload: p }; }); })
       .then(function (res) {
-        if (!res.ok) {
-          showError(res.payload.detail || "Could not launch the run.");
-          launchBtn.disabled = false;
-          launchBtn.textContent = "Launch run";
-          return;
-        }
-        window.location = res.payload.run_id ? "/runs/" + res.payload.run_id : "/runs/new";
+        if (!res.ok) { launchFailed(res.payload.detail || "Could not launch."); return; }
+        var runId = pick(res.payload);
+        window.location = runId ? "/runs/" + runId : "/runs";
       })
-      .catch(function () {
-        showError("Could not reach the server. Try the full launcher.");
-        launchBtn.disabled = false;
-        launchBtn.textContent = "Launch run";
+      .catch(function () { launchFailed("Could not reach the server."); });
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    launchBtn.disabled = true;
+    launchBtn.textContent = "Launching…";
+    if (queue.length) {
+      // Queue several guides to run back-to-back (batch).
+      post("/live-tests/batch/start", { confirmed: true, items: queue.map(toItem) }, function (p) {
+        var first = (p.batch || [])[0];
+        return first && first.run_id;
       });
+      return;
+    }
+    // Single run: launch the currently-selected guide now.
+    var cfg;
+    try { cfg = readConfig(); } catch (msg) { showError(msg); launchBtn.disabled = false; launchBtn.textContent = "Launch run"; return; }
+    showError("");
+    var body = toItem(cfg); body.confirmed = true;
+    post("/live-tests/" + GUIDED_WORKFLOW + "/start", body, function (p) { return p.run_id; });
   });
 })();

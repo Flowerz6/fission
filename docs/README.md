@@ -1,8 +1,12 @@
 # Fission docs — index
 
-> The front door. Every doc in `docs/` is listed here with one line on what it's for and
-> when to read it. If you're returning to this project after time away, read the four
-> **Start here** docs and nothing else until you need more.
+> The front door. Every doc in `docs/` is listed here with one line on what it's for.
+> Returning after time away? Read the three **Start here** docs and the architecture
+> onboarding guide; reach for the rest only when you need the depth.
+
+> 🧭 **New engineer?** The canonical onboarding layer is
+> **[architecture/README.md](architecture/README.md)** — the system stage by stage, with
+> diagrams. Start there.
 
 ## Start here (operating the tool)
 
@@ -11,57 +15,44 @@
 | [GETTING_STARTED.md](GETTING_STARTED.md) | You want to install, configure, and run your first attack + dashboard. |
 | [ACCOUNTS_AND_AUTH.md](ACCOUNTS_AND_AUTH.md) | You need to sign in the Google/Outlook test accounts so live runs work. |
 | [CODEBASE_MAP.md](CODEBASE_MAP.md) | You need to find the code that does X, or reorient in the tree. |
-| [MILESTONES.md](MILESTONES.md) | You want the ordered plan — what to build next, as checkable steps. |
 
-## Runbooks (specific live-run recipes)
-
-| Doc | For |
-|---|---|
-| [SHEETS_UI_MODE_RUNBOOK.md](SHEETS_UI_MODE_RUNBOOK.md) | Running the Sheets skill-leak guide live against Gemini, step by step. |
-| [../scripts/README_DEMO.md](../scripts/README_DEMO.md) | The multi-app cross-inbox demo (`make fission`) operator runbook. |
-| [PILOT_DELIVERY_FORMAT.md](PILOT_DELIVERY_FORMAT.md) | How pilot deliverables are shaped for a client. |
-| [PILOT_ADAPTER_ACTIONS.md](PILOT_ADAPTER_ACTIONS.md) · [PILOT_ADAPTER_BUILD_PLAN.md](PILOT_ADAPTER_BUILD_PLAN.md) | Pilot adapter action surface + build plan. |
-
-## Architecture & design (how it works)
+## Architecture (how it fits together)
 
 | Doc | For |
 |---|---|
-| [FISSION_HLD.md](FISSION_HLD.md) | The high-level design — one self-contained map of components, data, flows, interfaces, and decisions. |
-| [FISSION_ARCHITECTURE_AND_PRODUCTION.md](FISSION_ARCHITECTURE_AND_PRODUCTION.md) | The full end-to-end architecture and the gap to production. |
-| [FISSION_SCALABILITY_REVIEW.md](FISSION_SCALABILITY_REVIEW.md) | Code-grounded review of the deploy blockers (P0/P1/P2) with file:line evidence and a fix order. |
-| [COMPETITIVE_LANDSCAPE.md](COMPETITIVE_LANDSCAPE.md) | Research on Silmaril and Straiker vs Fission: what they do, our edges, strategic read. |
-| [PATH_TO_COMPETITIVE_PARITY.md](PATH_TO_COMPETITIVE_PARITY.md) | What's missing to compete at their standard: capability gaps + a sequenced roadmap. |
-| [FISSION_MEASUREMENT_SPINE.md](FISSION_MEASUREMENT_SPINE.md) | The oracle grading + ASR ± CI measurement design. |
-| [FISSION_FLYWHEEL.md](FISSION_FLYWHEEL.md) | The self-improvement loop (the "(c)" thesis). |
-| [FISSION_DIAGRAMS.md](FISSION_DIAGRAMS.md) · `fission_*.dot` | Diagrams and their sources. |
+| [architecture/README.md](architecture/README.md) | The onboarding guide — the whole system, stage by stage (01–09), with diagrams. |
+| [INTEGRATION_CONTRACT.md](INTEGRATION_CONTRACT.md) | The typed measurement-layer contract (`AttackTrace`/signals/verdicts) between the orchestrator and the oracle. |
+| [FISSION_MEASUREMENT_SPINE.md](FISSION_MEASUREMENT_SPINE.md) | The oracle grading + ASR ± CI measurement design the code implements (cited by `core/`, `storage/`, `judges/`). |
+
+## Authoring attacks & seeds
+
+| Doc | For |
+|---|---|
 | [FISSION_GUIDE_FORMAT.md](FISSION_GUIDE_FORMAT.md) | The guide (attack recipe) schema. |
+| [SEED_AUTHORING_GUIDE.md](SEED_AUTHORING_GUIDE.md) | How to author seeds. |
+| [SEED_GENERATOR_PLAN.md](SEED_GENERATOR_PLAN.md) | The seed-generator design + coverage worklist toward the pilot set. |
+| [SEARCH_TREE_DESIGN.md](SEARCH_TREE_DESIGN.md) | The attack search tree: category fan-out, cover/payload split, run-level dedup. |
+| [MUTATION_AXES_TAXONOMY.md](MUTATION_AXES_TAXONOMY.md) | The mutation-axis taxonomy the attack search fans out over. |
 
-## Product roadmap (what to build, and why)
+## Running live & delivering
 
 | Doc | For |
 |---|---|
-| [FISSION_ROADMAP.md](FISSION_ROADMAP.md) | The phased, GO/NO-GO-gated plan to the full vision. |
-| [FISSION_PHASE_TASKS.md](FISSION_PHASE_TASKS.md) | Concrete engineering tasks per phase, against real files. |
-| [FISSION_BUILD_MAP.md](FISSION_BUILD_MAP.md) | Target architecture overlaid on what's built today (🟩/🟨/🟥). |
-| [FISSION_IMPLEMENTATION_PLAN.md](FISSION_IMPLEMENTATION_PLAN.md) | Implementation detail behind the roadmap. |
-| [FISSION_DEPLOYMENT.md](FISSION_DEPLOYMENT.md) | Deployment topology and the browser-farm effort. |
+| [SHEETS_UI_MODE_RUNBOOK.md](SHEETS_UI_MODE_RUNBOOK.md) | Running a Sheets guide live against the Gemini side panel, step by step. |
+| [WS3_LIVE_VALIDATION_RUNBOOK.md](WS3_LIVE_VALIDATION_RUNBOOK.md) | The live-account validation runbook. |
+| [../scripts/README_DEMO.md](../scripts/README_DEMO.md) | The multi-app cross-inbox IPI flow — operator runbook. |
+| [PILOT_DELIVERY_FORMAT.md](PILOT_DELIVERY_FORMAT.md) | How pilot deliverables are shaped for a client. |
 
-> **[MILESTONES.md](MILESTONES.md) reconciles all of the above** into one ordered, solo-sized
-> checklist. Use it as the driver; use these for depth.
+## Results & verification
+
+| Doc | For |
+|---|---|
+| [SUCCESS_VERDICTS.md](SUCCESS_VERDICTS.md) | Full-corpus, payload-grounded success-label verification. |
+| [SUCCESSFUL_ATTACKS_REPORT.md](SUCCESSFUL_ATTACKS_REPORT.md) | Confirmed successful attacks on Gemini-in-Workspace. |
 
 ## Research grounding
 
 | Doc | For |
 |---|---|
 | [FOUNDATIONS.md](FOUNDATIONS.md) | Threat model, the papers/benchmarks this aligns with, technique choices. |
-| [FISSION_ATTACK_LANDSCAPE.md](FISSION_ATTACK_LANDSCAPE.md) | Survey of the attack space. |
-| [RED_TEAM_RESEARCH_UPGRADES.md](RED_TEAM_RESEARCH_UPGRADES.md) · [TAP_ATTACK_SUCCESS_UPGRADES.md](TAP_ATTACK_SUCCESS_UPGRADES.md) | Research-driven upgrades to attacks/scoring. |
-| [RED_TEAM_VARIANT_DIVERSITY.md](RED_TEAM_VARIANT_DIVERSITY.md) | Structured TAP variant generation (typed operators + novelty gate) vs mode collapse; 2024–2026 lit + roadmap. |
-| [SEED_AUTHORING_GUIDE.md](SEED_AUTHORING_GUIDE.md) · [SEED_AUTHOR_REPORTING.md](SEED_AUTHOR_REPORTING.md) | Authoring seeds and reporting on them. |
 | [../references.bib](../references.bib) | Citations referenced from code and docs. |
-
-## Repo productionisation (clean + auditable)
-
-A separate track from the product roadmap. See [production/README.md](production/README.md)
-for the phase map. Phases 0–5 cover current-state audit, repo hygiene, governance & docs,
-quality & CI, release & ops, and auditability & compliance.

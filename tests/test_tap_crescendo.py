@@ -50,7 +50,12 @@ def _behavior() -> Behavior:
 
 
 def _judge() -> RetrievalVerdictJudge:
-    return RetrievalVerdictJudge(entity=ENTITY, canary=CANARY, handshake_token=HANDSHAKE)
+    return RetrievalVerdictJudge(
+        entity=ENTITY,
+        canary=CANARY,
+        handshake_token=HANDSHAKE,
+        accept_output_markers=True,
+    )
 
 
 class _FakeAttacker:
@@ -232,7 +237,9 @@ def test_strategist_system_is_guide_driven_with_a_brief() -> None:
 
 @pytest.mark.asyncio
 async def test_root_converges_stops_tree() -> None:
-    attack, target = _attack(_CONVERGE)
+    # stop_on_success is no longer the default (runs keep branching after a win to
+    # find more variants); this test exercises the opt-in early-exit feature.
+    attack, target = _attack(_CONVERGE, stop_on_success=True)
     attempts = await _collect(attack, target)
     assert len(attempts) == 1  # converged on turn 1 of the root, no children
     meta = attempts[0].metadata["tap_crescendo"]
@@ -323,18 +330,23 @@ async def test_confirm_judge_must_agree_to_converge() -> None:
     node when the LLM judge agrees. If it rejects, the search keeps going."""
     # Heuristic _CONVERGE scores 1.0 at the root, but the confirm judge
     # rejects → the node is NOT a success → the tree keeps exploring.
+    # stop_on_success opt-in so the confirm judge is the ONLY thing deciding
+    # whether the root converges and halts the tree.
     attack, target = _attack(
         _CONVERGE,
         max_depth=1,
         keep_top=1,
         node_stuck_patience=1,
         node_max_turns=2,
+        stop_on_success=True,
         confirm_judge=_ConfirmJudge(approve=False),
     )
     attempts = await _collect(attack, target)
     assert set(_nodes(attempts)) != {"n0"}  # did NOT stop at the root
     # When the confirm judge approves, the root converges immediately.
-    attack2, target2 = _attack(_CONVERGE, max_depth=1, confirm_judge=_ConfirmJudge(approve=True))
+    attack2, target2 = _attack(
+        _CONVERGE, max_depth=1, stop_on_success=True, confirm_judge=_ConfirmJudge(approve=True)
+    )
     attempts2 = await _collect(attack2, target2)
     assert set(_nodes(attempts2)) == {"n0"}  # stopped at the confirmed root
 
@@ -846,14 +858,18 @@ async def test_guide_partial_signal_raises_pruning_score_and_is_recorded() -> No
 
 
 @pytest.mark.asyncio
-async def test_guide_stop_signal_converges_root_without_children() -> None:
+async def test_guide_output_marker_corroborates_without_proving_success() -> None:
     attack, target = _attack(
         "STOP-MARK",
+        max_depth=0,
+        node_stuck_patience=1,
         stop_signal_specs=[{"kind": "token_appears", "name": "stop_mark", "token": "STOP-MARK"}],
     )
     attempts = await _collect(attack, target)
-    assert len(attempts) == 1
-    assert attempts[0].metadata["tap_crescendo"]["guide_signals"]["stop"] == ["stop_mark"]
+    assert len(attempts) == 2
+    signals = attempts[0].metadata["tap_crescendo"]["guide_signals"]
+    assert signals["stop"] == []
+    assert signals["corroborating"] == ["stop_mark"]
 
 
 @pytest.mark.asyncio
@@ -1083,13 +1099,13 @@ async def test_typed_scheduler_rotates_across_full_mutation_surface() -> None:
                 return await super().complete(messages, **kw)
             dimension = next(
                 name
-                for name in ("persona", "turn_order", "escalation_speed")
+                for name in ("persona", "persuasion_principle", "escalation_trajectory")
                 if f"dimension '{name}'" in user
             )
             operator_name = {
                 "persona": "legacy-0",
-                "turn_order": "legacy-1",
-                "escalation_speed": "legacy-2",
+                "persuasion_principle": "legacy-1",
+                "escalation_trajectory": "legacy-2",
             }[dimension]
             return SimpleNamespace(
                 text=(
@@ -1107,7 +1123,7 @@ async def test_typed_scheduler_rotates_across_full_mutation_surface() -> None:
         attacker=_DimensionAwareAttacker(),  # type: ignore[arg-type]
         judge=_judge(),
         entity=ENTITY,
-        mutation_surface=["persona labels", "turn order", "escalation speed"],
+        mutation_surface=["persona labels", "the persuasion principle", "escalation trajectory"],
         invariants=["keep mechanism"],
         semantic_validation_required=False,
         branching_factor=1,
@@ -1122,4 +1138,33 @@ async def test_typed_scheduler_rotates_across_full_mutation_surface() -> None:
         for a in attempts
         if a.metadata["tap_crescendo"]["turn"] == 1 and a.metadata["tap_crescendo"]["depth"] > 0
     ]
-    assert dimensions == ["persona", "turn_order", "escalation_speed"]
+    assert dimensions == ["persona", "persuasion_principle", "escalation_trajectory"]
+
+
+@pytest.mark.asyncio
+async def test_turn_score_sem_is_descriptive_and_not_repeatability_uncertainty() -> None:
+    attack, target = _attack(_LOW, max_depth=0, node_max_turns=2)
+    node = {"id": "n0", "parent_id": None, "depth": 0, "strategy": "control"}
+    async for _attempt in attack._run_node(_behavior(), target, node):
+        pass
+    assert node["turn_score_sem"] == 0.0
+    assert "score_uncertainty" not in node
+    assert (
+        "not repeatability uncertainty" in attack.search_report()["turn_score_sem_interpretation"]
+    )
+
+
+def test_tap_document_evidence_excludes_unchanged_planted_content() -> None:
+    from types import SimpleNamespace
+
+    response = SimpleNamespace(
+        text="No change made.",
+        raw={"document_body": "SOURCE_ONLY_MARKER"},
+    )
+    assert "SOURCE_ONLY_MARKER" not in TapCrescendoAttack._full_text(response)
+    response.raw["document_body_before"] = "SOURCE_ONLY_MARKER"
+    assert "SOURCE_ONLY_MARKER" not in TapCrescendoAttack._full_text(response)
+    response.raw["document_body"] += "\nNEW_OUTPUT_MARKER"
+    text = TapCrescendoAttack._full_text(response)
+    assert "NEW_OUTPUT_MARKER" in text
+    assert "SOURCE_ONLY_MARKER" not in text

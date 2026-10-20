@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import os
 import re
 import uuid
 from pathlib import Path
@@ -93,6 +94,8 @@ class GeminiDocsMultiTurnTarget(DocumentTarget):
         invoke_fn: Any = None,
         doc_factory: Any = None,
         doc_deleter: Any = None,
+        accept_suggestions: bool = False,
+        confirm_actions: bool = False,
     ) -> None:
         super().__init__()
         self._output_dir = Path(output_dir)
@@ -115,6 +118,12 @@ class GeminiDocsMultiTurnTarget(DocumentTarget):
         self._invoke_fn = invoke_fn
         self._doc_factory = doc_factory
         self._doc_deleter = doc_deleter
+        # When True, after each turn play the human-in-the-loop clicks a
+        # write-back exfil needs: accept Gemini's suggested edit (commit the
+        # proposed text into the doc body) and/or clear an action-permission
+        # gate. Off by default so read-only/side-panel guides are unaffected.
+        self._accept_suggestions = accept_suggestions
+        self._confirm_actions = confirm_actions
         self._ctx: NativeContext | None = None
         self._owns_doc = False
         self._turn = 0
@@ -192,14 +201,21 @@ class GeminiDocsMultiTurnTarget(DocumentTarget):
         reset = self._turn == 0
         trace_id = f"{self._trace_prefix}-c{self._conversation}-t{self._turn + 1}"
         invoke_fn = self._invoke_fn or self._default_invoke_fn()
-        response: Response = await invoke_fn(
-            document_id=document_id,
-            user_prompt=user_prompt,
-            trace_id=trace_id,
-            output_dir=self._output_dir,
-            external_page=page,
-            reset_conversation=reset,
-        )
+        invoke_kwargs: dict[str, Any] = {
+            "document_id": document_id,
+            "user_prompt": user_prompt,
+            "trace_id": trace_id,
+            "output_dir": self._output_dir,
+            "external_page": page,
+            "reset_conversation": reset,
+        }
+        # Only forward the write-back flags when opted in, so injected test
+        # doubles with a fixed signature keep working unchanged.
+        if self._accept_suggestions:
+            invoke_kwargs["accept_suggestions"] = True
+        if self._confirm_actions:
+            invoke_kwargs["confirm_actions"] = True
+        response: Response = await invoke_fn(**invoke_kwargs)
         self._turn += 1
         # Stamp turn provenance for downstream scoring / the dashboard.
         try:
@@ -322,7 +338,16 @@ class GeminiDocsMultiTurnTarget(DocumentTarget):
             await self.setup()
         assert self._session is not None
         page = await self._session.ensure_page()
-        await page.goto("https://docs.google.com/document/create")
+        # Account-scoped create URL. A bare /document/create returns Google's
+        # "400. That's an error" page when the Chrome profile has MORE THAN ONE
+        # Google account signed in — the account-less URL is ambiguous, so Google
+        # rejects it. Scoping to /u/<n>/ picks a specific signed-in account and
+        # also works for single-account profiles. Override the index via
+        # ADVTEST_GOOGLE_ACCOUNT_INDEX when the victim isn't the first account.
+        idx = (os.environ.get("ADVTEST_GOOGLE_ACCOUNT_INDEX", "0") or "0").strip()
+        if not idx.isdigit():
+            idx = "0"
+        await page.goto(f"https://docs.google.com/document/u/{idx}/create")
         # The create endpoint redirects to the new doc; poll the URL for its id.
         for _ in range(40):  # ~12s
             m = re.search(r"/document/d/([A-Za-z0-9_-]{20,})", getattr(page, "url", "") or "")
@@ -331,7 +356,9 @@ class GeminiDocsMultiTurnTarget(DocumentTarget):
             await asyncio.sleep(0.3)
         raise RuntimeError(
             "browser-mint: no /document/d/<id> URL after navigating to "
-            "/document/create — is the Playwright profile logged into Google?"
+            f"/document/u/{idx}/create. Either the Playwright profile is not "
+            "logged into Google, or the victim is a different account index — "
+            "set ADVTEST_GOOGLE_ACCOUNT_INDEX to the right /u/<n> (0, 1, 2, …)."
         )
 
     async def _create_doc(self) -> str:

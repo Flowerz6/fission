@@ -11,12 +11,15 @@ optional interop extra (a single `TYPE_CHECKING` import).
 
 ## Where do I start?
 
-New here, or returning after a break? Read these four, in order:
+New here, or returning after a break? **Start with the
+[Architecture Onboarding Guide](docs/architecture/README.md)** — how the whole system fits
+together, stage by stage, with diagrams. That's the canonical onboarding layer.
+
+Then, to *operate* the tool, read these three, in order:
 
 1. [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) — install, configure, run your first attack + dashboard.
 2. [docs/ACCOUNTS_AND_AUTH.md](docs/ACCOUNTS_AND_AUTH.md) — sign in the Google/Outlook test accounts.
 3. [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md) — find your way around the code.
-4. [docs/MILESTONES.md](docs/MILESTONES.md) — the ordered plan of what to build next.
 
 [docs/README.md](docs/README.md) indexes every doc.
 
@@ -36,7 +39,7 @@ advtest_ext/        the package
   dashboard/        FastAPI + HTMX run/finding/tree views + reports
 tests/              unit tests (no GPU / no live LLM by default)
 configs/            run + provider YAML configs
-docs/               FOUNDATIONS.md, FISSION_*.md (design/research), references.bib
+docs/               architecture/ onboarding, design specs, runbooks, references.bib
 scripts/            operational + demo scripts
 ```
 
@@ -60,5 +63,5 @@ poetry run advtest --help      # CLI
 - Adversarial seed content lives in `advtest_ext/**/*.yaml` (payloads,
   demonstrations, templates). Handle per engagement policy.
 - Run artifacts (`out/`, `*.db`, exports) are git-ignored by design.
-- Design + research docs are in `docs/` — start with `docs/FOUNDATIONS.md` and
-  `docs/FISSION_ATTACK_LANDSCAPE.md`.
+- Design + research docs are in `docs/` — start with
+  [docs/architecture/README.md](docs/architecture/README.md) and `docs/FOUNDATIONS.md`.

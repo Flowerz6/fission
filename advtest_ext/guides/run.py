@@ -43,7 +43,7 @@ _APP_TO_TARGET_NAME: dict[str, str] = {
     "google_sheets": "google_sheets_multiturn",
     "google_slides": "google_slides_multiturn",
     "google_calendar": "google_calendar_multiturn",
-    "gmail": "gmail",
+    "gmail": "gmail_multiturn",
 }
 
 
@@ -167,8 +167,13 @@ async def run_guide(
     provider_config: str | Path,
     target_name: str | None = None,
     target_options: dict[str, Any] | None = None,
-    orchestrator_judge_name: str = "retrieval_verdict",
+    # The rubric-grounded IPI judge (attended/complied/harmful_effect), which
+    # scores against the guide's human-authored success.rubric — the right
+    # oracle for skill-leak / exfil / action guides. The old default
+    # (retrieval_verdict) is a retrieval-IPI heuristic that under-calls those.
+    orchestrator_judge_name: str = "decomposed_ipi",
     confirm_with_llm_judge: bool = True,
+    confirm_judge_name: str = "decomposed_ipi",
     attacker_roles: list[str] | None = None,
     planner_role: str | None = None,
     planner_roles: list[str] | None = None,
@@ -193,13 +198,13 @@ async def run_guide(
 ) -> RunResult:
     """Resolve live components from ``provider_config`` (the providers YAML) and
     run ``guide`` end-to-end. Mirrors the tap_crescendo CLI factory's judge
-    choices: a retrieval judge for the per-turn gradient and the LLM ipi_verdict
-    judge for confirmation. Drives a real target — use via ``scripts/run_guide.py``.
+    choices: a retrieval judge for the per-turn gradient and an LLM confirm
+    judge (``confirm_judge_name``, default ``decomposed_ipi``; pass ``jury`` for
+    a panel vote). Drives a real target — use via ``scripts/run_guide.py``.
     """
     # Imported lazily: these pull the live target/provider stack, which the pure
     # assembly path (and its tests) must not require.
     from advtest_ext._cli_factories import (
-        _ipi_verdict_judge_factory,
         _resolve_judge,
         _resolve_target,
         _retrieval_judge_from_opts,
@@ -310,6 +315,26 @@ async def run_guide(
                 cleanup_callback=mutation_cleanup_callback,
             ),
         )
+    if guide.environment_variants:
+        from advtest_ext.guides.environment import EnvironmentSeeder
+
+        # The staged host artifact id (bound into the target options during
+        # staging); the seeder re-writes it per node to match the pretext.
+        artifact_id = (
+            options.get("spreadsheet_id")
+            or options.get("sheet_id")
+            or options.get("document_id")
+            or options.get("doc_id")
+        )
+        if artifact_id:
+            attack_overrides.setdefault(
+                "environment_seeder",
+                EnvironmentSeeder(
+                    app=guide.target.app,
+                    artifact_id=str(artifact_id),
+                    variants=guide.environment_variants,
+                ),
+            )
     if verifier_quorum is not None:
         attack_overrides.setdefault("verifier_quorum", verifier_quorum)
     orchestrator = build_guide_run(
@@ -321,7 +346,7 @@ async def run_guide(
         planners=extra_planners,
         attack_judge=_retrieval_judge_from_opts({}),
         orchestrator_judge=_resolve_judge(orchestrator_judge_name),
-        confirm_judge=_ipi_verdict_judge_factory() if confirm_with_llm_judge else None,
+        confirm_judge=_resolve_judge(confirm_judge_name) if confirm_with_llm_judge else None,
         checker=checker,
         checkers=extra_checkers,
         budget=budget,

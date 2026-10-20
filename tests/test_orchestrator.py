@@ -295,12 +295,8 @@ class _MarkerTarget(DocumentTarget):
         return set()
 
 
-async def test_fired_signal_upgrades_verdict_to_success() -> None:
-    """Layered-oracle upgrade: the LLM judge scores LOW (refused), but a
-    deterministic signal fires on a planted marker in the response — so
-    the trace verdict is promoted to success. This is what lets one
-    shared judge ride on top of the signals without losing a signal's
-    win (e.g. the Docs system-prompt leak)."""
+async def test_fired_signal_only_lifts_verdict_to_partial() -> None:
+    """A marker match alone does not verify an unauthorized effect."""
     orch = GridOrchestrator(
         target=_MarkerTarget(),
         attacks=[_FixedAttack(name="atk", n_attempts=1)],
@@ -317,9 +313,8 @@ async def test_fired_signal_upgrades_verdict_to_success() -> None:
     )
     result = await orch.run()
     assert len(result.traces) == 1
-    # Judge alone would have classified this 'refused' (0.05 < 0.5);
-    # the fired signal upgrades it.
-    assert result.traces[0].verdict == "success"
+    # The marker corroborates exposure, but does not establish success.
+    assert result.traces[0].verdict == "partial"
     # The raw judge score is preserved for transparency.
     assert result.traces[0].judge_scores[0].score == 0.05
 

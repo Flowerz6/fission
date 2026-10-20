@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}target drift · advtest{% endblock %}
+{% block content %}
+<div class="page-head"><p class="eyebrow">Target-version drift</p><h1>Target drift</h1>
+<p>Per target_profile: fingerprint over time, calibrated drift alerts, and version-diff regression reports. Distinct from operational drift.</p></div>
+<ul class="td-profiles">
+{% for p in profiles %}
+  <li><a href="/target_drift/{{ p.token }}/heatmap">{{ p.model_label }} · {{ p.tenant_tier }} · {{ p.surface_config_hash }}</a>
+    — <a href="/target_drift/{{ p.token }}/alerts">alerts</a> · <a href="/target_drift/{{ p.token }}/status">status</a></li>
+{% else %}
+  <li>No target_profiles yet.</li>
+{% endfor %}
+</ul>
+{% endblock %}

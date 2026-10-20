@@ -28,6 +28,7 @@ from advtest_ext.adapters.calendar import recipe_ops as calendar_ops
 from advtest_ext.adapters.gmail import recipe_ops as gmail_ops
 from advtest_ext.adapters.google_docs import recipe_ops as docs_ops
 from advtest_ext.adapters.outlook import recipe_ops as outlook_ops
+from advtest_ext.adapters.sheets import recipe_ops as sheets_ops
 from advtest_ext.adapters.slides import recipe_ops as slides_ops
 from advtest_ext.core.recipe_operations import OperationRegistry
 
@@ -60,6 +61,10 @@ def default_operations() -> OperationRegistry:
     # Calendar-side operations (event title + description are the payload).
     registry.register("calendar", "create_event")(calendar_ops.create_event)
     registry.register("calendar", "type_prompt")(calendar_ops.type_prompt)
+
+    # Sheets: mint + seed a host spreadsheet so the conversation aligns with
+    # real on-grid content (no blank-sheet incoherence).
+    registry.register("sheets", "create_and_seed")(sheets_ops.create_and_seed)
 
     # Outlook-side operations — UI-mode email send, no OAuth gate.
     # Registered alongside (not instead of) gmail.send_email; a

@@ -279,7 +279,10 @@ async def _run(args: argparse.Namespace) -> int:
 
     out_dir = Path(args.output_dir).resolve()
     attacker = _load_attacker(args.attacker_role)
-    judge = RetrievalVerdictJudge(entity=ENTITY, canary=qf.CANARY, handshake_token=HANDSHAKE_TOKEN)
+    judge = RetrievalVerdictJudge(
+        entity=ENTITY, canary=qf.CANARY, handshake_token=HANDSHAKE_TOKEN,
+        accept_output_markers=True,
+    )
     behavior = _behavior()
 
     session = UiModeSession(profile_dir=resolve_profile_dir())

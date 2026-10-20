@@ -219,12 +219,9 @@ class TapChainAttack(AttackPlugin):
         n_turns: int,
         reason: str,
     ) -> AttackAttempt:
-        text = response.text or ""
-        # Fold in the doc body — Gemini often writes the persona/token
-        # into the document rather than the chat reply.
-        raw = getattr(response, "raw", None)
-        if isinstance(raw, dict) and isinstance(raw.get("document_body"), str):
-            text = f"{text}\n{raw['document_body']}"
+        from advtest_ext.judges.retrieval_verdict import generated_response_text
+
+        text = generated_response_text(response)[0]
         low = text.lower()
         v = build_verdict(
             full_text=text,

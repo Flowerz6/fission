@@ -4,7 +4,14 @@
     <div><h1>{{ run_name }} {% set state = run_state(run) %}<span class="pill {{ 'inactive' if state == 'interrupted' else state }}">{{ state|capitalize }}</span></h1>
       <p class="muted">{{ surface_name }} · {{ run_metrics.conversations }} conversation{{ '' if run_metrics.conversations == 1 else 's' }} · {{ run.started_at.strftime('%d %b %Y, %H:%M') if run.started_at else 'Start time not recorded' }}</p>
     </div>
-    <a class="btn-outline" href="/runs/{{ run.id }}/report?export=1">Export report</a>
+    <div class="run-header-actions">
+      {% if is_stoppable %}
+      <button type="button" class="btn-outline btn-stop" hx-post="/live-tests/stop" hx-swap="none"
+        hx-confirm="Stop this run? The in-progress exploration will end and the run is marked interrupted."
+        hx-on::after-request="window.location.reload()">Stop run</button>
+      {% endif %}
+      <a class="btn-outline" href="/runs/{{ run.id }}/report?export=1">Export report</a>
+    </div>
   </div>
   <dl class="run-summary-metrics">
     <div><dt>Attempts</dt><dd>{{ run_metrics.attempts }}</dd></div>

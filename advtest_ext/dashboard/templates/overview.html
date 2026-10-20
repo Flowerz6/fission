@@ -253,7 +253,7 @@
     {% else %}<div class="sub">no runs yet</div>{% endif %}
   </div>
   <div class="ov-actions">
-    <a class="ov-action primary" href="/runs/new">New run</a>
+    <a class="ov-action primary" href="/runs?new=1">New run</a>
     {% if latest %}<a class="ov-action" href="/runs/{{ latest.id }}">View latest run</a>{% endif %}
     <a class="ov-action" href="/findings">Review findings</a>
   </div>
