@@ -32,9 +32,7 @@ def snapshot_baseline(observer: WorkspaceObserver) -> TenantState:
     return observer.snapshot()
 
 
-def _resolve_status(
-    before: ObservationStatus, after: ObservationStatus
-) -> ObservationStatus:
+def _resolve_status(before: ObservationStatus, after: ObservationStatus) -> ObservationStatus:
     # A failure in either snapshot means we can't certify the delta.
     if before == "failed" or after == "failed":
         return "failed"

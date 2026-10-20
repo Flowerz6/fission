@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from advtest_ext.providers.base import ChatMessage, Provider
 from advtest_ext.strategy.library import Strategy, discover
@@ -80,9 +80,7 @@ class ScriptedDecider:
         try:
             return self._decisions[hit.sample.sample_key]
         except KeyError as exc:
-            raise KeyError(
-                f"no scripted decision for {hit.sample.sample_key}"
-            ) from exc
+            raise KeyError(f"no scripted decision for {hit.sample.sample_key}") from exc
 
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -98,7 +96,7 @@ class ProviderDecider:
         # thinking + the short decision headroom. Pass None to defer to the
         # provider config instead.
         self._provider = provider
-        self._overrides: dict[str, object] = {}
+        self._overrides: dict[str, Any] = {}
         if max_tokens is not None:
             self._overrides["max_tokens"] = max_tokens
 
@@ -287,9 +285,7 @@ class Digester:
         report.audit_path = self._write_audit(audit_dir or root, report)
         return report
 
-    def _create_novel(
-        self, root: Path, hit: Hit, decision: DigestDecision
-    ) -> tuple[str, Path]:
+    def _create_novel(self, root: Path, hit: Hit, decision: DigestDecision) -> tuple[str, Path]:
         # Slugify whatever the model named the mechanism (it may return a
         # human phrase with spaces/caps/parens) into a safe filename stem.
         raw_short = decision.new_short_name or hit.sample.injection_task_id
@@ -298,15 +294,12 @@ class Digester:
         sid = f"{_slug(decision.dataset, 40)}_attack_strategy_{short}_{decision.target_model}"
         body = strategy_file(
             title=f"{title_short} (novel — {hit.sample.sample_key})",
-            intro=decision.why
-            or f"Novel mechanism first observed on {hit.sample.sample_key}.",
+            intro=decision.why or f"Novel mechanism first observed on {hit.sample.sample_key}.",
             scope_target=[
                 f"**Confirmed effective**: `{decision.target_model}` — 1 hit "
                 f"({hit.sample.sample_key})."
             ],
-            scope_task=[
-                f"**Suite/product coverage demonstrated**: `{hit.sample.suite_name}`."
-            ],
+            scope_task=[f"**Suite/product coverage demonstrated**: `{hit.sample.suite_name}`."],
             distinct=decision.rationale
             or "Mechanism not described by any existing strategy's template.",
             moves=[],

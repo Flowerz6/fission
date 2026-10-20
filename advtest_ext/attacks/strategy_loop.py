@@ -125,9 +125,7 @@ class StrategyLoopAttack(AttackPlugin):
         supply the real carrier + benign trigger later without touching
         this plugin."""
         ctx = context or {}
-        carrier = (
-            ctx.get("context_with_placeholder") or ctx.get("carrier_body") or _DEFAULT_CARRIER
-        )
+        carrier = ctx.get("context_with_placeholder") or ctx.get("carrier_body") or _DEFAULT_CARRIER
         return Sample(
             suite_name=str(ctx.get("suite_name") or behavior.category or "workspace"),
             user_task_id=behavior.id,

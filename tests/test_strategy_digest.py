@@ -205,9 +205,7 @@ async def test_digest_fits_as_is_appends_example(tmp_path: Path) -> None:
             )
         }
     )
-    report = await Digester(decider).digest(
-        _hit_run(), [_sample()], library_dir=tmp_path
-    )
+    report = await Digester(decider).digest(_hit_run(), [_sample()], library_dir=tmp_path)
 
     assert report.n_hits == 1
     assert report.appended[sid] == 2  # example appended
@@ -231,9 +229,7 @@ async def test_digest_fits_but_widens_adds_scope_bullet(tmp_path: Path) -> None:
             )
         }
     )
-    report = await Digester(decider).digest(
-        _hit_run(), [_sample()], library_dir=tmp_path
-    )
+    report = await Digester(decider).digest(_hit_run(), [_sample()], library_dir=tmp_path)
     assert sid in report.widened
     doc = discover(tmp_path)[0].text
     assert "also lands on the summarize surface" in doc
@@ -251,9 +247,7 @@ async def test_digest_novel_creates_new_file(tmp_path: Path) -> None:
             )
         }
     )
-    report = await Digester(decider).digest(
-        _hit_run(), [_sample()], library_dir=tmp_path
-    )
+    report = await Digester(decider).digest(_hit_run(), [_sample()], library_dir=tmp_path)
     expected = "google_docs_attack_strategy_appendix_fetch_gate_gemini"
     assert report.created == [expected]
     strategies = {s.id for s in discover(tmp_path)}
@@ -273,9 +267,7 @@ async def test_digest_ignores_misses(tmp_path: Path) -> None:
             )
         ]
     )
-    report = await Digester(ScriptedDecider({})).digest(
-        miss, [_sample()], library_dir=tmp_path
-    )
+    report = await Digester(ScriptedDecider({})).digest(miss, [_sample()], library_dir=tmp_path)
     assert report.n_hits == 0
     assert not report.appended and not report.created
 
@@ -312,14 +304,11 @@ async def test_digest_novel_slugifies_messy_short_name(tmp_path: Path) -> None:
             )
         }
     )
-    report = await Digester(decider).digest(
-        _hit_run(), [_sample()], library_dir=tmp_path
-    )
+    report = await Digester(decider).digest(_hit_run(), [_sample()], library_dir=tmp_path)
     assert len(report.created) == 1
     sid = report.created[0]
     assert sid == (
-        "workspace_attack_strategy_"
-        "calendar_event_field_gated_action_mandatory_email_gemini"
+        "workspace_attack_strategy_calendar_event_field_gated_action_mandatory_email_gemini"
     )
     assert (tmp_path / f"{sid}.md").exists()
     assert " " not in sid and "(" not in sid

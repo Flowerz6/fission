@@ -18,8 +18,27 @@ from advtest_ext.guides.stage import (
 _log = structlog.get_logger(__name__)
 
 _PALETTE_STOP = {
-    "the", "a", "an", "and", "or", "of", "to", "then", "with", "no", "not", "all",
-    "that", "this", "into", "from", "when", "which", "there", "here", "them",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "to",
+    "then",
+    "with",
+    "no",
+    "not",
+    "all",
+    "that",
+    "this",
+    "into",
+    "from",
+    "when",
+    "which",
+    "there",
+    "here",
+    "them",
 }
 
 
@@ -90,6 +109,7 @@ def carrier_invariant_violations(guide: Guide, variant: Guide) -> list[str]:
                 texts.append(value)
     blob = "\n".join(texts)
     return [a for a in anchors if a not in blob]
+
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable

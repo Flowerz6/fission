@@ -65,9 +65,7 @@ class FakeTrace:
         self.depth = turn
         self.technique_id = technique_id
         self.payload_id = payload_id
-        mutation = (
-            {"dimension": dimension, "feature_value": feature_value} if dimension else {}
-        )
+        mutation = {"dimension": dimension, "feature_value": feature_value} if dimension else {}
         self.extra_metadata = {
             "tap_crescendo": {
                 "node_id": node_id,
@@ -123,10 +121,32 @@ def _linear_tree() -> list[FakeTrace]:
     # n0 (root) -> n1 (persona=cfo) -> n2 (carrier_placement=footer)
     return [
         FakeTrace(trace_id="t0", node_id="n0", parent_id=None, turn=1),
-        FakeTrace(trace_id="t1", node_id="n1", parent_id="n0", dimension="persona", feature_value="cfo", turn=1),
-        FakeTrace(trace_id="t2", node_id="n2", parent_id="n1", dimension="carrier_placement", feature_value="footer", turn=1),
+        FakeTrace(
+            trace_id="t1",
+            node_id="n1",
+            parent_id="n0",
+            dimension="persona",
+            feature_value="cfo",
+            turn=1,
+        ),
+        FakeTrace(
+            trace_id="t2",
+            node_id="n2",
+            parent_id="n1",
+            dimension="carrier_placement",
+            feature_value="footer",
+            turn=1,
+        ),
         # a second turn of the leaf that only changes wording
-        FakeTrace(trace_id="t2w", node_id="n2", parent_id="n1", dimension="carrier_placement", feature_value="footer", turn=2, verdict="success"),
+        FakeTrace(
+            trace_id="t2w",
+            node_id="n2",
+            parent_id="n1",
+            dimension="carrier_placement",
+            feature_value="footer",
+            turn=2,
+            verdict="success",
+        ),
     ]
 
 
@@ -147,10 +167,17 @@ def test_wording_shares_cell_but_distinct_individual() -> None:
     a = signature(traces[2], node_index=index, run_config=SINGLE_APP)  # leaf turn 1
     # A wording-only variant: same cumulative non-wording vector.
     b_meta = FakeTrace(
-        trace_id="tw", node_id="n2", parent_id="n1",
-        dimension="carrier_placement", feature_value="footer", turn=9,
+        trace_id="tw",
+        node_id="n2",
+        parent_id="n1",
+        dimension="carrier_placement",
+        feature_value="footer",
+        turn=9,
     )
-    b_meta.extra_metadata["tap_crescendo"]["mutation"] = {"dimension": "carrier_placement", "feature_value": "footer"}
+    b_meta.extra_metadata["tap_crescendo"]["mutation"] = {
+        "dimension": "carrier_placement",
+        "feature_value": "footer",
+    }
     b = signature(b_meta, node_index=index, run_config=SINGLE_APP)
     assert a.cell_key() == b.cell_key()  # wording never enters the key
 
@@ -171,8 +198,22 @@ def test_changing_carrier_placement_changes_cell() -> None:
     # Same tree but leaf mutates a different carrier value.
     alt = [
         FakeTrace(trace_id="t0", node_id="n0", parent_id=None, turn=1),
-        FakeTrace(trace_id="t1", node_id="n1", parent_id="n0", dimension="persona", feature_value="cfo", turn=1),
-        FakeTrace(trace_id="t2", node_id="n2", parent_id="n1", dimension="carrier_placement", feature_value="comment", turn=1),
+        FakeTrace(
+            trace_id="t1",
+            node_id="n1",
+            parent_id="n0",
+            dimension="persona",
+            feature_value="cfo",
+            turn=1,
+        ),
+        FakeTrace(
+            trace_id="t2",
+            node_id="n2",
+            parent_id="n1",
+            dimension="carrier_placement",
+            feature_value="comment",
+            turn=1,
+        ),
     ]
     alt_sig = signature(alt[2], node_index=build_node_index(alt), run_config=SINGLE_APP)
     assert base.cell_key() != alt_sig.cell_key()
@@ -195,7 +236,13 @@ def test_cross_app_hops_from_phases() -> None:
     assert hops_bucket(count_cross_app_transitions(GMAIL_TO_DOCS)) == "1"
     assert hops_bucket(count_cross_app_transitions(SINGLE_APP)) == "0"
     assert hops_bucket(count_cross_app_transitions({})) == "0"
-    three = {"phases": [{"target_name": "gmail"}, {"target_name": "google_docs"}, {"target_name": "google_sheets"}]}
+    three = {
+        "phases": [
+            {"target_name": "gmail"},
+            {"target_name": "google_docs"},
+            {"target_name": "google_sheets"},
+        ]
+    }
     assert hops_bucket(count_cross_app_transitions(three)) == "2+"
 
 
@@ -228,9 +275,23 @@ def test_signal_verified_success_moves_mean_and_shrinks_ci() -> None:
 def test_judge_only_success_leaves_posterior_untouched_and_is_banked() -> None:
     arch = Archive(profile=TargetProfileKey("m", "t", "s"))
     sig = signature(
-        FakeTrace(trace_id="t", node_id="n1", parent_id=None, dimension="carrier_placement", feature_value="footer"),
+        FakeTrace(
+            trace_id="t",
+            node_id="n1",
+            parent_id=None,
+            dimension="carrier_placement",
+            feature_value="footer",
+        ),
         node_index=build_node_index(
-            [FakeTrace(trace_id="t", node_id="n1", parent_id=None, dimension="carrier_placement", feature_value="footer")]
+            [
+                FakeTrace(
+                    trace_id="t",
+                    node_id="n1",
+                    parent_id=None,
+                    dimension="carrier_placement",
+                    feature_value="footer",
+                )
+            ]
         ),
         run_config=SINGLE_APP,
     )
@@ -309,10 +370,19 @@ def test_snapshot_round_trips_through_db() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _insert_run_with_leaf(session: Session, *, run_id: str, guide_id: str | None, leaf_chain: list[dict[str, Any]]) -> None:
+def _insert_run_with_leaf(
+    session: Session, *, run_id: str, guide_id: str | None, leaf_chain: list[dict[str, Any]]
+) -> None:
     """Insert a Run and a single root→leaf tap_crescendo path as Trace rows."""
     session.add(
-        Run(id=run_id, target_name="gmail_multiturn", strategy="mcts", guide_id=guide_id, config={}, summary={})
+        Run(
+            id=run_id,
+            target_name="gmail_multiturn",
+            strategy="mcts",
+            guide_id=guide_id,
+            config={},
+            summary={},
+        )
     )
     for node in leaf_chain:
         session.add(
@@ -353,39 +423,75 @@ def test_backfill_bins_coarse_and_medium_and_drops() -> None:
     with Session(engine) as session:
         # Coarse: leaf recovers objective + carrier only.
         _insert_run_with_leaf(
-            session, run_id="r-coarse", guide_id="g",
+            session,
+            run_id="r-coarse",
+            guide_id="g",
             leaf_chain=[
                 {"node_id": "n0", "parent_id": None},
-                {"node_id": "n1", "parent_id": "n0", "dimension": "carrier_placement", "feature_value": "footer"},
+                {
+                    "node_id": "n1",
+                    "parent_id": "n0",
+                    "dimension": "carrier_placement",
+                    "feature_value": "footer",
+                },
             ],
         )
         # Medium: leaf recovers carrier + framing + persona (≥2 more → ≥4 descriptors).
         _insert_run_with_leaf(
-            session, run_id="r-medium", guide_id="g",
+            session,
+            run_id="r-medium",
+            guide_id="g",
             leaf_chain=[
                 {"node_id": "n0", "parent_id": None},
-                {"node_id": "n1", "parent_id": "n0", "dimension": "carrier_placement", "feature_value": "footer"},
-                {"node_id": "n2", "parent_id": "n1", "dimension": "framing", "feature_value": "urgency"},
-                {"node_id": "n3", "parent_id": "n2", "dimension": "persona", "feature_value": "cfo"},
+                {
+                    "node_id": "n1",
+                    "parent_id": "n0",
+                    "dimension": "carrier_placement",
+                    "feature_value": "footer",
+                },
+                {
+                    "node_id": "n2",
+                    "parent_id": "n1",
+                    "dimension": "framing",
+                    "feature_value": "urgency",
+                },
+                {
+                    "node_id": "n3",
+                    "parent_id": "n2",
+                    "dimension": "persona",
+                    "feature_value": "cfo",
+                },
             ],
         )
         # Dropped (null carrier): leaf mutates only framing, no technique_id.
         _insert_run_with_leaf(
-            session, run_id="r-drop", guide_id="g",
+            session,
+            run_id="r-drop",
+            guide_id="g",
             leaf_chain=[
                 {"node_id": "n0", "parent_id": None},
-                {"node_id": "n1", "parent_id": "n0", "dimension": "framing", "feature_value": "urgency"},
+                {
+                    "node_id": "n1",
+                    "parent_id": "n0",
+                    "dimension": "framing",
+                    "feature_value": "urgency",
+                },
             ],
         )
         # Forward-only skip: a run with no guide_id.
         _insert_run_with_leaf(
-            session, run_id="r-noguide", guide_id=None,
+            session,
+            run_id="r-noguide",
+            guide_id=None,
             leaf_chain=[{"node_id": "n0", "parent_id": None}],
         )
         session.commit()
 
         _arch, report = backfill_from_history(
-            session, profile=TargetProfileKey("hist", "ent", "h0"), guides_by_id={}, behavior_categories={}
+            session,
+            profile=TargetProfileKey("hist", "ent", "h0"),
+            guides_by_id={},
+            behavior_categories={},
         )
 
     assert report.coarse == 1
@@ -409,19 +515,31 @@ def test_backfill_real_db_invariants(tmp_path: Path) -> None:
     copy = tmp_path / "advtest_copy.db"
     shutil.copy("advtest.db", copy)
     engine = make_engine(f"sqlite:///{copy}")
-    categories = {b["id"]: b["category"] for b in yaml.safe_load(Path("advtest_ext/core/seed_behaviors.yaml").read_text())}
+    categories = {
+        b["id"]: b["category"]
+        for b in yaml.safe_load(Path("advtest_ext/core/seed_behaviors.yaml").read_text())
+    }
     guides_by_id = {g.id: g for g in load_guides("guides")}
     with Session(engine) as session:
         # Expected skip = traces belonging to runs with no guide_id.
         from advtest_ext.storage.models import Run as RunModel
         from advtest_ext.storage.models import Trace as TraceModel
 
-        guideless_runs = {r.id for r in session.query(RunModel).filter((RunModel.guide_id.is_(None)) | (RunModel.guide_id == "")).all()}
-        expected_skip = session.query(TraceModel).filter(TraceModel.run_id.in_(guideless_runs)).count()
+        guideless_runs = {
+            r.id
+            for r in session.query(RunModel)
+            .filter((RunModel.guide_id.is_(None)) | (RunModel.guide_id == ""))
+            .all()
+        }
+        expected_skip = (
+            session.query(TraceModel).filter(TraceModel.run_id.in_(guideless_runs)).count()
+        )
 
         _arch, report = backfill_from_history(
-            session, profile=TargetProfileKey("gemini-hist", "enterprise", "h0"),
-            guides_by_id=guides_by_id, behavior_categories=categories,
+            session,
+            profile=TargetProfileKey("gemini-hist", "enterprise", "h0"),
+            guides_by_id=guides_by_id,
+            behavior_categories=categories,
         )
 
     assert report.forward_only_skipped == expected_skip

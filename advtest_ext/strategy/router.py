@@ -10,7 +10,7 @@ fallback to cold-start on any parse/validation failure.
 from __future__ import annotations
 
 import re
-from typing import Protocol
+from typing import Any, Protocol
 
 from advtest_ext.providers.base import ChatMessage, Provider
 from advtest_ext.strategy.library import Strategy
@@ -81,7 +81,7 @@ class ProviderRouter:
     ) -> None:
         self._provider = provider
         self._top_k = top_k
-        self._overrides: dict[str, object] = {}
+        self._overrides: dict[str, Any] = {}
         if max_tokens is not None:
             self._overrides["max_tokens"] = max_tokens
         if temperature is not None:

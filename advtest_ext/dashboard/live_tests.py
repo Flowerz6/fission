@@ -410,9 +410,7 @@ class LiveTestController:
         )
         return _QueuedRun("guided-workspace-playbook", str(playbook), argv, run_id, str(playbook))
 
-    def _spawn(
-        self, argv: tuple[str, ...], *, test_id: str, run_id: str | None
-    ) -> dict[str, Any]:
+    def _spawn(self, argv: tuple[str, ...], *, test_id: str, run_id: str | None) -> dict[str, Any]:
         """Launch a prepared argv as the sole active process. Does NOT touch
         ``_stop_requested`` (callers arm it) so batch auto-advance can't clear a
         stop that arrived mid-hand-off."""

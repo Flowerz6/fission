@@ -52,7 +52,9 @@ class _FakeJudge:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    async def score_response(self, *, behavior: Any, payload: Any, response: str, target_name: str = "unknown") -> Any:
+    async def score_response(
+        self, *, behavior: Any, payload: Any, response: str, target_name: str = "unknown"
+    ) -> Any:
         self.calls.append(response)
         return SimpleNamespace(score=1.0 if "WIN" in response else 0.0)
 

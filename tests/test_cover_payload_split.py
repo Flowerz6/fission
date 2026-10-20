@@ -112,9 +112,7 @@ async def test_payload_role_regenerates_payload_and_keeps_cover() -> None:
 def test_gmail_guide_migrated_to_cover_payload_split() -> None:
     """Lock the real migrated guide: payload is a clean substring of the planted
     body, and the two core operators carry the right carrier_role + mutable field."""
-    guide = load_guide(
-        Path("guides/gmail_ai_overview_owner_note_guidelines_star.yaml")
-    )
+    guide = load_guide(Path("guides/gmail_ai_overview_owner_note_guidelines_star.yaml"))
     body = guide.setup_steps[0].params["body"]
     assert guide.carrier_payload and guide.carrier_payload in body
     # Cover derived by stripping the payload is non-empty and payload-free.

@@ -148,7 +148,9 @@ class TenantState:
     def add(self, item: ObservedItem) -> None:
         self.items.setdefault(item.CHANNEL, {})[item.key] = item
 
-    def mark(self, channel: str, status: ObservationStatus, *, error_kind: str | None = None) -> None:
+    def mark(
+        self, channel: str, status: ObservationStatus, *, error_kind: str | None = None
+    ) -> None:
         self.status[channel] = status
         if error_kind is not None:
             self.errors[channel] = error_kind
@@ -180,11 +182,7 @@ class SideEffectObservation:
 
     def observed_effect_channels(self) -> list[str]:
         """Channels we read cleanly AND that show a non-empty delta."""
-        return [
-            ch
-            for ch in CHANNELS
-            if self.status.get(ch) == "observed" and getattr(self, ch)
-        ]
+        return [ch for ch in CHANNELS if self.status.get(ch) == "observed" and getattr(self, ch)]
 
     def failed_channels(self) -> list[str]:
         return [ch for ch in CHANNELS if self.status.get(ch) == "failed"]

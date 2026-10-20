@@ -61,7 +61,9 @@ async def create_and_seed(ctx: OperationContext) -> OperationResult:
     title = ctx.params.get("title")
     if not isinstance(title, str) or not title:
         title = "Shared Working Sheet"
-    rows = _coerce_rows(ctx.params.get("rows") if ctx.params.get("rows") is not None else ctx.params.get("data"))
+    rows = _coerce_rows(
+        ctx.params.get("rows") if ctx.params.get("rows") is not None else ctx.params.get("data")
+    )
     start_cell = ctx.params.get("start_cell")
     start_cell = start_cell if isinstance(start_cell, str) and start_cell else "A1"
 

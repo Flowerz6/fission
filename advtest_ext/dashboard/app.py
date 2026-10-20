@@ -151,7 +151,7 @@ def _highlight_html(text: str | None, patterns: list[str]) -> str:
     for m in combined.finditer(text):
         if m.start() == m.end():  # skip zero-width matches
             continue
-        out.append(_h.escape(text[last:m.start()]))
+        out.append(_h.escape(text[last : m.start()]))
         out.append('<mark class="sig-hit">' + _h.escape(m.group(0)) + "</mark>")
         last = m.end()
     out.append(_h.escape(text[last:]))
@@ -1752,7 +1752,11 @@ def create_app(
         # load its signals and re-apply the matched patterns to the reply/thoughts.
         highlights: dict[str, dict[str, str]] = {}
         for _turn in node_turns:
-            _sigs = signals if _turn.trace_id == trace_id else list_signals_for_trace(session, _turn.trace_id)
+            _sigs = (
+                signals
+                if _turn.trace_id == trace_id
+                else list_signals_for_trace(session, _turn.trace_id)
+            )
             _rp, _tp = _signal_highlight_patterns(_sigs)
             highlights[_turn.trace_id] = {
                 "response": _highlight_html(_turn.response, _rp),
@@ -2454,7 +2458,11 @@ def create_app(
             workspace=workspace,
             date_from=date_from,
             date_to=date_to,
-            run_id=run_id, finding_id=finding_id, recipient=recipient, author=author, contact=contact,
+            run_id=run_id,
+            finding_id=finding_id,
+            recipient=recipient,
+            author=author,
+            contact=contact,
         )
         ctx["pdf_available"] = True
         return templates.TemplateResponse(request, "reports/document.html", ctx)
@@ -2487,7 +2495,11 @@ def create_app(
             workspace=workspace,
             date_from=date_from,
             date_to=date_to,
-            run_id=run_id, finding_id=finding_id, recipient=recipient, author=author, contact=contact,
+            run_id=run_id,
+            finding_id=finding_id,
+            recipient=recipient,
+            author=author,
+            contact=contact,
         )
         ctx["pdf_available"] = True
         from advtest_ext.dashboard.disclosure_pdf import render_disclosure_pdf
@@ -2496,7 +2508,9 @@ def create_app(
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="fission-{ctx["report_id"]}.pdf"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="fission-{ctx["report_id"]}.pdf"'
+            },
         )
 
     @app.get("/settings", response_class=HTMLResponse)

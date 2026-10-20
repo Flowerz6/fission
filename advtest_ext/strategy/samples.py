@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from advtest_ext.strategy.models import Sample
 
 
-def _coerce(row: dict) -> dict:
+def _coerce(row: dict[str, Any]) -> dict[str, Any]:
     row = dict(row)
     if "injection_candidates" not in row and "visible_vectors" in row:
         vv = row.get("visible_vectors") or []

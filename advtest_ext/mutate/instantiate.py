@@ -75,7 +75,9 @@ class PatchStrategist(Protocol):
     Tests inject scripted strategists.
     """
 
-    def __call__(self, guide: Guide, operator: GuideMutationOperator, feature_value: str) -> AxisPatch: ...
+    def __call__(
+        self, guide: Guide, operator: GuideMutationOperator, feature_value: str
+    ) -> AxisPatch: ...
 
 
 @dataclass(frozen=True)
@@ -113,7 +115,9 @@ class _NoTarget:
     ``_tip_patch`` without staging (it never touches ``target``)."""
 
 
-def _carrier_patch(parent_guide: Guide, operator: GuideMutationOperator, feature_value: str) -> AxisPatch:
+def _carrier_patch(
+    parent_guide: Guide, operator: GuideMutationOperator, feature_value: str
+) -> AxisPatch:
     """Deterministic carrier patch via the existing ``_tip_patch`` path."""
     from advtest_ext.guides.mutation_runtime import GuideMutationMaterializer
 
@@ -121,7 +125,9 @@ def _carrier_patch(parent_guide: Guide, operator: GuideMutationOperator, feature
     materializer = GuideMutationMaterializer(guide=parent_guide, target=_no_target())
     # Reuse the materializer's deterministic TIP patch (single source of truth).
     patch = materializer._tip_patch(operator, f"tip:{scheme}")
-    return AxisPatch(artifact_patch=patch, claimed_realized_axes={CARRIER_AXIS: feature_value}, seed=0)
+    return AxisPatch(
+        artifact_patch=patch, claimed_realized_axes={CARRIER_AXIS: feature_value}, seed=0
+    )
 
 
 def _no_target() -> DocumentTarget:
@@ -133,15 +139,26 @@ def _no_target() -> DocumentTarget:
 class _SynthTrace:
     """A minimal trace carrying one tap_crescendo mutation node (for signature())."""
 
-    def __init__(self, node_id: str, parent_id: str | None, dimension: str | None, feature_value: str | None) -> None:
+    def __init__(
+        self, node_id: str, parent_id: str | None, dimension: str | None, feature_value: str | None
+    ) -> None:
         self.behavior_id = "__synthetic__"
         self.payload_id = node_id
         self.id = node_id
         mutation = {"dimension": dimension, "feature_value": feature_value} if dimension else {}
-        self.extra_metadata = {"tap_crescendo": {"node_id": node_id, "parent_id": parent_id, "turn": 1, "mutation": mutation}}
+        self.extra_metadata = {
+            "tap_crescendo": {
+                "node_id": node_id,
+                "parent_id": parent_id,
+                "turn": 1,
+                "mutation": mutation,
+            }
+        }
 
 
-def _child_signature(parent: Signature, claimed_realized_axes: Mapping[str, str], child_guide: Guide) -> Signature:
+def _child_signature(
+    parent: Signature, claimed_realized_axes: Mapping[str, str], child_guide: Guide
+) -> Signature:
     """Re-derive the child Signature by running Part A ``signature()`` over the
     parent's ancestry with the claimed axis moves appended as new nodes."""
     nodes: list[tuple[str, str | None, str | None, str | None]] = [("n0", None, None, None)]
@@ -211,7 +228,9 @@ def instantiate(
         clean_basis = "deterministic"
     else:
         if strategist is None:
-            raise ValueError(f"a PatchStrategist is required to instantiate semantic axis {dimension!r}")
+            raise ValueError(
+                f"a PatchStrategist is required to instantiate semantic axis {dimension!r}"
+            )
         axis_patch = strategist(parent_guide, operator, feature_value)
         clean_basis = "self_report"
 
@@ -219,9 +238,13 @@ def instantiate(
     structural_bleed = bool(set(axis_patch.artifact_patch) - allowed)
 
     child_guide = _apply_patch(parent_guide, axis_patch.artifact_patch)
-    child_signature = _child_signature(parent_signature, axis_patch.claimed_realized_axes, child_guide)
+    child_signature = _child_signature(
+        parent_signature, axis_patch.claimed_realized_axes, child_guide
+    )
 
-    changed = [a for a in KEY_MUTATION_AXES if getattr(child_signature, a) != getattr(parent_signature, a)]
+    changed = [
+        a for a in KEY_MUTATION_AXES if getattr(child_signature, a) != getattr(parent_signature, a)
+    ]
     bleed_axes = tuple(a for a in changed if a != dimension)
     bleed = bleed_axes + ((STRUCTURAL_BLEED,) if structural_bleed else ())
     clean = (

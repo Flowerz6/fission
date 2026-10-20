@@ -48,7 +48,9 @@ class Hypothesis:
         return self.status
 
 
-def diagnose(score_result: ScoreResult, *, exposed_rationale: str | None = None) -> list[Hypothesis]:
+def diagnose(
+    score_result: ScoreResult, *, exposed_rationale: str | None = None
+) -> list[Hypothesis]:
     """Propose axis moves from a refusal + any exposed rationale (hypotheses only)."""
     hypotheses: list[Hypothesis] = []
     if score_result.refusal_style == "explicit_refusal":

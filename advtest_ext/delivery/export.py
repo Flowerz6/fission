@@ -92,7 +92,14 @@ def _validation(t: Trace) -> dict[str, object] | None:
     record = meta.get("pilot_validation")
     if not isinstance(record, dict) or record.get("phase") != "validation":
         return None
-    required = ("candidate_id", "episode_id", "environment_id", "target_version", "evaluator_version", "evidence_ref")
+    required = (
+        "candidate_id",
+        "episode_id",
+        "environment_id",
+        "target_version",
+        "evaluator_version",
+        "evidence_ref",
+    )
     if not all(isinstance(record.get(k), str) and record[k].strip() for k in required):
         return None
     if record.get("verification_source") not in {"human_review", "effect_verifier"}:
@@ -104,7 +111,9 @@ def _group_key(t: Trace) -> tuple[str, str, str | None, str, str, str]:
     record = _validation(t)
     if record is not None:
         candidate = str(record["candidate_id"])
-        environment = ":".join(str(record[k]) for k in ("environment_id", "target_version", "evaluator_version"))
+        environment = ":".join(
+            str(record[k]) for k in ("environment_id", "target_version", "evaluator_version")
+        )
     else:
         # Unvalidated search rows are discovery observations. Their exact
         # artifact and run scope prevent unrelated candidates being pooled.
@@ -128,7 +137,11 @@ def _validated_trials(group: _Group) -> tuple[int, int]:
     successes = 0
     for trace in episodes.values():
         record = _validation(trace)
-        if record is not None and trace.verdict == "success" and record.get("effect_verified") is True:
+        if (
+            record is not None
+            and trace.verdict == "success"
+            and record.get("effect_verified") is True
+        ):
             successes += 1
     return len(episodes), successes
 
@@ -273,8 +286,10 @@ def _verdict_breakdown(group: _Group) -> dict[str, int]:
 
 def _representative(group: _Group) -> Trace:
     verified = [
-        t for t in group.traces
-        if t.verdict == "success" and (record := _validation(t)) is not None
+        t
+        for t in group.traces
+        if t.verdict == "success"
+        and (record := _validation(t)) is not None
         and record.get("effect_verified") is True
     ]
     successes = [t for t in group.traces if t.verdict == "success"]
@@ -406,8 +421,13 @@ def build_dataset_from_traces(
         g = groups.get(key)
         if g is None:
             g = _Group(
-                behavior_id=key[0], attack_name=key[1], technique_id=key[2],
-                target_name=key[3], candidate_key=key[4], environment_key=key[5], traces=[],
+                behavior_id=key[0],
+                attack_name=key[1],
+                technique_id=key[2],
+                target_name=key[3],
+                candidate_key=key[4],
+                environment_key=key[5],
+                traces=[],
             )
             groups[key] = g
         g.traces.append(t)

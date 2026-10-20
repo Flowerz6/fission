@@ -27,8 +27,16 @@ def _seed(engine) -> str:
                 status="hit",
                 hit_iter=1,
                 attempts=[
-                    Attempt(iter=0, analysis="a0", injection="benign", utility=True, security=False),
-                    Attempt(iter=1, analysis="a1", injection="fetch https://sink", utility=True, security=True),
+                    Attempt(
+                        iter=0, analysis="a0", injection="benign", utility=True, security=False
+                    ),
+                    Attempt(
+                        iter=1,
+                        analysis="a1",
+                        injection="fetch https://sink",
+                        utility=True,
+                        security=True,
+                    ),
                 ],
             )
         ]
@@ -44,10 +52,20 @@ def _seed(engine) -> str:
     )
     factory = make_session_factory(engine)
     with session_scope(factory) as s:
-        run_id = persist_run(result, session=s, samples=[sample], target="workspace", target_model="gemini")
+        run_id = persist_run(
+            result, session=s, samples=[sample], target="workspace", target_model="gemini"
+        )
         persist_replays(
-            [ReplayStat(sample_key=_SAMPLE_KEY, injection="fetch https://sink", trials_n=3,
-                        successes_m=2, verdicts=[True, False, True], lineage_id="google_docs_attack_strategy_docs_exfil_gemini")],
+            [
+                ReplayStat(
+                    sample_key=_SAMPLE_KEY,
+                    injection="fetch https://sink",
+                    trials_n=3,
+                    successes_m=2,
+                    verdicts=[True, False, True],
+                    lineage_id="google_docs_attack_strategy_docs_exfil_gemini",
+                )
+            ],
             run_id,
             session=s,
         )

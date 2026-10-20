@@ -235,7 +235,12 @@ def evaluate_and_record_alerts(
     source_by_cell = source_by_cell or {}
     written: list[str] = []
     for cell_key, series in series_by_cell.items():
-        cp = cusum(series, baseline_rate=baseline_rate, threshold=thresholds.cusum_h, slack=thresholds.cusum_slack)
+        cp = cusum(
+            series,
+            baseline_rate=baseline_rate,
+            threshold=thresholds.cusum_h,
+            slack=thresholds.cusum_slack,
+        )
         if not cp.detected:
             continue
         row_id = uuid.uuid4().hex
@@ -251,7 +256,9 @@ def evaluate_and_record_alerts(
                 magnitude=cp.statistic,
                 source=source_by_cell.get(cell_key, "target"),
                 detector_calibrated=alerts_enabled(thresholds),
-                note="" if alerts_enabled(thresholds) else "detector not calibrated — alerts suppressed",
+                note=""
+                if alerts_enabled(thresholds)
+                else "detector not calibrated — alerts suppressed",
             )
         )
         written.append(row_id)
@@ -293,7 +300,9 @@ def on_version_change(
     robust: list[tuple[float, CellKey]] = []
     for cell_key, cell in old_archive.cells.items():
         seeded = BetaPosterior.seed_from_previous_version(cell.posterior, decay=decay)
-        new_archive.cells[cell_key] = Cell(key=cell_key, posterior=seeded, resolution=cell.resolution)
+        new_archive.cells[cell_key] = Cell(
+            key=cell_key, posterior=seeded, resolution=cell.resolution
+        )
         if cell.posterior.mean() <= robust_threshold:
             robust.append((cell.posterior.mean(), cell_key))
     robust.sort()  # most robust (lowest success) first — most informative to re-probe

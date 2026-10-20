@@ -30,7 +30,9 @@ _SAMPLE_META = {
 }
 
 
-def _trace(verdict: str, *, with_meta: bool = True, sample_key: str = "google_docs/t1/exfil") -> SimpleNamespace:
+def _trace(
+    verdict: str, *, with_meta: bool = True, sample_key: str = "google_docs/t1/exfil"
+) -> SimpleNamespace:
     meta = {}
     if with_meta:
         meta = {
@@ -118,7 +120,9 @@ def test_gate_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_maybe_digest_run_returns_none_when_gated_off(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_maybe_digest_run_returns_none_when_gated_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from advtest_ext.strategy.harvest import maybe_digest_run
 
     monkeypatch.delenv("ADVTEST_DIGEST_STRATEGY", raising=False)

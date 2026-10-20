@@ -81,8 +81,8 @@ def enrich_disclosure_context(
     run_ids = list(dict.fromkeys(f.run_id for f in findings))
     if context["filters"].get("run_id") and context["filters"]["run_id"] not in run_ids:
         run_ids.append(context["filters"]["run_id"])
-    runs = {rid: get_run(session, rid) for rid in run_ids}
-    runs = {rid: run for rid, run in runs.items() if run is not None}
+    all_runs = {rid: get_run(session, rid) for rid in run_ids}
+    runs = {rid: run for rid, run in all_runs.items() if run is not None}
     traces = {rid: list_traces_for_run(session, rid) for rid in runs}
     # Reuse the same shared-capture guard and response selection as the dashboard.
     from advtest_ext.dashboard.app import _full_responses_for_traces
@@ -102,7 +102,8 @@ def enrich_disclosure_context(
             .where(GoldLabel.trace_id.in_(trace_ids))
             .order_by(GoldLabel.reviewed_at.desc())
         ):
-            reviews.setdefault(label.trace_id, []).append(label)
+            if label.trace_id is not None:
+                reviews.setdefault(label.trace_id, []).append(label)
     cases = []
     scope = []
     for rid, run in runs.items():
@@ -125,7 +126,7 @@ def enrich_disclosure_context(
         )
     for index, finding in enumerate(findings, 1):
         trace = finding.trace
-        run = runs.get(finding.run_id)
+        finding_run = runs.get(finding.run_id)
         guide = _guide_reference(trace.behavior_id) if trace else {}
         group = by_trace.get(finding.trace_id)
         labels = reviews.get(finding.trace_id, [])
@@ -145,7 +146,7 @@ def enrich_disclosure_context(
             validation = "Automated finding; human review pending"
         payload = trace.payload_text or "" if trace else ""
         limitations = []
-        model = _recorded_model(run, trace) if run else "Not recorded"
+        model = _recorded_model(finding_run, trace) if finding_run else "Not recorded"
         if model == "Not recorded":
             limitations.append("Exact model version was not captured.")
         if not current_labels:

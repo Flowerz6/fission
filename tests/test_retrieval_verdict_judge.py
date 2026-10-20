@@ -188,7 +188,9 @@ def test_llm_judge_excludes_source_document_content() -> None:
 @pytest.mark.asyncio
 async def test_explicit_output_marker_objective_can_flag_marker() -> None:
     judge = RetrievalVerdictJudge(
-        entity=ENTITY, canary=CANARY, handshake_token=HANDSHAKE,
+        entity=ENTITY,
+        canary=CANARY,
+        handshake_token=HANDSHAKE,
         accept_output_markers=True,
     )
     verdict = await judge.score_response(

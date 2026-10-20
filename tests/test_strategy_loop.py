@@ -225,9 +225,7 @@ def test_load_samples_maps_visible_vectors() -> None:
     rows = load_samples("tests/data/strategy_samples.jsonl")
     assert len(rows) == 1
     assert rows[0].sample_key == "workspace/user_task_0/injection_task_0"
-    assert rows[0].injection_candidates == [
-        "calendar_networking_event_injection_email"
-    ]
+    assert rows[0].injection_candidates == ["calendar_networking_event_injection_email"]
 
 
 # ---- integration: a real Claude attacker drives one offline sample ------

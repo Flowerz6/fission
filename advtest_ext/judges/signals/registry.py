@@ -28,8 +28,13 @@ from advtest_ext.judges.signals.token_appears import TokenAppears
 SIGNAL_REGISTRY: dict[str, type[Signal]] = {
     cls.KIND: cls
     for cls in (
-        TokenAppears, RegexMatch, CanaryAppears, HttpResponseShape,
-        ExfilSink, DocDiff, GroundingCheck,
+        TokenAppears,
+        RegexMatch,
+        CanaryAppears,
+        HttpResponseShape,
+        ExfilSink,
+        DocDiff,
+        GroundingCheck,
     )
 }
 

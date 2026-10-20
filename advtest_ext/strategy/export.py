@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -71,7 +72,7 @@ class _Group:
         return next((r for r in self.ran if r.security), None)
 
     @property
-    def ctx(self) -> dict:
+    def ctx(self) -> dict[str, Any]:
         return self.rows[0].extra_metadata or {} if self.rows else {}
 
 
@@ -185,9 +186,7 @@ def build_dataset_from_strategy_runs(
     for r in rows:
         grouped[(r.lineage_id, r.sample_key)].append(r)
 
-    all_run_ids = run_ids or sorted(
-        {rid for (rid,) in session.execute(select(StrategyRun.id))}
-    )
+    all_run_ids = run_ids or sorted({rid for (rid,) in session.execute(select(StrategyRun.id))})
 
     # Real repeated-trial M/N, when a replay was run. Keyed by sample_key;
     # prefer the replay with the most trials if several exist.
@@ -203,7 +202,9 @@ def build_dataset_from_strategy_runs(
     successful: list[PilotAttack] = []
     plausible: list[PilotAttack] = []
     for seq, ((lineage, sample_key), grp_rows) in enumerate(sorted(grouped.items()), 1):
-        grp = _Group(lineage_id=lineage, sample_key=sample_key, rows=sorted(grp_rows, key=lambda r: r.iter))
+        grp = _Group(
+            lineage_id=lineage, sample_key=sample_key, rows=sorted(grp_rows, key=lambda r: r.iter)
+        )
         if not grp.rows:
             continue
         attack = _build_attack(grp, all_run_ids, seq, replay=replay_by_key.get(sample_key))

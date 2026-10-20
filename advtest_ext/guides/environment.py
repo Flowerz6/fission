@@ -27,7 +27,11 @@ def _coerce_rows(raw: Any) -> list[list[str]]:
     if isinstance(raw, list):
         out: list[list[str]] = []
         for row in raw:
-            out.append([("" if c is None else str(c)) for c in row] if isinstance(row, list) else [str(row)])
+            out.append(
+                [("" if c is None else str(c)) for c in row]
+                if isinstance(row, list)
+                else [str(row)]
+            )
         return out
     if isinstance(raw, str) and raw.strip():
         return [[c.strip() for c in line.split(",")] for line in raw.splitlines() if line.strip()]
@@ -38,7 +42,9 @@ def _write_sheet(artifact_id: str, content: dict[str, Any]) -> None:
     """Clear the grid and write the variant's rows (Sheets API)."""
     from advtest_ext.adapters._auth import SHEETS_SCOPES, get_service
 
-    rows = _coerce_rows(content.get("rows") if content.get("rows") is not None else content.get("data"))
+    rows = _coerce_rows(
+        content.get("rows") if content.get("rows") is not None else content.get("data")
+    )
     sheets = get_service("sheets", "v4", SHEETS_SCOPES)
     sheets.spreadsheets().values().clear(
         spreadsheetId=artifact_id, range="A1:ZZ5000", body={}
@@ -115,7 +121,9 @@ class EnvironmentSeeder:
             logger.info("environment.reseeded", app=self._app, cell=cell_value)
             return True
         except Exception as exc:
-            logger.warning("environment.reseed_failed", app=self._app, cell=cell_value, err=str(exc)[:120])
+            logger.warning(
+                "environment.reseed_failed", app=self._app, cell=cell_value, err=str(exc)[:120]
+            )
             return False
 
 

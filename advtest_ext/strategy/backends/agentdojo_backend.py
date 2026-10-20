@@ -94,9 +94,7 @@ def build_pipeline(
         from agentdojo.agent_pipeline.llms.google_llm import GoogleLLM
         from google import genai
 
-        key = os.environ.get(api_key_env or "GEMINI_API_KEY") or os.environ.get(
-            "GOOGLE_API_KEY"
-        )
+        key = os.environ.get(api_key_env or "GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key:
             raise RuntimeError("GEMINI_API_KEY (or GOOGLE_API_KEY) must be set")
         llm = GoogleLLM(target_model, genai.Client(api_key=key))
@@ -165,9 +163,7 @@ def run_trajectory(
     model_output = None
     for _ in range(3):
         try:
-            _, _, task_environment, messages, _ = pipeline.query(
-                prompt, runtime, task_environment
-            )
+            _, _, task_environment, messages, _ = pipeline.query(prompt, runtime, task_environment)
         except Exception as e:  # AbortAgentError or similar carries partial state
             te = getattr(e, "task_environment", None)
             ms = getattr(e, "messages", None)
@@ -187,7 +183,9 @@ def run_trajectory(
 
     stack = functions_stack_trace_from_messages(messages)
     utility = bool(
-        suite._check_task_result(user_task, model_output or [], pre_environment, task_environment, stack)
+        suite._check_task_result(
+            user_task, model_output or [], pre_environment, task_environment, stack
+        )
     )
     security = False
     if injection_task is not None:
@@ -214,7 +212,8 @@ def _model_output_text(model_output: Any) -> str:
 
 
 def _block_text_and_calls(content: Any) -> tuple[str, list[tuple[str, str]]]:
-    text, calls = "", []
+    text = ""
+    calls: list[tuple[str, str]] = []
     if isinstance(content, str):
         return content, calls
     if isinstance(content, list):
@@ -223,7 +222,12 @@ def _block_text_and_calls(content: Any) -> tuple[str, list[tuple[str, str]]]:
                 if blk.get("type") == "text":
                     text += blk.get("content", "") or blk.get("text", "")
                 elif blk.get("type") == "tool_use":
-                    calls.append((blk.get("name"), json.dumps(blk.get("input") or {}, default=str)))
+                    calls.append(
+                        (
+                            str(blk.get("name") or ""),
+                            json.dumps(blk.get("input") or {}, default=str),
+                        )
+                    )
     return text, calls
 
 
@@ -242,7 +246,7 @@ def extract_final_output(messages: list[Any]) -> str:
         for tc in last["tool_calls"]:
             fn = tc.get("function") if isinstance(tc, dict) else getattr(tc, "function", "")
             args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
-            calls.append((fn, json.dumps(args, default=str)))
+            calls.append((str(fn or ""), json.dumps(args, default=str)))
     parts = [text.strip() or "(no assistant text)"]
     parts += [f"[tool_call] {n}({(a or '')[:1000]})" for n, a in calls] or ["(no tool call)"]
     return "\n".join(parts)
@@ -262,9 +266,7 @@ def serialize_trajectory(messages: list[Any], *, max_chars: int = 25_000) -> str
                 if isinstance(blk, dict) and blk.get("type") == "tool_result":
                     body = blk.get("content", "")
                     if isinstance(body, list):
-                        body = " ".join(
-                            b.get("content", "") for b in body if isinstance(b, dict)
-                        )
+                        body = " ".join(b.get("content", "") for b in body if isinstance(b, dict))
                     text += f"\n[tool_result] {str(body)[:2000]}"
         lines.append(f"<|{role}|>\n{text.strip()[:4000]}")
     out = "\n\n".join(lines)

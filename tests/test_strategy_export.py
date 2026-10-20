@@ -44,7 +44,9 @@ def _result() -> RunResult:
                 status="hit",
                 hit_iter=1,
                 attempts=[
-                    Attempt(iter=0, analysis="a0", injection="benign note", utility=True, security=False),
+                    Attempt(
+                        iter=0, analysis="a0", injection="benign note", utility=True, security=False
+                    ),
                     Attempt(
                         iter=1,
                         analysis="a1",
@@ -59,7 +61,11 @@ def _result() -> RunResult:
                 strategy_ids=["_template_cold_start"],
                 status="miss",
                 hit_iter=None,
-                attempts=[Attempt(iter=0, analysis="a", injection="try send", utility=True, security=False)],
+                attempts=[
+                    Attempt(
+                        iter=0, analysis="a", injection="try send", utility=True, security=False
+                    )
+                ],
             ),
         ]
     )

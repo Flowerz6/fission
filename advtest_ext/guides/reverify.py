@@ -144,11 +144,7 @@ def reverify_content(
         any(token in artifact.casefold() for token in required_tokens)
         for artifact in rerun_artifacts
     )
-    reproduced = (
-        len(rerun_artifacts) >= 2
-        and evidence_recurs
-        and score >= min_consistency
-    )
+    reproduced = len(rerun_artifacts) >= 2 and evidence_recurs and score >= min_consistency
     if reproduced:
         reasoning = (
             f"specific evidence recurs across {len(rerun_artifacts)} re-run(s) "

@@ -56,11 +56,7 @@ _DAY_VIEW_URL = "https://calendar.google.com/calendar/u/0/r/day"
 # Event-editor selectors — LIVE-VALIDATION-REQUIRED (see module warning).
 # Each is a comma-joined fallback chain: ARIA-name first (survives markup
 # churn), then a legacy id, then a broadened case-insensitive match.
-_TITLE_SELECTOR = (
-    'input[aria-label="Add title"], '
-    "input#xTiInp, "
-    'input[aria-label*="title" i]'
-)
+_TITLE_SELECTOR = 'input[aria-label="Add title"], input#xTiInp, input[aria-label*="title" i]'
 _DESCRIPTION_SELECTOR = (
     '[aria-label="Add description"], '
     "textarea#xDescInp, "
@@ -89,7 +85,9 @@ def _drift(what: str) -> SidePanelUnavailable:
     return SidePanelUnavailable(f"{what}: {SELECTOR_DRIFT_MESSAGE}")
 
 
-async def _fill_first_match(page: Any, selector: str, text: str, *, what: str, timeout_ms: int) -> None:
+async def _fill_first_match(
+    page: Any, selector: str, text: str, *, what: str, timeout_ms: int
+) -> None:
     """Focus + human-type into the first selector in the fallback chain
     that resolves. Raises :class:`SidePanelUnavailable` if none appear."""
     locator = page.locator(selector).first
@@ -150,9 +148,7 @@ async def calendar_ui_create_event(
             await page.goto(_EVENT_EDIT_URL, timeout=timeout)
         await jitter_pause(HUMAN_ACTION_PAUSE_S)
 
-        await _fill_first_match(
-            page, _TITLE_SELECTOR, title, what="title", timeout_ms=timeout
-        )
+        await _fill_first_match(page, _TITLE_SELECTOR, title, what="title", timeout_ms=timeout)
         if description:
             await _fill_first_match(
                 page,
@@ -172,9 +168,7 @@ async def calendar_ui_create_event(
         # Save navigates back to the grid. Wait for the editor URL to
         # fall away as the confirmation the plant committed.
         try:
-            await page.wait_for_url(
-                lambda url: "eventedit" not in url, timeout=timeout
-            )
+            await page.wait_for_url(lambda url: "eventedit" not in url, timeout=timeout)
         except Exception:
             # Non-fatal: some layouts keep the URL and only toast. The
             # event is created either way; a stale editor URL must not

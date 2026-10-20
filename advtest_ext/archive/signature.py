@@ -313,7 +313,9 @@ def signature(
       axes :data:`BASELINE`, ``individual_id = content_hash(guide)``.
     """
     if isinstance(obj, Guide):
-        return _signature_from_guide(obj, run_config=run_config, behavior_categories=behavior_categories)
+        return _signature_from_guide(
+            obj, run_config=run_config, behavior_categories=behavior_categories
+        )
     return _signature_from_trace(
         obj,
         node_index=node_index,
@@ -355,7 +357,9 @@ def _signature_from_trace(
         individual_id = content_hash(guide)
     else:
         individual_id = str(
-            getattr(trace, "payload_id", "") or (node_id if isinstance(node_id, str) else "") or getattr(trace, "id", "")
+            getattr(trace, "payload_id", "")
+            or (node_id if isinstance(node_id, str) else "")
+            or getattr(trace, "id", "")
         )
     return Signature(
         objective_class=objective_class,

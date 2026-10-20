@@ -340,9 +340,7 @@ def _strategy_loop_attack_factory(options: dict[str, Any] | None = None) -> Atta
     # Optional dedicated router role; fall back to the attacker provider.
     router_provider = None
     try:
-        router_provider = _load_provider_role(
-            cfg_path, "CLAUDE_ROUTER", missing_role_hint=""
-        )
+        router_provider = _load_provider_role(cfg_path, "CLAUDE_ROUTER", missing_role_hint="")
     except Exception:
         router_provider = None
     opts = options or {}
@@ -1081,9 +1079,7 @@ def _jury_panel_spec() -> tuple[tuple[str, str], ...]:
             continue
         kind, _, role = entry.partition("@")
         if not role:
-            raise typer.BadParameter(
-                f"ADVTEST_JURY_PANEL entry {entry!r} must be 'kind@ROLE'"
-            )
+            raise typer.BadParameter(f"ADVTEST_JURY_PANEL entry {entry!r} must be 'kind@ROLE'")
         panel.append((kind.strip(), role.strip()))
     return tuple(panel) if panel else _DEFAULT_JURY_PANEL
 

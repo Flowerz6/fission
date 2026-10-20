@@ -65,7 +65,9 @@ async def test_rollout_maps_sample_and_returns_verdicts() -> None:
 
     assert res.security is True and res.utility is True
     # One call, with the injection fanned onto the sample's vector(s).
-    assert runner.calls == [("workspace", "user_task_0", "injection_task_0", {"calendar_evt": "INJECT-TEXT"})]
+    assert runner.calls == [
+        ("workspace", "user_task_0", "injection_task_0", {"calendar_evt": "INJECT-TEXT"})
+    ]
     # Black-box default: final output present, trajectory hidden.
     assert "send_email" in res.final_output
     assert res.trajectory == ""
@@ -73,7 +75,9 @@ async def test_rollout_maps_sample_and_returns_verdicts() -> None:
 
 
 async def test_rollout_white_box_includes_trajectory() -> None:
-    target = AgentDojoTarget("gpt-4o-mini", runner=_FakeRunner(True, False), threat_model="white_box")
+    target = AgentDojoTarget(
+        "gpt-4o-mini", runner=_FakeRunner(True, False), threat_model="white_box"
+    )
     res = await target.rollout(_sample(), "x")
     assert res.security is False
     assert "<|assistant|>" in res.trajectory
@@ -99,7 +103,10 @@ def test_extract_final_output_and_serialize() -> None:
         {"role": "user", "content": "q"},
         {
             "role": "assistant",
-            "content": [{"type": "text", "content": "ans"}, {"type": "tool_use", "name": "f", "input": {"a": 1}}],
+            "content": [
+                {"type": "text", "content": "ans"},
+                {"type": "tool_use", "name": "f", "input": {"a": 1}},
+            ],
         },
     ]
     final = extract_final_output(messages)

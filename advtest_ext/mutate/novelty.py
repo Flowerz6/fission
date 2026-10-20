@@ -45,7 +45,9 @@ def cell_admissible(
         return NoveltyDecision(admit=True, reason="explicit replication request")
     ess = cell.posterior.effective_sample_size()
     if ess >= ess_threshold:
-        return NoveltyDecision(admit=False, reason=f"cell already sampled (ESS {ess:.1f} >= {ess_threshold})")
+        return NoveltyDecision(
+            admit=False, reason=f"cell already sampled (ESS {ess:.1f} >= {ess_threshold})"
+        )
     return NoveltyDecision(admit=True, reason=f"cell below ESS threshold (ESS {ess:.1f})")
 
 

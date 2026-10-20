@@ -40,6 +40,7 @@ class StrategyStart(BaseModel):
     trigger_prompt: str | None = None
     target_model: str = "gpt-4o-mini"
 
+
 _ALLOWED_TARGETS = ("workspace", "agentdojo", "offline")
 _DEFAULT_LIBRARY = "advtest_ext/strategy/library"
 
@@ -72,11 +73,18 @@ class StrategyController:
         n_max = max(1, min(int(opts.get("n_max", 10)), 25))
         replay = max(0, min(int(opts.get("replay", 0)), 10))
         argv = [
-            "poetry", "run", "python", "scripts/run_strategy_loop.py",
-            "--samples", samples,
-            "--target", target,
-            "--n-max", str(n_max),
-            "--threat-model", "black_box",
+            "poetry",
+            "run",
+            "python",
+            "scripts/run_strategy_loop.py",
+            "--samples",
+            samples,
+            "--target",
+            target,
+            "--n-max",
+            str(n_max),
+            "--threat-model",
+            "black_box",
             "--persist",
         ]
         if opts.get("route"):
@@ -106,9 +114,14 @@ class StrategyController:
             self._status = "running"
             self._exit_code = None
             self._process = subprocess.Popen(
-                argv, cwd=_REPO_ROOT, env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, start_new_session=True,
+                argv,
+                cwd=_REPO_ROOT,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                start_new_session=True,
             )
             threading.Thread(target=self._collect, args=(self._process,), daemon=True).start()
         return self.snapshot()
@@ -165,9 +178,7 @@ def _run_view(session: Session, run_id: str) -> dict[str, Any]:
         grouped[(a.lineage_id, a.sample_key)].append(a)
     replays = {
         r.sample_key: r
-        for r in session.scalars(
-            select(StrategyReplay).where(StrategyReplay.run_id == run_id)
-        )
+        for r in session.scalars(select(StrategyReplay).where(StrategyReplay.run_id == run_id))
     }
     cases = [
         {
@@ -231,7 +242,9 @@ def build_strategy_router(
 
     @router.get("/{run_id}", response_class=HTMLResponse)
     def detail(
-        run_id: str, request: Request, session: Session = Depends(get_session)  # noqa: B008
+        run_id: str,
+        request: Request,
+        session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
         return templates.TemplateResponse(
             request, "strategy/run.html", {"run_id": run_id, **_run_view(session, run_id)}

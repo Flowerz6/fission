@@ -63,9 +63,15 @@ def test_review_record_rejects_missing_evidence_and_conflicting_overwrite() -> N
             _record(session, effect_verified=False)
         with pytest.raises(ValueError, match="nonempty"):
             mark_trace_validation(
-                session, trace_id="t1", expected_run_id="r1",
-                candidate_id="candidate-1", episode_id="episode-2",
-                environment_id="fixture", target_version="target-v1",
-                evaluator_version="evaluator-v1", evidence_ref="",
-                verification_source="human_review", effect_verified=True,
+                session,
+                trace_id="t1",
+                expected_run_id="r1",
+                candidate_id="candidate-1",
+                episode_id="episode-2",
+                environment_id="fixture",
+                target_version="target-v1",
+                evaluator_version="evaluator-v1",
+                evidence_ref="",
+                verification_source="human_review",
+                effect_verified=True,
             )

@@ -90,9 +90,10 @@ def strategy_file(
         if moves
         else "1. (moves not yet distilled — digester will populate from hits)"
     )
-    fp = "\n".join(
-        f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} | {r[4]} |" for r in fingerprint_rows
-    ) or "| 1 | (tbd) | | | |"
+    fp = (
+        "\n".join(f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} | {r[4]} |" for r in fingerprint_rows)
+        or "| 1 | (tbd) | | | |"
+    )
 
     return "\n".join(
         [
@@ -124,8 +125,7 @@ def strategy_file(
             "",
             EXAMPLES_HEADING,
             "",
-            ("\n".join(examples)).strip()
-            or "(no confirmed examples yet — seeded from a guide.)",
+            ("\n".join(examples)).strip() or "(no confirmed examples yet — seeded from a guide.)",
             "",
             "---",
             "",

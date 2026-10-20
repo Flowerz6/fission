@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -187,7 +188,7 @@ async def _wait_for_compose_open(page: Any, timeout_ms: int) -> None:
     # regardless of element type or where the name comes from), then fall back to
     # the CSS registry, then to a raw visible-text match.
     name_re = re.compile(r"new\s+(mail|email|message)", re.IGNORECASE)
-    click_strategies = (
+    click_strategies: tuple[Callable[[], Any], ...] = (
         lambda: page.get_by_role("button", name=name_re).first,
         lambda: page.locator(SELECTORS["new_mail_button"]).first,
         lambda: page.get_by_text(name_re).first,

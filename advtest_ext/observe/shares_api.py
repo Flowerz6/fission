@@ -61,8 +61,14 @@ class SharesApiAccelerator:
                 .execute()
             )
             for perm in perms.get("permissions", []) or []:
-                principal = str(perm.get("emailAddress") or perm.get("domain") or perm.get("type", ""))
-                grants.append(FileShare(file_id=str(doc_id), principal=principal, scope=str(perm.get("role", ""))))
+                principal = str(
+                    perm.get("emailAddress") or perm.get("domain") or perm.get("type", "")
+                )
+                grants.append(
+                    FileShare(
+                        file_id=str(doc_id), principal=principal, scope=str(perm.get("role", ""))
+                    )
+                )
         return grants
 
 

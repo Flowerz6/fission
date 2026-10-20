@@ -107,12 +107,18 @@ def test_archive_separates_exploration_from_success_coverage() -> None:
     operators = typed_operators(["persona labels"])
     archive = DiversityArchive()
     attempted = MutationCandidate(
-        "attempted", MutationDimension.PERSONA, "persona labels",
-        operator_name="legacy-0", feature_value="manual",
+        "attempted",
+        MutationDimension.PERSONA,
+        "persona labels",
+        operator_name="legacy-0",
+        feature_value="manual",
     )
     successful = MutationCandidate(
-        "successful", MutationDimension.PERSONA, "persona labels",
-        operator_name="legacy-0", feature_value="unspecified",
+        "successful",
+        MutationDimension.PERSONA,
+        "persona labels",
+        operator_name="legacy-0",
+        feature_value="unspecified",
     )
     archive.update(attempted, score=0.4, node_id="n1")
     archive.update(successful, score=0.9, node_id="n2", succeeded=True)
@@ -131,8 +137,14 @@ def test_parse_candidate_extracts_fenced_json_from_planner() -> None:
 
     ops = typed_operators(
         [],
-        [{"name": "persuasion_principle", "dimension": "persuasion_principle",
-          "description": "which principle drives it", "cell_values": ["commitment-consistency"]}],
+        [
+            {
+                "name": "persuasion_principle",
+                "dimension": "persuasion_principle",
+                "description": "which principle drives it",
+                "cell_values": ["commitment-consistency"],
+            }
+        ],
     )
     fenced = (
         "Here is the candidate:\n```json\n"

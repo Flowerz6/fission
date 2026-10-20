@@ -112,7 +112,9 @@ def posterior_drift(
         direction = LESS_VULNERABLE
     else:
         direction = NO_DIRECTION
-    return PosteriorDrift(magnitude=magnitude, z=z, direction=direction, mean_new=mean_new, mean_prior=mean_prior)
+    return PosteriorDrift(
+        magnitude=magnitude, z=z, direction=direction, mean_new=mean_new, mean_prior=mean_prior
+    )
 
 
 def posterior_drift_for_cell(cell: Any, *, new_alpha: float, new_beta: float) -> PosteriorDrift:
@@ -125,7 +127,9 @@ def posterior_drift_for_cell(cell: Any, *, new_alpha: float, new_beta: float) ->
     prev_alpha = getattr(cell, "prev_alpha", None)
     prev_beta = getattr(cell, "prev_beta", None)
     if prev_alpha is None or prev_beta is None:
-        raise ValueError("cell carries no undecayed prev_alpha/prev_beta — no prior to drift against")
+        raise ValueError(
+            "cell carries no undecayed prev_alpha/prev_beta — no prior to drift against"
+        )
     return posterior_drift(
         new_alpha=new_alpha, new_beta=new_beta, prior_alpha=prev_alpha, prior_beta=prev_beta
     )

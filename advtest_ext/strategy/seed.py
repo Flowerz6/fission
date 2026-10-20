@@ -54,7 +54,9 @@ def _seed_example(guide: Guide) -> str:
     trigger = (
         guide.exemplar_turns[0]
         if guide.exemplar_turns
-        else (guide.seed_prompts[0] if guide.seed_prompts else "(user triggers the guide's journey)")
+        else (
+            guide.seed_prompts[0] if guide.seed_prompts else "(user triggers the guide's journey)"
+        )
     )
     payload = guide.carrier_payload or "(payload lives in the guide's setup steps; not inlined)"
     why = (guide.strategy or guide.objective or "").strip() or "(see guide strategy)"

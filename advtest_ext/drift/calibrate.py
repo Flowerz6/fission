@@ -34,10 +34,16 @@ class FalseDriftReport:
     thresholds: DriftThresholds
 
 
-def _false_alarm_rate(stable_series: Sequence[Sequence[bool]], *, baseline_rate: float, h: float, slack: float) -> float:
+def _false_alarm_rate(
+    stable_series: Sequence[Sequence[bool]], *, baseline_rate: float, h: float, slack: float
+) -> float:
     if not stable_series:
         return 0.0
-    alarms = sum(1 for series in stable_series if cusum(series, baseline_rate=baseline_rate, threshold=h, slack=slack).detected)
+    alarms = sum(
+        1
+        for series in stable_series
+        if cusum(series, baseline_rate=baseline_rate, threshold=h, slack=slack).detected
+    )
     return alarms / len(stable_series)
 
 
@@ -56,18 +62,28 @@ def calibrate_false_drift(
     """
     thresholds = thresholds or DriftThresholds()
     h = thresholds.cusum_h
-    rate = _false_alarm_rate(stable_series, baseline_rate=baseline_rate, h=h, slack=thresholds.cusum_slack)
+    rate = _false_alarm_rate(
+        stable_series, baseline_rate=baseline_rate, h=h, slack=thresholds.cusum_slack
+    )
     while rate > target_rate and h < max_h:
         h += 1.0
-        rate = _false_alarm_rate(stable_series, baseline_rate=baseline_rate, h=h, slack=thresholds.cusum_slack)
+        rate = _false_alarm_rate(
+            stable_series, baseline_rate=baseline_rate, h=h, slack=thresholds.cusum_slack
+        )
     within = rate <= target_rate
     tuned = DriftThresholds(
-        cusum_h=h, cusum_slack=thresholds.cusum_slack, posterior_z=thresholds.posterior_z,
-        psi_alert=thresholds.psi_alert, calibrated=within,
+        cusum_h=h,
+        cusum_slack=thresholds.cusum_slack,
+        posterior_z=thresholds.posterior_z,
+        psi_alert=thresholds.psi_alert,
+        calibrated=within,
     )
     report = FalseDriftReport(
-        false_alarm_rate=rate, target_rate=target_rate, n_series=len(stable_series),
-        within_budget=within, thresholds=tuned,
+        false_alarm_rate=rate,
+        target_rate=target_rate,
+        n_series=len(stable_series),
+        within_budget=within,
+        thresholds=tuned,
     )
     return tuned, report
 

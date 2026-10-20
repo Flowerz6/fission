@@ -52,9 +52,7 @@ def discover(library_dir: Path | str | None = None) -> list[Strategy]:
         if path.name.startswith("_"):  # _TEMPLATE / _template_cold_start
             continue
         text = path.read_text(encoding="utf-8")
-        out.append(
-            Strategy(id=path.stem, path=path, text=text, summary=_summarize(text))
-        )
+        out.append(Strategy(id=path.stem, path=path, text=text, summary=_summarize(text)))
     return out
 
 

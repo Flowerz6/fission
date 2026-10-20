@@ -76,7 +76,9 @@ def search_health(
 
     ``collapsed_cells`` are cells that were populated before but got no fresh
     observation this window (candidate suppression targets)."""
-    counts = [max(cell.posterior.effective_sample_size() - 2.0, 0.0) for cell in archive.cells.values()]
+    counts = [
+        max(cell.posterior.effective_sample_size() - 2.0, 0.0) for cell in archive.cells.values()
+    ]
     coverage = len(archive.cells)
     entropy = _entropy(counts)
     if novelty_decisions:
@@ -84,7 +86,9 @@ def search_health(
         nar = admitted / len(novelty_decisions)
     else:
         nar = 1.0
-    coverage_collapse = prev_coverage is not None and coverage < prev_coverage * (1.0 - coverage_drop_frac)
+    coverage_collapse = prev_coverage is not None and coverage < prev_coverage * (
+        1.0 - coverage_drop_frac
+    )
     novelty_collapse = bool(novelty_decisions) and nar <= min_novelty_acceptance
     collapsed = coverage_collapse or novelty_collapse
     now_cells = frozenset(archive.cells.keys())
@@ -103,11 +107,16 @@ def suppress_search_drift(alerts: Sequence[DriftAlert], health: SearchHealth) ->
     cannot claim the target changed where you stopped probing."""
     out: list[DriftAlert] = []
     for alert in alerts:
-        if alert.source == TARGET and (alert.cell_key in health.collapsed_cells or health.collapsed):
+        if alert.source == TARGET and (
+            alert.cell_key in health.collapsed_cells or health.collapsed
+        ):
             out.append(
                 DriftAlert(
-                    cell_key=alert.cell_key, magnitude=alert.magnitude, direction=alert.direction,
-                    source=SEARCH, note="suppressed: coincides with search-coverage collapse",
+                    cell_key=alert.cell_key,
+                    magnitude=alert.magnitude,
+                    direction=alert.direction,
+                    source=SEARCH,
+                    note="suppressed: coincides with search-coverage collapse",
                 )
             )
         else:
@@ -145,7 +154,11 @@ class SuspectLead:
 def mark_leads_suspect(lead_cell_keys: Sequence[CellKey], drift: JudgeDrift) -> list[SuspectLead]:
     """When judge drift fires, annotate judge-only leads as suspect — never
     silently attribute an oracle-only shift to the target."""
-    note = f"judge drift {drift.shift_rate:.0%} on frozen gold set — verify before trusting" if drift.shifted else ""
+    note = (
+        f"judge drift {drift.shift_rate:.0%} on frozen gold set — verify before trusting"
+        if drift.shifted
+        else ""
+    )
     return [SuspectLead(cell_key=key, suspect=drift.shifted, note=note) for key in lead_cell_keys]
 
 

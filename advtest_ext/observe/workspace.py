@@ -193,7 +193,11 @@ async def _scrape_gmail_list(page: Any, url: str, *, draft: bool) -> list[Any]:
     rows = await page.query_selector_all("tr.zA")
     items: list[Any] = []
     for row in rows:
-        row_id = (await row.get_attribute("data-legacy-thread-id")) or (await row.get_attribute("id")) or ""
+        row_id = (
+            (await row.get_attribute("data-legacy-thread-id"))
+            or (await row.get_attribute("id"))
+            or ""
+        )
         recipient_el = await row.query_selector("span[email]")
         recipient = (await recipient_el.get_attribute("email")) if recipient_el else ""
         subject_el = await row.query_selector(".bog")
@@ -201,9 +205,13 @@ async def _scrape_gmail_list(page: Any, url: str, *, draft: bool) -> list[Any]:
         if not row_id:
             continue
         if draft:
-            items.append(DraftItem(draft_id=str(row_id), recipient=recipient or "", subject=subject))
+            items.append(
+                DraftItem(draft_id=str(row_id), recipient=recipient or "", subject=subject)
+            )
         else:
-            items.append(MailItem(message_id=str(row_id), recipient=recipient or "", subject=subject))
+            items.append(
+                MailItem(message_id=str(row_id), recipient=recipient or "", subject=subject)
+            )
     return items
 
 

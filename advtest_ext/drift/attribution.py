@@ -57,7 +57,9 @@ def attribute_drift(
     boundary: BoundaryModel,
 ) -> VersionDiffReport:
     """Attribute regressed cells to the descriptor axes carrying the regression."""
-    report = VersionDiffReport(profile_old=profile_old, profile_new=profile_new, regressed_cells=list(regressed_cells))
+    report = VersionDiffReport(
+        profile_old=profile_old, profile_new=profile_new, regressed_cells=list(regressed_cells)
+    )
     seen: set[tuple[str, str]] = set()
     for cell_key in regressed_cells:
         fields = decode_cell_key(cell_key) if isinstance(cell_key, str) else cell_key
@@ -70,8 +72,15 @@ def attribute_drift(
             effect = _effect_for(boundary, axis, value)
             if effect is None:
                 report.axis_patterns.append(
-                    AxisRegression(axis=axis, feature_value=value, success_rate=0.0, ci_low=0.0, ci_high=0.0,
-                                   asserted=False, caveat="no boundary coefficient for this axis value")
+                    AxisRegression(
+                        axis=axis,
+                        feature_value=value,
+                        success_rate=0.0,
+                        ci_low=0.0,
+                        ci_high=0.0,
+                        asserted=False,
+                        caveat="no boundary coefficient for this axis value",
+                    )
                 )
                 continue
             caveat = None
@@ -84,8 +93,13 @@ def attribute_drift(
                 caveat = "low-confidence coefficient (thin ESS or self-report basis) — not asserted"
             report.axis_patterns.append(
                 AxisRegression(
-                    axis=axis, feature_value=value, success_rate=effect.success_rate,
-                    ci_low=effect.ci_low, ci_high=effect.ci_high, asserted=asserted, caveat=caveat,
+                    axis=axis,
+                    feature_value=value,
+                    success_rate=effect.success_rate,
+                    ci_low=effect.ci_low,
+                    ci_high=effect.ci_high,
+                    asserted=asserted,
+                    caveat=caveat,
                 )
             )
     return report

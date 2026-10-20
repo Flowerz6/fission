@@ -27,7 +27,9 @@ def scorer_for(objective_class: str) -> Scorer:
     try:
         return _SCORERS[objective_class]
     except KeyError as exc:
-        raise ScoringConfigError(f"no scorer registered for objective_class {objective_class!r}") from exc
+        raise ScoringConfigError(
+            f"no scorer registered for objective_class {objective_class!r}"
+        ) from exc
 
 
 @dataclass

@@ -51,7 +51,7 @@ class _RealRunner:
         self,
         *,
         judge_provider: Any,
-        signal_specs: list[dict] | None,
+        signal_specs: list[dict[str, Any]] | None,
         output_dir: str,
         black_box: bool,
     ) -> None:
@@ -88,9 +88,7 @@ class _RealRunner:
         from advtest_ext.corpus.docs_seeder import DocsCorpusSeeder
 
         if product != "google_docs":
-            raise ValueError(
-                f"WorkspaceTarget currently drives google_docs only; got {product!r}"
-            )
+            raise ValueError(f"WorkspaceTarget currently drives google_docs only; got {product!r}")
 
         seeder = DocsCorpusSeeder()
         # The injection is already spliced into carrier_body, so the whole doc
@@ -169,9 +167,7 @@ class _RealRunner:
         judge_score = await self._get_judge().evaluate(trace=trace, behavior=behavior)
         base = _classify_verdict(judge_score.score)
         verdict = (
-            resolve_guide_verdict(base, fired, is_seed_repro=False)
-            if self._signal_specs
-            else base
+            resolve_guide_verdict(base, fired, is_seed_repro=False) if self._signal_specs else base
         )
         security = verdict == "success"
         utility = bool(resp.text) and verdict != "refused"
@@ -190,7 +186,7 @@ class WorkspaceTarget:
         product: str = "google_docs",
         trigger_prompt: str | None = None,
         judge_provider: Any = None,
-        signal_specs: list[dict] | None = None,
+        signal_specs: list[dict[str, Any]] | None = None,
         output_dir: str = "out/workspace_rollout",
         threat_model: str = "black_box",
         runner: WorkspaceRunner | None = None,

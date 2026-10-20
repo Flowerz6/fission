@@ -227,8 +227,7 @@ class ExfilSink(Signal):
                 },
             )
         reason = (
-            "no attacker-sink egress "
-            f"({len(candidates)} url(s) seen, none carried data off-domain)"
+            f"no attacker-sink egress ({len(candidates)} url(s) seen, none carried data off-domain)"
         )
         if echoed_skipped:
             reason = (

@@ -35,7 +35,9 @@ class PlannedVariant:
     """One planned experiment (or a paraphrase individual)."""
 
     kind: str  # "one_axis" | "pair" | "paraphrase"
-    axes: dict[str, str]  # dimension -> feature_value (1 for one_axis, 2 for pair, wording for paraphrase)
+    axes: dict[
+        str, str
+    ]  # dimension -> feature_value (1 for one_axis, 2 for pair, wording for paraphrase)
     paraphrase_only: bool = False
 
 
@@ -121,7 +123,11 @@ def realize_variant(
         wording = next(iter(planned.axes.values()), "")
         individual = replace(parent_signature, wording=wording)
         return RealizedVariant(
-            planned=planned, guide=parent_guide, signature=individual, steps=(), paraphrase_only=True
+            planned=planned,
+            guide=parent_guide,
+            signature=individual,
+            steps=(),
+            paraphrase_only=True,
         )
 
     guide = parent_guide

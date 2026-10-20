@@ -736,7 +736,10 @@ class TargetDriftSentinel(Base):
     __tablename__ = "target_drift_sentinels"
     __table_args__ = (
         UniqueConstraint(
-            "model_label", "tenant_tier", "surface_config_hash", "cell_key",
+            "model_label",
+            "tenant_tier",
+            "surface_config_hash",
+            "cell_key",
             name="uq_target_drift_sentinel",
         ),
     )
@@ -762,7 +765,9 @@ class TargetDriftSentinelObservation(Base):
     surface_config_hash: Mapped[str] = mapped_column(String(64))
     cell_key: Mapped[str] = mapped_column(String(512), index=True)
     content_hash: Mapped[str] = mapped_column(String(64))
-    cycle_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, index=True)
+    cycle_ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, index=True
+    )
     signal_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     run_outcome: Mapped[str] = mapped_column(String(24), default="invalid_technical")
     fixture_clean: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -781,7 +786,9 @@ class TargetDriftAlert(Base):
     tenant_tier: Mapped[str] = mapped_column(String(64))
     surface_config_hash: Mapped[str] = mapped_column(String(64))
     cell_key: Mapped[str] = mapped_column(String(512), index=True)
-    cycle_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, index=True)
+    cycle_ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, index=True
+    )
     direction: Mapped[str] = mapped_column(String(24), default="none")
     magnitude: Mapped[float] = mapped_column(Float, default=0.0)
     source: Mapped[str] = mapped_column(String(16), default="target", index=True)
@@ -801,7 +808,9 @@ class BoundaryModelRow(Base):
     model_label: Mapped[str] = mapped_column(String(128), index=True)
     tenant_tier: Mapped[str] = mapped_column(String(64))
     surface_config_hash: Mapped[str] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, index=True
+    )
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
@@ -819,7 +828,9 @@ class FingerprintSnapshot(Base):
     model_label: Mapped[str] = mapped_column(String(128), index=True)
     tenant_tier: Mapped[str] = mapped_column(String(64))
     surface_config_hash: Mapped[str] = mapped_column(String(64))
-    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, index=True)
+    taken_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, index=True
+    )
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 

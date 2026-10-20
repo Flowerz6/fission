@@ -23,9 +23,17 @@ PROFILE = TargetProfileKey("gemini-1", "enterprise", "cfg")
 
 
 def _sig(**axes: str) -> Signature:
-    base = dict(framing=BASELINE, turn_order=BASELINE, persona=BASELINE, carrier_placement=BASELINE, escalation_speed=BASELINE)
+    base = dict(
+        framing=BASELINE,
+        turn_order=BASELINE,
+        persona=BASELINE,
+        carrier_placement=BASELINE,
+        escalation_speed=BASELINE,
+    )
     base.update(axes)
-    return Signature(objective_class="canary_exfil", cross_app_hops_bucket="0", individual_id="h", **base)
+    return Signature(
+        objective_class="canary_exfil", cross_app_hops_bucket="0", individual_id="h", **base
+    )
 
 
 @dataclass
@@ -114,8 +122,17 @@ class MockMaterializer:
 
 def _deliver(sv: bool):  # type: ignore[no-untyped-def]
     def deliver(_v: Variant) -> tuple:
-        result = ScoreResult(signal_verified=sv, judge_success=None, judge_confidence=0.0, leak_fraction=1.0 if sv else 0.0, refusal_style=None, evidence="", observation_path="ui")
+        result = ScoreResult(
+            signal_verified=sv,
+            judge_success=None,
+            judge_confidence=0.0,
+            leak_fraction=1.0 if sv else 0.0,
+            refusal_style=None,
+            evidence="",
+            observation_path="ui",
+        )
         return result, obs_state(), objective_for("canary_exfil")
+
     return deliver
 
 
@@ -131,10 +148,18 @@ def test_teardown_runs_even_when_scoring_raises() -> None:
     def deliver(_v: Variant) -> tuple:
         raise RuntimeError("delivery blew up mid-score")
 
-    out = asyncio.run(run_native_phase(
-        TenantScheduler(), PROFILE, archive, [Variant("v1", _sig(framing="authority"))],
-        deliver_and_score=deliver, fixture=fixture, observer=MockObserver(tenant), materializer=mat,
-    ))
+    out = asyncio.run(
+        run_native_phase(
+            TenantScheduler(),
+            PROFILE,
+            archive,
+            [Variant("v1", _sig(framing="authority"))],
+            deliver_and_score=deliver,
+            fixture=fixture,
+            observer=MockObserver(tenant),
+            materializer=mat,
+        )
+    )
     assert fixture.reset_calls == 2  # setup + teardown ran despite the raise
     assert out.invalid_technical == 1 and len(out.requeued) == 1
     assert tenant.is_clean()  # materializer.cleanup ran in finally → carrier torn down
@@ -151,10 +176,18 @@ def test_failing_teardown_invalidates_next_run() -> None:
     a = Variant("A", _sig(framing="authority"))
     b = Variant("B", _sig(framing="urgency"))
 
-    out = asyncio.run(run_native_phase(
-        TenantScheduler(), PROFILE, archive, [a, b],
-        deliver_and_score=_deliver(sv=True), fixture=fixture, observer=MockObserver(tenant), materializer=mat,
-    ))
+    out = asyncio.run(
+        run_native_phase(
+            TenantScheduler(),
+            PROFILE,
+            archive,
+            [a, b],
+            deliver_and_score=_deliver(sv=True),
+            fixture=fixture,
+            observer=MockObserver(tenant),
+            materializer=mat,
+        )
+    )
     assert out.dirty_teardowns >= 1  # verify-clean caught A's stuck carrier
     assert b in out.requeued and out.invalid_technical >= 1  # B couldn't baseline
     # B's cell never updated (invalid_technical): still the uniform prior.
@@ -172,10 +205,18 @@ def test_clean_teardown_leaves_empty_delta() -> None:
     archive = Archive(profile=PROFILE)
     variants = [Variant("A", _sig(framing="authority")), Variant("B", _sig(framing="urgency"))]
 
-    out = asyncio.run(run_native_phase(
-        TenantScheduler(), PROFILE, archive, variants,
-        deliver_and_score=_deliver(sv=True), fixture=fixture, observer=MockObserver(tenant), materializer=mat,
-    ))
+    out = asyncio.run(
+        run_native_phase(
+            TenantScheduler(),
+            PROFILE,
+            archive,
+            variants,
+            deliver_and_score=_deliver(sv=True),
+            fixture=fixture,
+            observer=MockObserver(tenant),
+            materializer=mat,
+        )
+    )
     assert out.dirty_teardowns == 0  # every teardown verified clean
     assert out.updated == 2 and not out.requeued  # both baselined clean and scored
     assert tenant.is_clean()
@@ -192,16 +233,27 @@ def test_native_and_sentinel_share_one_reset_mechanism() -> None:
     scheduler = TenantScheduler()
     archive = Archive(profile=PROFILE)
 
-    asyncio.run(run_native_phase(
-        scheduler, PROFILE, archive, [Variant("A", _sig(framing="authority"))],
-        deliver_and_score=_deliver(sv=False), fixture=fixture, observer=MockObserver(tenant), materializer=MockMaterializer(tenant),
-    ))
+    asyncio.run(
+        run_native_phase(
+            scheduler,
+            PROFILE,
+            archive,
+            [Variant("A", _sig(framing="authority"))],
+            deliver_and_score=_deliver(sv=False),
+            fixture=fixture,
+            observer=MockObserver(tenant),
+            materializer=MockMaterializer(tenant),
+        )
+    )
     after_native = fixture.reset_calls
     assert after_native >= 2  # native used setup_fixture + teardown_fixture
 
     run_sentinel_phase(
-        scheduler, PROFILE, [Sentinel(cell_key=_sig(framing="authority").cell_key(), content_hash="h")],
-        fixture=fixture, deliver_and_score=lambda _s: (True, "valid_success"),
+        scheduler,
+        PROFILE,
+        [Sentinel(cell_key=_sig(framing="authority").cell_key(), content_hash="h")],
+        fixture=fixture,
+        deliver_and_score=lambda _s: (True, "valid_success"),
     )
     # The SAME fixture's reset (Part B hooks) advanced again — one mechanism, no third path.
     assert fixture.reset_calls > after_native
@@ -222,13 +274,33 @@ def test_carrier_rematerializes_semantic_axis_does_not() -> None:
     from advtest_ext.mutate.instantiate import AxisPatch, instantiate
 
     guide = Guide(
-        id="g", objective="summarise", target=GuideTarget(app="google_docs"),
+        id="g",
+        objective="summarise",
+        target=GuideTarget(app="google_docs"),
         success=GuideSuccess(signals=[{"kind": "canary_appears", "name": "c", "canary": "ZZ"}]),
-        provenance=GuideProvenance(source="t"), carrier_payload="PAYLOAD body text",
-        invariants=["keep"], setup_steps=[GuideStep(id="s1", intent="plant", app="google_docs", operation="open_document", params={})],
+        provenance=GuideProvenance(source="t"),
+        carrier_payload="PAYLOAD body text",
+        invariants=["keep"],
+        setup_steps=[
+            GuideStep(
+                id="s1", intent="plant", app="google_docs", operation="open_document", params={}
+            )
+        ],
         mutation_operators=[
-            GuideMutationOperator(name="reframe", dimension="framing", description="f", mutable_fields=["objective"], cell_values=["urgency"]),
-            GuideMutationOperator(name="encode", dimension="carrier_placement", description="c", mutable_fields=["carrier_payload"], cell_values=["rot13"]),
+            GuideMutationOperator(
+                name="reframe",
+                dimension="framing",
+                description="f",
+                mutable_fields=["objective"],
+                cell_values=["urgency"],
+            ),
+            GuideMutationOperator(
+                name="encode",
+                dimension="carrier_placement",
+                description="c",
+                mutable_fields=["carrier_payload"],
+                cell_values=["rot13"],
+            ),
         ],
     )
     parent = _sig()
@@ -239,7 +311,10 @@ def test_carrier_rematerializes_semantic_axis_does_not() -> None:
 
     # semantic axis (framing) → touches the conversational field, NOT the doc body.
     def strat(g: Any, op: Any, fv: str) -> AxisPatch:
-        return AxisPatch(artifact_patch={"objective": f"[{fv}] {g.objective}"}, claimed_realized_axes={"framing": fv})
+        return AxisPatch(
+            artifact_patch={"objective": f"[{fv}] {g.objective}"},
+            claimed_realized_axes={"framing": fv},
+        )
 
     semantic = instantiate(guide, parent, "framing", "urgency", strategist=strat)
     assert semantic.guide.carrier_payload == guide.carrier_payload  # doc body unchanged
@@ -256,10 +331,18 @@ def test_bracket_runs_under_profile_lock() -> None:
     archive = Archive(profile=PROFILE)
 
     # Completes without AssertionError → every setup/teardown reset ran under the lock.
-    asyncio.run(run_native_phase(
-        scheduler, PROFILE, archive, [Variant("A", _sig(framing="authority"))],
-        deliver_and_score=_deliver(sv=False), fixture=fixture, observer=MockObserver(tenant), materializer=MockMaterializer(tenant),
-    ))
+    asyncio.run(
+        run_native_phase(
+            scheduler,
+            PROFILE,
+            archive,
+            [Variant("A", _sig(framing="authority"))],
+            deliver_and_score=_deliver(sv=False),
+            fixture=fixture,
+            observer=MockObserver(tenant),
+            materializer=MockMaterializer(tenant),
+        )
+    )
     assert fixture.reset_calls >= 2
     # A different profile's lock is independent (could run concurrently).
     other = TargetProfileKey("gemini-1", "enterprise", "OTHER")

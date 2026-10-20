@@ -37,9 +37,17 @@ from advtest_ext.mutate.novelty import NoveltyDecision
 
 
 def _sig(**axes: str) -> Signature:
-    base = dict(framing=BASELINE, turn_order=BASELINE, persona=BASELINE, carrier_placement=BASELINE, escalation_speed=BASELINE)
+    base = dict(
+        framing=BASELINE,
+        turn_order=BASELINE,
+        persona=BASELINE,
+        carrier_placement=BASELINE,
+        escalation_speed=BASELINE,
+    )
     base.update(axes)
-    return Signature(objective_class="canary_exfil", cross_app_hops_bucket="0", individual_id="h", **base)
+    return Signature(
+        objective_class="canary_exfil", cross_app_hops_bucket="0", individual_id="h", **base
+    )
 
 
 class _Fixture:
@@ -66,7 +74,11 @@ def test_sentinel_resets_and_changepoint_detects_flip() -> None:
     def run_cycle(cycle_index: int) -> list:
         def deliver(_s: Sentinel) -> tuple[bool, str]:
             # target flips to vulnerable at flip_cycle
-            return (cycle_index >= flip_cycle, "valid_success" if cycle_index >= flip_cycle else "valid_refusal")
+            return (
+                cycle_index >= flip_cycle,
+                "valid_success" if cycle_index >= flip_cycle else "valid_refusal",
+            )
+
         return run_sentinel_cycle(sentinels, fixture=fixture, deliver_and_score=deliver)
 
     cycles = [run_cycle(i) for i in range(12)]
@@ -89,8 +101,12 @@ def test_q4_uses_undecayed_prior_decayed_underreports() -> None:
     # Fresh evidence: now clearly vulnerable.
     new_alpha, new_beta = 8.0, 2.0
 
-    undecayed_drift = posterior_drift(new_alpha=new_alpha, new_beta=new_beta, prior_alpha=prev.alpha, prior_beta=prev.beta)
-    decayed_drift = posterior_drift(new_alpha=new_alpha, new_beta=new_beta, prior_alpha=decayed.alpha, prior_beta=decayed.beta)
+    undecayed_drift = posterior_drift(
+        new_alpha=new_alpha, new_beta=new_beta, prior_alpha=prev.alpha, prior_beta=prev.beta
+    )
+    decayed_drift = posterior_drift(
+        new_alpha=new_alpha, new_beta=new_beta, prior_alpha=decayed.alpha, prior_beta=decayed.beta
+    )
 
     # Same mean shift, but the decayed prior's inflated variance DEFLATES the z-score.
     assert abs(undecayed_drift.magnitude - decayed_drift.magnitude) < 1e-9
@@ -116,7 +132,9 @@ def test_search_collapse_suppresses_target_alert() -> None:
     dropped = _sig(framing="urgency")  # was populated last window, gone now
 
     health = search_health(
-        archive, prev_coverage=10, prev_populated_cells=frozenset({kept.cell_key(), dropped.cell_key()}),
+        archive,
+        prev_coverage=10,
+        prev_populated_cells=frozenset({kept.cell_key(), dropped.cell_key()}),
     )
     assert health.collapsed  # coverage fell 10 -> 1
     assert dropped.cell_key() in health.collapsed_cells
@@ -131,7 +149,11 @@ def test_search_collapse_suppresses_target_alert() -> None:
 
 def test_judge_drift_marks_leads_suspect() -> None:
     before = {"g1": "refused", "g2": "success", "g3": "refused"}
-    after = {"g1": "success", "g2": "success", "g3": "success"}  # 2/3 verdicts moved on FIXED inputs
+    after = {
+        "g1": "success",
+        "g2": "success",
+        "g3": "success",
+    }  # 2/3 verdicts moved on FIXED inputs
     drift = judge_drift(before, after)
     assert drift.shifted and drift.shift_rate > 0.5
 
@@ -165,8 +187,32 @@ def test_axis_attribution_names_axis_and_refuses_entangled() -> None:
     regressed = [encode_cell_key(_sig(framing="authority", escalation_speed="fast").cell_key())]
     boundary = BoundaryModel(
         main_effects=[
-            AxisEffect("framing", "authority", 0.7, 0.6, 0.5, 0.9, 12.0, 8.0, low_confidence=False, entangled=False, basis="self_report"),
-            AxisEffect("escalation_speed", "fast", 0.6, 0.5, 0.3, 0.9, 5.0, 3.0, low_confidence=True, entangled=True, basis="self_report"),
+            AxisEffect(
+                "framing",
+                "authority",
+                0.7,
+                0.6,
+                0.5,
+                0.9,
+                12.0,
+                8.0,
+                low_confidence=False,
+                entangled=False,
+                basis="self_report",
+            ),
+            AxisEffect(
+                "escalation_speed",
+                "fast",
+                0.6,
+                0.5,
+                0.3,
+                0.9,
+                5.0,
+                3.0,
+                low_confidence=True,
+                entangled=True,
+                basis="self_report",
+            ),
         ]
     )
     report = attribute_drift(old, new, regressed, boundary)
@@ -214,7 +260,9 @@ def test_false_drift_calibration_holds_budget() -> None:
     baseline = 0.3
     stable_series = [[rng.random() < baseline for _ in range(24)] for _ in range(40)]
 
-    thresholds, report = calibrate_false_drift(stable_series, baseline_rate=baseline, target_rate=0.05)
+    thresholds, report = calibrate_false_drift(
+        stable_series, baseline_rate=baseline, target_rate=0.05
+    )
     assert report.false_alarm_rate <= 0.05
     assert report.within_budget and thresholds.calibrated
     assert alerts_enabled(thresholds) is True
@@ -241,7 +289,9 @@ def test_sentinel_selection_is_stable() -> None:
 def test_search_health_novelty_collapse() -> None:
     archive = Archive(profile=TargetProfileKey("m", "t", "s"))
     archive.observe(_sig(framing="authority"), outcome="valid_refusal", signal_verified=False)
-    decisions = [NoveltyDecision(admit=False, reason="dup") for _ in range(9)] + [NoveltyDecision(admit=True, reason="new")]
+    decisions = [NoveltyDecision(admit=False, reason="dup") for _ in range(9)] + [
+        NoveltyDecision(admit=True, reason="new")
+    ]
     health = search_health(archive, novelty_decisions=decisions)
     assert health.novelty_acceptance_rate == 0.1
     assert health.collapsed  # novelty acceptance below floor

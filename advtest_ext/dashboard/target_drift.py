@@ -75,15 +75,24 @@ def _boundary(session: Session, profile: TargetProfileKey) -> BoundaryModel | No
 
 
 def _boundary_from_payload(payload: dict[str, Any]) -> BoundaryModel:
-    model = BoundaryModel(baseline_rate=payload.get("baseline_rate"), requeued=int(payload.get("requeued", 0)))
+    model = BoundaryModel(
+        baseline_rate=payload.get("baseline_rate"), requeued=int(payload.get("requeued", 0))
+    )
     for e in payload.get("main_effects", []):
         ci = e.get("ci", [0.0, 0.0])
         model.main_effects.append(
             AxisEffect(
-                axis=e["axis"], feature_value=e["feature_value"], success_rate=e["success_rate"],
-                delta_vs_baseline=e.get("delta_vs_baseline"), ci_low=ci[0], ci_high=ci[1],
-                ess=e["ess"], n_signal_verified=e["n_signal_verified"], low_confidence=e["low_confidence"],
-                entangled=e["entangled"], basis=e["basis"],
+                axis=e["axis"],
+                feature_value=e["feature_value"],
+                success_rate=e["success_rate"],
+                delta_vs_baseline=e.get("delta_vs_baseline"),
+                ci_low=ci[0],
+                ci_high=ci[1],
+                ess=e["ess"],
+                n_signal_verified=e["n_signal_verified"],
+                low_confidence=e["low_confidence"],
+                entangled=e["entangled"],
+                basis=e["basis"],
             )
         )
     return model
@@ -102,15 +111,22 @@ def build_target_drift_router(
         profiles = [
             {
                 "token": _encode_profile(p.model_label, p.tenant_tier, p.surface_config_hash),
-                "model_label": p.model_label, "tenant_tier": p.tenant_tier, "surface_config_hash": p.surface_config_hash,
+                "model_label": p.model_label,
+                "tenant_tier": p.tenant_tier,
+                "surface_config_hash": p.surface_config_hash,
             }
             for p in session.query(TargetProfile).all()
         ]
-        return templates.TemplateResponse(request, "target_drift/index.html", {"profiles": profiles})
+        return templates.TemplateResponse(
+            request, "target_drift/index.html", {"profiles": profiles}
+        )
 
     @router.get("/{token}/heatmap", response_class=HTMLResponse)
     async def heatmap(
-        request: Request, token: str, cycle: int | None = None, session: Session = Depends(get_session)  # noqa: B008
+        request: Request,
+        token: str,
+        cycle: int | None = None,
+        session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
         profile = _decode_profile(token)
         snaps = _snapshots(session, profile)
@@ -120,27 +136,38 @@ def build_target_drift_router(
         fp = Fingerprint.from_payload(dict(snaps[idx].payload))
         cells = [
             {
-                "cell_key": key, "mean": stat.mean, "ess": stat.ess, "resolution": stat.resolution,
+                "cell_key": key,
+                "mean": stat.mean,
+                "ess": stat.ess,
+                "resolution": stat.resolution,
                 "coarse": stat.resolution != "native",
             }
             for key, stat in sorted(fp.cells.items())
         ]
         ctx = {
-            "token": token, "profile": profile, "cells": cells,
-            "cycle": idx, "n_cycles": len(snaps),
+            "token": token,
+            "profile": profile,
+            "cells": cells,
+            "cycle": idx,
+            "n_cycles": len(snaps),
             "cycle_labels": [s.taken_at.isoformat() for s in snaps],
         }
         return templates.TemplateResponse(request, "target_drift/heatmap.html", ctx)
 
     @router.get("/{token}/alerts", response_class=HTMLResponse)
-    async def alerts(request: Request, token: str, session: Session = Depends(get_session)) -> Response:  # noqa: B008
+    async def alerts(
+        request: Request,
+        token: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
         from advtest_ext.storage.models import TargetDriftAlert
 
         profile = _decode_profile(token)
         rows = list(
             session.query(TargetDriftAlert)
             .filter_by(
-                model_label=profile.model_label, tenant_tier=profile.tenant_tier,
+                model_label=profile.model_label,
+                tenant_tier=profile.tenant_tier,
                 surface_config_hash=profile.surface_config_hash,
             )
             .order_by(TargetDriftAlert.cycle_ts.desc())
@@ -149,8 +176,12 @@ def build_target_drift_router(
         )
         alert_views = [
             {
-                "cell_key": r.cell_key, "direction": r.direction, "magnitude": round(r.magnitude, 2),
-                "source": r.source, "calibrated": bool(r.detector_calibrated), "note": r.note,
+                "cell_key": r.cell_key,
+                "direction": r.direction,
+                "magnitude": round(r.magnitude, 2),
+                "source": r.source,
+                "calibrated": bool(r.detector_calibrated),
+                "note": r.note,
             }
             for r in rows
         ]
@@ -159,7 +190,11 @@ def build_target_drift_router(
         )
 
     @router.get("/{token}/status", response_class=HTMLResponse)
-    async def status(request: Request, token: str, session: Session = Depends(get_session)) -> Response:  # noqa: B008
+    async def status(
+        request: Request,
+        token: str,
+        session: Session = Depends(get_session),  # noqa: B008
+    ) -> Response:
         from advtest_ext.storage.models import TargetDriftAlert
 
         profile = _decode_profile(token)
@@ -167,8 +202,11 @@ def build_target_drift_router(
         calibrated_target_alerts = (
             session.query(TargetDriftAlert)
             .filter_by(
-                model_label=profile.model_label, tenant_tier=profile.tenant_tier,
-                surface_config_hash=profile.surface_config_hash, detector_calibrated=True, source="target",
+                model_label=profile.model_label,
+                tenant_tier=profile.tenant_tier,
+                surface_config_hash=profile.surface_config_hash,
+                detector_calibrated=True,
+                source="target",
             )
             .count()
         )
@@ -188,19 +226,34 @@ def build_target_drift_router(
         elif not cusum_quiet:
             state, detail = "sustained_drift", "CUSUM detected a sustained shift"
         elif version_diff_available and version_diff_within_tolerance is False:
-            state, detail = "gradual_drift", "version-diff over tolerance (gradual drift CUSUM smooths over)"
+            state, detail = (
+                "gradual_drift",
+                "version-diff over tolerance (gradual drift CUSUM smooths over)",
+            )
         else:
-            state, detail = "partial_coverage", "CUSUM quiet but no version-diff computed — NOT stable"
+            state, detail = (
+                "partial_coverage",
+                "CUSUM quiet but no version-diff computed — NOT stable",
+            )
 
         return templates.TemplateResponse(
-            request, "target_drift/status.html",
-            {"token": token, "state": state, "detail": detail,
-             "cusum_quiet": cusum_quiet, "version_diff_available": version_diff_available},
+            request,
+            "target_drift/status.html",
+            {
+                "token": token,
+                "state": state,
+                "detail": detail,
+                "cusum_quiet": cusum_quiet,
+                "version_diff_available": version_diff_available,
+            },
         )
 
     @router.get("/diff", response_class=HTMLResponse)
     async def version_diff(
-        request: Request, old: str, new: str, session: Session = Depends(get_session)  # noqa: B008
+        request: Request,
+        old: str,
+        new: str,
+        session: Session = Depends(get_session),  # noqa: B008
     ) -> Response:
         old_profile, new_profile = _decode_profile(old), _decode_profile(new)
         old_snaps, new_snaps = _snapshots(session, old_profile), _snapshots(session, new_profile)
@@ -214,19 +267,31 @@ def build_target_drift_router(
         report = attribute_drift(old_profile, new_profile, regressed, boundary)
         axis_rows = [
             {
-                "axis": a.axis, "feature_value": a.feature_value, "success_rate": round(a.success_rate, 3),
-                "ci": [round(a.ci_low, 3), round(a.ci_high, 3)], "asserted": a.asserted, "caveat": a.caveat,
+                "axis": a.axis,
+                "feature_value": a.feature_value,
+                "success_rate": round(a.success_rate, 3),
+                "ci": [round(a.ci_low, 3), round(a.ci_high, 3)],
+                "asserted": a.asserted,
+                "caveat": a.caveat,
             }
             for a in report.axis_patterns
         ]
         divergences = [
-            {"resolution": d.resolution, "psi": round(d.psi, 4), "kl": round(d.kl, 4), "n": d.n_matched_cells}
+            {
+                "resolution": d.resolution,
+                "psi": round(d.psi, 4),
+                "kl": round(d.kl, 4),
+                "n": d.n_matched_cells,
+            }
             for d in diff.by_resolution.values()
         ]
         ctx = {
-            "old": old, "new": new, "facets_changed": diff.facets_changed,
+            "old": old,
+            "new": new,
+            "facets_changed": diff.facets_changed,
             "regressed": [decode_cell_key(k) if isinstance(k, str) else k for k in regressed],
-            "axis_rows": axis_rows, "divergences": divergences,
+            "axis_rows": axis_rows,
+            "divergences": divergences,
         }
         return templates.TemplateResponse(request, "target_drift/diff.html", ctx)
 

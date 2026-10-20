@@ -50,9 +50,7 @@ def _ui_pool(tmp_path: Path, *, profile_exists: bool) -> AccountPool:
     if profile_exists:
         prof.mkdir()
     return AccountPool(
-        slots=[
-            AccountSlot(role="outlook_sender", profile_dir=prof, token_cache=None, label=None)
-        ]
+        slots=[AccountSlot(role="outlook_sender", profile_dir=prof, token_cache=None, label=None)]
     )
 
 

@@ -29,9 +29,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from advtest_ext.scoring.objectives import Objective
 
 
-def required_channel_gap(
-    observation: SideEffectObservation, objective: Objective
-) -> str | None:
+def required_channel_gap(observation: SideEffectObservation, objective: Objective) -> str | None:
     """The first required channel that is ``unavailable``/``failed``, or ``None``."""
     for channel in objective.required_channels:
         if observation.status.get(channel) in ("unavailable", "failed"):

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -30,7 +31,7 @@ from advtest_ext.strategy.orchestrator import RunResult, SampleOutcome
 COLD_START_PREFIX = "cold_start:"
 
 
-def _sample_ctx(sample: Sample) -> dict:
+def _sample_ctx(sample: Sample) -> dict[str, Any]:
     """The sample fields the pilot exporter needs (carrier, goal, journey
     signals), stashed on each attempt row so the DB is self-sufficient for
     export without re-reading the source JSONL."""
@@ -53,7 +54,7 @@ def lineage_id_for(outcome: SampleOutcome) -> str:
 
 
 def _rows_for_outcome(
-    run_id: str, outcome: SampleOutcome, *, target_model: str, ctx: dict
+    run_id: str, outcome: SampleOutcome, *, target_model: str, ctx: dict[str, Any]
 ) -> list[StrategyAttempt]:
     lineage = lineage_id_for(outcome)
     rows: list[StrategyAttempt] = []
@@ -87,7 +88,7 @@ def persist_run(
     target_model: str = "",
     threat_model: str = "black_box",
     library_dir: str | None = None,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
     run_id: str | None = None,
     samples: list[Sample] | None = None,
 ) -> str:
@@ -125,9 +126,7 @@ def persist_run(
         for outcome in result.outcomes:
             prev_id: int | None = None
             ctx = ctx_by_key.get(outcome.sample_key, {})
-            for row in _rows_for_outcome(
-                run_id, outcome, target_model=target_model, ctx=ctx
-            ):
+            for row in _rows_for_outcome(run_id, outcome, target_model=target_model, ctx=ctx):
                 row.parent_id = prev_id  # refinement chain within the sample
                 sess.add(row)
                 sess.flush()  # assign row.id so the next iter can point at it

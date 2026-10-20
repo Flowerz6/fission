@@ -35,6 +35,4 @@ def router_from_config(
     temperature: float | None = None,
 ) -> ProviderRouter:
     provider = load_provider_from_yaml(config_path, role)
-    return ProviderRouter(
-        provider, top_k=top_k, max_tokens=max_tokens, temperature=temperature
-    )
+    return ProviderRouter(provider, top_k=top_k, max_tokens=max_tokens, temperature=temperature)

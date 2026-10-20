@@ -56,9 +56,7 @@ def factory():
 def test_persist_writes_run_and_attempts(factory) -> None:
     result = RunResult(outcomes=[_outcome_hit(), _outcome_coldstart_miss()])
     with session_scope(factory) as s:
-        run_id = persist_run(
-            result, session=s, target="agentdojo", target_model="gpt-5-nano"
-        )
+        run_id = persist_run(result, session=s, target="agentdojo", target_model="gpt-5-nano")
 
     with session_scope(factory) as s:
         run = s.get(StrategyRun, run_id)
@@ -88,7 +86,9 @@ def test_persist_builds_parent_chain(factory) -> None:
     with session_scope(factory) as s:
         rows = sorted(
             s.scalars(
-                select(StrategyAttempt).where(StrategyAttempt.sample_key == "google_docs/user_task_1/exfil")
+                select(StrategyAttempt).where(
+                    StrategyAttempt.sample_key == "google_docs/user_task_1/exfil"
+                )
             ),
             key=lambda r: r.iter,
         )

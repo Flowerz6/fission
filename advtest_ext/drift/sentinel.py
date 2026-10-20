@@ -55,7 +55,9 @@ def select_sentinels(
     for cell_key, cell in archive.cells.items():
         if not cell.individuals:
             continue
-        content_hash = existing.get(cell_key) or min(ind.individual_id for ind in cell.individuals.values())
+        content_hash = existing.get(cell_key) or min(
+            ind.individual_id for ind in cell.individuals.values()
+        )
         sentinels.append(Sentinel(cell_key=cell_key, content_hash=content_hash))
     return sorted(sentinels, key=lambda s: s.cell_key)
 
@@ -77,7 +79,11 @@ class SentinelObservation:
     @property
     def counts(self) -> bool:
         """A valid, signal-verified measurement (the only kind drift may use)."""
-        return self.fixture_clean and self.effective_outcome != "invalid_technical" and self.signal_verified
+        return (
+            self.fixture_clean
+            and self.effective_outcome != "invalid_technical"
+            and self.signal_verified
+        )
 
 
 def run_sentinel_cycle(
@@ -108,7 +114,9 @@ def run_sentinel_cycle(
     return observations
 
 
-def sentinel_series(cycles: Iterable[Sequence[SentinelObservation]], cell_key: CellKey) -> list[bool]:
+def sentinel_series(
+    cycles: Iterable[Sequence[SentinelObservation]], cell_key: CellKey
+) -> list[bool]:
     """The per-cell signal-verified series across cycles (valid measurements only)."""
     series: list[bool] = []
     for cycle in cycles:
@@ -123,7 +131,9 @@ def sentinel_series(cycles: Iterable[Sequence[SentinelObservation]], cell_key: C
 # ---------------------------------------------------------------------------
 
 
-def store_sentinels(session: Session, profile: TargetProfileKey, sentinels: Sequence[Sentinel]) -> None:
+def store_sentinels(
+    session: Session, profile: TargetProfileKey, sentinels: Sequence[Sentinel]
+) -> None:
     from advtest_ext.archive.fingerprint import encode_cell_key
     from advtest_ext.storage.models import TargetDriftSentinel
 

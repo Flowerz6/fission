@@ -208,8 +208,10 @@ def _normal_quantile(level: float) -> float:
     if p <= p_high:
         q = p - 0.5
         r = q * q
-        return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (
-            ((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0
+        return (
+            (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5])
+            * q
+            / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0)
         )
     q = math.sqrt(-2.0 * math.log(1.0 - p))
     return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
@@ -254,14 +256,10 @@ def apply_observation(
     if outcome == "valid_success":
         if not signal_verified:
             return Observation(effect="judge_only", resolution=resolution)
-        posterior.update(
-            success_signal_verified=True, confidence=confidence, resolution=resolution
-        )
+        posterior.update(success_signal_verified=True, confidence=confidence, resolution=resolution)
         return Observation(effect="updated_success", resolution=resolution)
     # valid_refusal
-    posterior.update(
-        success_signal_verified=False, confidence=confidence, resolution=resolution
-    )
+    posterior.update(success_signal_verified=False, confidence=confidence, resolution=resolution)
     return Observation(effect="updated_failure", resolution=resolution)
 
 

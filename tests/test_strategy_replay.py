@@ -45,7 +45,9 @@ def _hit_result() -> RunResult:
                 strategy_ids=["s1"],
                 status="hit",
                 hit_iter=0,
-                attempts=[Attempt(iter=0, analysis="a", injection="WIN", utility=True, security=True)],
+                attempts=[
+                    Attempt(iter=0, analysis="a", injection="WIN", utility=True, security=True)
+                ],
             )
         ]
     )
@@ -69,7 +71,9 @@ async def test_replay_run_only_replays_winners() -> None:
                 strategy_ids=["_template_cold_start"],
                 status="miss",
                 hit_iter=None,
-                attempts=[Attempt(iter=0, analysis="a", injection="n", utility=False, security=False)],
+                attempts=[
+                    Attempt(iter=0, analysis="a", injection="n", utility=False, security=False)
+                ],
             ),
         ]
     )

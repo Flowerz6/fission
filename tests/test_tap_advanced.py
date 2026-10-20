@@ -130,7 +130,9 @@ def test_checkpoint_restores_completed_node_atomically(tmp_path: Any) -> None:
 def test_checkpoint_rejects_changed_experiment_identity(tmp_path: Any, field: str) -> None:
     path = tmp_path / "checkpoint.json"
     original = SearchCheckpointStore(path, "run", identity=_checkpoint_identity())
-    original.save_node({"id": "n1-1", "parent_id": "n0", "depth": 1, "score": 1.0}, operator_cursor=4)
+    original.save_node(
+        {"id": "n1-1", "parent_id": "n0", "depth": 1, "score": 1.0}, operator_cursor=4
+    )
     changed = _checkpoint_identity() | {field: "changed-version"}
     restored = SearchCheckpointStore(path, "run", identity=changed)
     node = {"id": "n1-1"}
@@ -140,7 +142,9 @@ def test_checkpoint_rejects_changed_experiment_identity(tmp_path: Any, field: st
     assert restored.state["operator_cursor"] == 0
 
 
-@pytest.mark.parametrize("identity", [None, {}, {"guide": "known"}, _checkpoint_identity() | {"environment": " "}])
+@pytest.mark.parametrize(
+    "identity", [None, {}, {"guide": "known"}, _checkpoint_identity() | {"environment": " "}]
+)
 def test_checkpoint_missing_identity_never_reuses_nodes(tmp_path: Any, identity: Any) -> None:
     path = tmp_path / "checkpoint.json"
     original = SearchCheckpointStore(path, "run", identity=identity)

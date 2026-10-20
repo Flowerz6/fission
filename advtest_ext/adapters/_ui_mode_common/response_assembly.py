@@ -94,6 +94,7 @@ def extract_model_thoughts(jsonl_path: Path | str, *, cap: int | None = None) ->
     if not fragments:
         return ""
     answer = max(fragments, key=len)
+
     # Gemini's thought summaries are the only bold-titled fragments (**Title**);
     # everything before the first one is UI chrome (suggestion chips, capability
     # lists), so anchor there. Stop at the final answer fragment; its cumulative

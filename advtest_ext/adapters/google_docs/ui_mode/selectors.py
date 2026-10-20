@@ -30,7 +30,7 @@ because those drift less than class names.
 
 from __future__ import annotations
 
-from typing import TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 
 from advtest_ext.adapters._ui_mode_common.selector_overlay import resolve_selectors
 
@@ -109,7 +109,7 @@ class SidePanelSelectors(TypedDict):
     button first and falls back to Enter only if the selector misses
     (drift safety net)."""
 
-    suggestion_accept: str
+    suggestion_accept: NotRequired[str]
     """The "Accept" control on a Gemini-proposed *suggested edit*
     (Docs track-changes). When Gemini writes into the doc via the
     inline editor it does NOT commit directly — it proposes a
@@ -120,13 +120,13 @@ class SidePanelSelectors(TypedDict):
     accept controls on the page (a reply can propose several); the
     invoker clicks them oldest-first until none remain."""
 
-    suggestion_reject: str
+    suggestion_reject: NotRequired[str]
     """The "Reject" control on a Gemini-proposed suggested edit —
     the clean-control counterpart to ``suggestion_accept`` (discard
     the proposal so nothing is written). Used by reject-mode runs and
     to clear a stuck "Resolve Gemini suggestions" lock between nodes."""
 
-    action_confirm: str
+    action_confirm: NotRequired[str]
     """A generic confirm / allow / continue button on a Gemini
     action-permission prompt (e.g. "Gemini wants to …" → Allow, or a
     "Continue" step gate). Best-effort and permissive — accessible

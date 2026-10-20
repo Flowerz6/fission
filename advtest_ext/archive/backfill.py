@@ -78,7 +78,9 @@ def _signal_verified(trace: Any) -> bool:
     """A deterministic (non-LLM) signal fired — the SIGNAL-VERIFIED predicate
     (``dashboard/app.py`` / harvest flywheel), read off the trace's signals."""
     sigs = getattr(trace, "signals", None) or []
-    return any(getattr(s, "fired", False) and getattr(s, "kind", "") != "llm_judge_verdict" for s in sigs)
+    return any(
+        getattr(s, "fired", False) and getattr(s, "kind", "") != "llm_judge_verdict" for s in sigs
+    )
 
 
 def _judge_confidence(trace: Any) -> float:
@@ -155,9 +157,7 @@ def _observe_leaf(
         report.coarse += 1
 
 
-def _leaf_terminal_traces(
-    traces: list[Any], index: dict[str, MutationNode]
-) -> dict[str, Any]:
+def _leaf_terminal_traces(traces: list[Any], index: dict[str, MutationNode]) -> dict[str, Any]:
     """Return ``{leaf_node_id: terminal_trace}`` for a run's tap_crescendo nodes.
 
     A leaf node is one no other node names as parent; its terminal trace is the

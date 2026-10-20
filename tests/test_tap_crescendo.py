@@ -51,7 +51,9 @@ def _behavior() -> Behavior:
 
 def _judge() -> RetrievalVerdictJudge:
     return RetrievalVerdictJudge(
-        entity=ENTITY, canary=CANARY, handshake_token=HANDSHAKE,
+        entity=ENTITY,
+        canary=CANARY,
+        handshake_token=HANDSHAKE,
         accept_output_markers=True,
     )
 
@@ -342,7 +344,9 @@ async def test_confirm_judge_must_agree_to_converge() -> None:
     attempts = await _collect(attack, target)
     assert set(_nodes(attempts)) != {"n0"}  # did NOT stop at the root
     # When the confirm judge approves, the root converges immediately.
-    attack2, target2 = _attack(_CONVERGE, max_depth=1, stop_on_success=True, confirm_judge=_ConfirmJudge(approve=True))
+    attack2, target2 = _attack(
+        _CONVERGE, max_depth=1, stop_on_success=True, confirm_judge=_ConfirmJudge(approve=True)
+    )
     attempts2 = await _collect(attack2, target2)
     assert set(_nodes(attempts2)) == {"n0"}  # stopped at the confirmed root
 
@@ -1145,7 +1149,9 @@ async def test_turn_score_sem_is_descriptive_and_not_repeatability_uncertainty()
         pass
     assert node["turn_score_sem"] == 0.0
     assert "score_uncertainty" not in node
-    assert "not repeatability uncertainty" in attack.search_report()["turn_score_sem_interpretation"]
+    assert (
+        "not repeatability uncertainty" in attack.search_report()["turn_score_sem_interpretation"]
+    )
 
 
 def test_tap_document_evidence_excludes_unchanged_planted_content() -> None:

@@ -100,18 +100,28 @@ class BoundaryModel:
             "requeued": self.requeued,
             "main_effects": [
                 {
-                    "axis": e.axis, "feature_value": e.feature_value, "success_rate": e.success_rate,
-                    "delta_vs_baseline": e.delta_vs_baseline, "ci": [e.ci_low, e.ci_high], "ess": e.ess,
-                    "n_signal_verified": e.n_signal_verified, "low_confidence": e.low_confidence,
-                    "entangled": e.entangled, "basis": e.basis,
+                    "axis": e.axis,
+                    "feature_value": e.feature_value,
+                    "success_rate": e.success_rate,
+                    "delta_vs_baseline": e.delta_vs_baseline,
+                    "ci": [e.ci_low, e.ci_high],
+                    "ess": e.ess,
+                    "n_signal_verified": e.n_signal_verified,
+                    "low_confidence": e.low_confidence,
+                    "entangled": e.entangled,
+                    "basis": e.basis,
                 }
                 for e in self.main_effects
             ],
             "interactions": [
                 {
-                    "axes": list(i.axes), "values": list(i.values), "observed_rate": i.observed_rate,
-                    "additive_prediction": i.additive_prediction, "interaction": i.interaction,
-                    "ess": i.ess, "low_confidence": i.low_confidence,
+                    "axes": list(i.axes),
+                    "values": list(i.values),
+                    "observed_rate": i.observed_rate,
+                    "additive_prediction": i.additive_prediction,
+                    "interaction": i.interaction,
+                    "ess": i.ess,
+                    "low_confidence": i.low_confidence,
                 }
                 for i in self.interactions
             ],
@@ -156,21 +166,32 @@ def estimate_effects(
     # --- main effects (one-axis, clean) ---
     groups: dict[tuple[str, str], list[VariantOutcome]] = {}
     for outcome in one_axis:
-        (axis, value), = outcome.axes.items()
+        ((axis, value),) = outcome.axes.items()
         groups.setdefault((axis, value), []).append(outcome)
 
     for (axis, value), group in sorted(groups.items()):
         successes, _total, post = _rate(group)
         ci = post.credible_interval()
-        basis = _DETERMINISTIC if all(o.clean_basis == _DETERMINISTIC for o in group) else _SELF_REPORT
+        basis = (
+            _DETERMINISTIC if all(o.clean_basis == _DETERMINISTIC for o in group) else _SELF_REPORT
+        )
         entangled = axis in ENTANGLED_AXES and pair_count < _MIN_PAIR_FOR_DISENTANGLE
         low_conf = post.effective_sample_size() < _MIN_ESS or basis == _SELF_REPORT or entangled
         model.main_effects.append(
             AxisEffect(
-                axis=axis, feature_value=value, success_rate=post.mean(),
-                delta_vs_baseline=(post.mean() - baseline_rate) if baseline_rate is not None else None,
-                ci_low=ci.low, ci_high=ci.high, ess=post.effective_sample_size(),
-                n_signal_verified=successes, low_confidence=low_conf, entangled=entangled, basis=basis,
+                axis=axis,
+                feature_value=value,
+                success_rate=post.mean(),
+                delta_vs_baseline=(post.mean() - baseline_rate)
+                if baseline_rate is not None
+                else None,
+                ci_low=ci.low,
+                ci_high=ci.high,
+                ess=post.effective_sample_size(),
+                n_signal_verified=successes,
+                low_confidence=low_conf,
+                entangled=entangled,
+                basis=basis,
             )
         )
 
@@ -187,12 +208,17 @@ def estimate_effects(
         # Additive prediction from the two main effects, if both are known.
         m0 = main_by_axis_value.get((axes[0], values[0]))
         m1 = main_by_axis_value.get((axes[1], values[1]))
-        additive = None if (m0 is None or m1 is None) else min(1.0, m0 + m1 - (baseline_rate or 0.0))
+        additive = (
+            None if (m0 is None or m1 is None) else min(1.0, m0 + m1 - (baseline_rate or 0.0))
+        )
         interaction_val = None if additive is None else post.mean() - additive
         model.interactions.append(
             Interaction(
-                axes=axes, values=values, observed_rate=post.mean(),
-                additive_prediction=additive, interaction=interaction_val,
+                axes=axes,
+                values=values,
+                observed_rate=post.mean(),
+                additive_prediction=additive,
+                interaction=interaction_val,
                 ess=post.effective_sample_size(),
                 low_confidence=post.effective_sample_size() < _MIN_ESS,
             )

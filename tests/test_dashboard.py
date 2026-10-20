@@ -1387,8 +1387,14 @@ def test_live_tests_options_keys_guides_by_surface_and_scope() -> None:
     assert data["guides"], "expected at least one guide"
     g = data["guides"][0]
     assert {
-        "id", "title", "surface", "surface_label",
-        "multi_workspace", "second_accounts", "maturity", "blurb",
+        "id",
+        "title",
+        "surface",
+        "surface_label",
+        "multi_workspace",
+        "second_accounts",
+        "maturity",
+        "blurb",
     } <= set(g)
     assert isinstance(g["multi_workspace"], bool)
     # Both scopes are represented, so the Single/Across-workspaces toggle has content.

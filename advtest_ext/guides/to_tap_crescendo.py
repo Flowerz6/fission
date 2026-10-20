@@ -145,7 +145,10 @@ def _strategy_brief(guide: Guide) -> str | None:
             "wording mutations are applied to the planted content, not delivered via your chat turn."
         )
         if guide.carrier_payload:
-            parts.append("Carrier for REFERENCE ONLY (already planted — do not resend):\n" + guide.carrier_payload)
+            parts.append(
+                "Carrier for REFERENCE ONLY (already planted — do not resend):\n"
+                + guide.carrier_payload
+            )
     elif guide.carrier_payload:
         parts.append("Exact known carrier/payload:\n" + guide.carrier_payload)
     elif guide.carrier_payload_source:
@@ -308,8 +311,7 @@ def map_guide(guide: Guide) -> GuidePlan:
     #    goal (benign_user_turns stays off).
     _plant_ops = {"send_email", "open_document", "create_event"}
     plants_payload = any(
-        step.operation in _plant_ops
-        and (step.params.get("body") or step.params.get("description"))
+        step.operation in _plant_ops and (step.params.get("body") or step.params.get("description"))
         for step in guide.setup_steps
     )
     if plants_payload or "indirect_prompt_injection" in (guide.threat_class or ""):

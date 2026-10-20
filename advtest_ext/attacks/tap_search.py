@@ -192,7 +192,7 @@ class MutationCandidate:
 _CANDIDATE_KEY_HINTS = ("operator_name", "dimension", "strategy", "plan_steps")
 
 
-def extract_candidate_json(text: str) -> dict | None:
+def extract_candidate_json(text: str) -> dict[str, Any] | None:
     """Parse the candidate JSON object from a strategist reply, tolerant of code
     fences and prose preambles. A strong planner (e.g. Claude) routinely wraps the
     JSON in ```json … ``` or a sentence, which a bare ``json.loads`` rejects — that
@@ -210,7 +210,7 @@ def extract_candidate_json(text: str) -> dict | None:
         pass
     from advtest_ext.attacks._attacker_json import iter_balanced_json_blocks
 
-    parsed: list[dict] = []
+    parsed: list[dict[str, Any]] = []
     for block in iter_balanced_json_blocks(text):
         try:
             obj = json.loads(block)
@@ -224,7 +224,7 @@ def extract_candidate_json(text: str) -> dict | None:
     return parsed[0] if parsed else None
 
 
-def _flatten_artifact_patch(patch: dict) -> dict:
+def _flatten_artifact_patch(patch: dict[str, Any]) -> dict[str, Any]:
     """Flatten a nested artifact_patch into dotted field paths.
 
     Local / open models often emit the patch as a nested object
@@ -236,7 +236,7 @@ def _flatten_artifact_patch(patch: dict) -> dict:
     """
     if not isinstance(patch, dict):
         return {}
-    out: dict = {}
+    out: dict[str, Any] = {}
 
     def walk(prefix: str, value: Any) -> None:
         if isinstance(value, dict) and value and "." not in prefix.split(".")[-1]:
@@ -312,7 +312,7 @@ def parse_candidate(
         preserved_invariants=tuple(str(item) for item in preserved)
         if isinstance(preserved, list)
         else (),
-        diagnosis=dict(payload.get("diagnosis"))
+        diagnosis=dict(payload.get("diagnosis") or {})
         if isinstance(payload.get("diagnosis"), dict)
         else ({"note": str(payload["diagnosis"])} if payload.get("diagnosis") else {}),
     )
@@ -772,7 +772,9 @@ class SearchCheckpointStore:
             isinstance(value, str) and bool(value.strip()) for value in self.identity.values()
         )
         self.state: dict[str, Any] = {
-            "nodes": {}, "operator_cursor": 0, "identity": self.identity,
+            "nodes": {},
+            "operator_cursor": 0,
+            "identity": self.identity,
         }
         if self.path and self.path.exists():
             try:
