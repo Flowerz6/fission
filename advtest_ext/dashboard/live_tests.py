@@ -167,6 +167,30 @@ def live_test_catalog() -> tuple[LiveTestSpec, ...]:
             ),
         ),
         LiveTestSpec(
+            id="docs-strategy-loop",
+            title="Docs — adaptive strategy loop",
+            surface="Google Docs",
+            method="PIMiner adaptive refinement (library-routed)",
+            description=(
+                "Routes over the strategy library, then iteratively refines an "
+                "indirect injection against the live Docs side panel — learning "
+                "from each reply until a hit or the iteration budget. Every "
+                "iteration is scored and streamed to this dashboard."
+            ),
+            prerequisites=(
+                "Workspace browser profile is connected",
+                "Assessment policy and evaluator are configured",
+            ),
+            argv=(
+                "poetry",
+                "run",
+                "advtest",
+                "run",
+                "--config",
+                "configs/run_workspace_docs_strategy.yaml",
+            ),
+        ),
+        LiveTestSpec(
             id="sheets-injection-sweep",
             title="Sheets — injection sweep",
             surface="Google Sheets",
