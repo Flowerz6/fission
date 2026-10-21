@@ -17,12 +17,28 @@
 # Point endpoint at the vast.ai 70b when available, e.g.
 #   endpoint: http://<vast-host>:<port>/v1
 #   model_id: qwen2.5:72b-instruct   (or llama3.3:70b)
+# Switched from the local abliterated 32B to opus-4-8: it reasons far better at
+# the PIMiner loop's credit-assignment (<analysis>) step and does NOT refuse /
+# empty on offensive turns the way the 5.x Claudes do (verified via a 3-iter
+# cold-start smoke: 0 empty injections, and the variants genuinely adapted to
+# the target's refusals), while still writing hard, un-softened attack content.
+# It is also hosted, so there is no RunPod pod to keep warm. NOTE: CLAUDE_ATTACKER
+# also drives the TAP turn-writer; opus-4-8 handles that fine. Restore the local
+# 32B (commented below) if you specifically want it back for TAP.
 CLAUDE_ATTACKER:
-  provider_type: local_vllm
-  endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
-  model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
-  max_tokens: 2048
+  provider_type: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  model_id: claude-opus-4-8
+  max_tokens: 4096
   temperature: 1.0
+
+# Previous attacker — local abliterated Qwen2.5-32B (un-softened TAP turn-writer):
+# CLAUDE_ATTACKER:
+#   provider_type: local_vllm
+#   endpoint: https://3akijhrj3vnywg-8000.proxy.runpod.net/v1
+#   model_id: hf.co/zetasepic/Qwen2.5-32B-Instruct-abliterated-v2-GGUF:Q4_K_M
+#   max_tokens: 2048
+#   temperature: 1.0
 
 # --- The PLANNER: CLAUDE (proposes the mutation strategy, not the turn text) ---
 # Split from the attacker: the local 32B is strong at writing hard, un-softened
