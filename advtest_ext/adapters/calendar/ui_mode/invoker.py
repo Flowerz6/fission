@@ -45,6 +45,7 @@ from advtest_ext.adapters._ui_mode_common.config import (
 from advtest_ext.adapters._ui_mode_common.response_assembly import (
     assemble_full_response,
 )
+from advtest_ext.adapters._ui_mode_common.response_read import read_new_blocks_settled
 from advtest_ext.adapters.calendar.ui_mode.selectors import SELECTORS
 from advtest_ext.document.target import Response
 
@@ -178,50 +179,6 @@ async def _count_responses(page: Any) -> int:
         return 0
 
 
-_SETTLE_POLL_S = 0.6
-_SETTLE_STABLE_ROUNDS = 2
-_SETTLE_MAX_ROUNDS = 40
-
-
-async def _join_new_blocks(page: Any, sel: str, prev_count: int) -> str:
-    loc = page.locator(sel)
-    try:
-        count = int(await loc.count())
-    except Exception:
-        count = 0
-    if count <= prev_count:
-        # No NEW agent bubble yet. Return empty (keep waiting) — do NOT fall
-        # back to the previous turn's bubble. Reading the stale reply here is
-        # exactly what makes the attacker "ignore" Gemini's answer and fire
-        # turns back-to-back on a panel that didn't reset / replied slowly.
-        return ""
-    parts: list[str] = []
-    for i in range(prev_count, count):
-        try:
-            block = await loc.nth(i).inner_text()
-        except Exception:
-            continue
-        if block:
-            parts.append(block)
-    return "\n\n".join(parts).strip()
-
-
-async def _read_new_blocks_settled(page: Any, sel: str, prev_count: int) -> str:
-    last = ""
-    stable = 0
-    for _ in range(_SETTLE_MAX_ROUNDS):
-        current = await _join_new_blocks(page, sel, prev_count)
-        if current == last and current:
-            stable += 1
-            if stable >= _SETTLE_STABLE_ROUNDS:
-                return current
-        else:
-            stable = 0
-        last = current
-        await asyncio.sleep(_SETTLE_POLL_S)
-    return last
-
-
 # Calendar Gemini sometimes replies with clickable OPTIONS instead of (or
 # alongside) a text bubble: a multiple-choice *questionnaire*
 # (appsElementsSidekickQuestionnaireRoot -> a QuestionList of options), or an
@@ -289,7 +246,7 @@ async def _read_response(page: Any, timeout_ms: int, prev_count: int = 0) -> str
             # A genuinely NEW agent bubble. No .last fallback — reading the
             # previous bubble would hand the attacker a stale reply.
             await page.locator(sel).nth(prev_count).wait_for(state="visible", timeout=timeout_ms)
-            text = await _read_new_blocks_settled(page, sel, prev_count)
+            text = await read_new_blocks_settled(page, sel, prev_count)
         except Exception:
             # No new text bubble — maybe a choice-chip reply. Try chips below.
             text = ""

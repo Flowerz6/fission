@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from advtest_ext.adapters._ui_mode_common import SidePanelUnavailable
+from advtest_ext.adapters._ui_mode_common import SidePanelUnavailable, response_read
 from advtest_ext.adapters.google_docs.ui_mode import invoker as inv
 from advtest_ext.adapters.google_docs.ui_mode.selectors import SELECTORS
 
@@ -61,8 +61,8 @@ class _TransientPage:
 
 @pytest.fixture(autouse=True)
 def _fast_settle(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(inv, "_SETTLE_MAX_ROUNDS", 3)
-    monkeypatch.setattr(inv, "_SETTLE_POLL_S", 0)
+    monkeypatch.setattr(response_read, "_SETTLE_MAX_ROUNDS", 3)
+    monkeypatch.setattr(response_read, "_SETTLE_POLL_S", 0)
 
 
 @pytest.mark.asyncio
