@@ -601,6 +601,41 @@ def test_summarise_excludes_error_traces_from_asr() -> None:
     assert stats.overall_asr == pytest.approx(2 / 3)
 
 
+def test_summarise_excludes_invalid_technical_not_just_error() -> None:
+    # A judge that itself errored (carried-forward score) and an anti-automation
+    # / selector-drift technical failure are non-measurements and must be
+    # excluded from the ASR, even though their verdict is not "error".
+    from advtest_ext.core.models import AttackTrace
+
+    payload = Payload(id="p", text="x", modality="text", generator_name="atk")
+    traces = [
+        AttackTrace(  # a real success
+            id="t0", run_id="r", behavior_id="b1", payload=payload,
+            target_name="stub", raw_request="x", raw_response="y", verdict="success",
+        ),
+        AttackTrace(  # carried-forward "success" but the judge errored -> excluded
+            id="t1", run_id="r", behavior_id="b1", payload=payload,
+            target_name="stub", raw_request="x", raw_response="y", verdict="success",
+            metadata={"tap_crescendo": {"judge_error": True}},
+        ),
+        AttackTrace(  # selector-drift failure surfaced as a refusal -> excluded
+            id="t2", run_id="r", behavior_id="b1", payload=payload,
+            target_name="stub", raw_request="x", raw_response="y", verdict="refused",
+            metadata={"error_kind": "selector_drift"},
+        ),
+        AttackTrace(  # a genuine refusal -> counts as a non-success attempt
+            id="t3", run_id="r", behavior_id="b1", payload=payload,
+            target_name="stub", raw_request="x", raw_response="y", verdict="refused",
+        ),
+    ]
+    stats = summarise(traces)
+    assert stats.total_traces == 4  # all visible in the failure surface
+    assert stats.successful_traces == 1  # the judge-errored success is not counted
+    row = stats.asr_breakdown[0]
+    assert row.attempts == 2  # only the real success + the genuine refusal
+    assert stats.overall_asr == pytest.approx(1 / 2)
+
+
 def test_summarise_rolls_up_asr_per_carrier() -> None:
     from advtest_ext.core.models import AttackTrace, HidingTechnique, Verdict
 

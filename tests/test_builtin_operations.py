@@ -65,7 +65,7 @@ def test_default_operations_returns_fresh_registry_each_call() -> None:
     r1 = default_operations()
     r2 = default_operations()
     assert r1 is not r2
-    assert len(r1) == len(r2) == 12
+    assert len(r1) == len(r2) == 14
 
 
 def test_default_operations_registered_pairs_match_expected() -> None:
@@ -80,6 +80,8 @@ def test_default_operations_registered_pairs_match_expected() -> None:
             ("slides", "open_deck"),
             ("slides", "set_speaker_notes"),
             ("slides", "type_prompt"),
+            ("studio", "create_app"),
+            ("studio", "run_agent"),
             ("sheets", "create_and_seed"),
             ("calendar", "create_event"),
             ("calendar", "type_prompt"),

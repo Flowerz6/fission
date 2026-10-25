@@ -181,6 +181,8 @@ _APP_SURFACE_JOURNEY: dict[tuple[str, str], str] = {
     ("gmail", "side_panel"): "J-GMAIL-SUMMARIZE",
     ("outlook", "compose"): "J-GMAIL-REPLY",
     ("outlook", "summarize"): "J-GMAIL-SUMMARIZE",
+    ("google_studio", "agent"): "J-STUDIO-AGENT",
+    ("google_studio", "api"): "J-STUDIO-AGENT",
     ("agentdojo", "api"): "J-TOOLUSE-AGENT",
     ("tool_use_agent", "api"): "J-TOOLUSE-AGENT",
 }

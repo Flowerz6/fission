@@ -36,6 +36,8 @@ App = Literal[
     "gemini_app",  # standalone Gemini at gemini.google.com
     "outlook",  # outlook.com web UI — used by the Outlook send_email
     # handler for V1/V4 attacker_sender steps (no OAuth)
+    "studio",  # Workspace Studio — the agentic app-runner surface (NOT the
+    # Gemini side panel); an app ingests a data source and acts across tools
 ]
 
 

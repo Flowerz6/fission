@@ -2,7 +2,7 @@
 
 > **Neighbours:** **Corpus & Seeds** → [2 · Staging](02-staging-and-recipes.md) &
 > [4 · Attack Search](04-attack-search.md) (both consume a guide) ·
-> **Deep reference:** `docs/SEED_AUTHORING_GUIDE.md`, `docs/FISSION_GUIDE_FORMAT.md`
+> **Deep reference:** `docs/SEEDER_HANDBOOK.md`, `docs/FISSION_GUIDE_FORMAT.md`
 
 ---
 

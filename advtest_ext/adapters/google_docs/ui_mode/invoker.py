@@ -22,8 +22,8 @@ that ``GoogleDocsTarget`` delegates to when constructed with
      bundle.
 
 On any timeout or selector miss, raise :class:`SidePanelUnavailable`
-with the canonical message. The pre-pitch checklist
-(TODO_BEFORE_PITCH.md item 4) describes how to re-validate selectors.
+with the canonical message. scripts/heal_selectors.py re-validates and
+auto-repairs selectors (docs/architecture/03-target-adapters.md §9).
 
 The browser is headed (``headless=False``) with ``slow_mo=200`` so the
 demo audience can follow each step on screen.

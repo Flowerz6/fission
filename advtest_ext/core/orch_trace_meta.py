@@ -261,7 +261,12 @@ def run_outcome_for_trace(trace: Any) -> RunOutcome:
     ``error_kind`` stamped by the adapter/orchestrator). Pure; no I/O.
     """
     verdict = getattr(trace, "verdict", None)
+    # ORM ``Trace`` stores it as ``extra_metadata``; the in-flight core
+    # ``AttackTrace`` carries the same dict as ``metadata`` — accept either so
+    # the trichotomy can be applied to both the persisted and the live shape.
     raw_meta = getattr(trace, "extra_metadata", None)
+    if raw_meta is None:
+        raw_meta = getattr(trace, "metadata", None)
     meta: dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
     raw_tc = meta.get("tap_crescendo")
     tc: dict[str, Any] = raw_tc if isinstance(raw_tc, dict) else {}

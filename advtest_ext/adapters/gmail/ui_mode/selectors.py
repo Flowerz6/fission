@@ -67,8 +67,8 @@ class SidePanelSelectors(TypedDict):
 # Docs and Gmail, so most selectors below are intentionally
 # byte-identical to the Docs registry. The toolbar entry button is
 # the one place where Gmail's right-rail icon differs from Docs'
-# inline toolbar button. Re-validate before each demo (item 4 in
-# TODO_BEFORE_PITCH.md applies here too).
+# inline toolbar button. Re-validate periodically; scripts/heal_selectors.py
+# auto-repairs drift into the overlay (docs/architecture/03-target-adapters.md §9).
 SELECTORS: SidePanelSelectors = {
     "side_panel_button": (
         # Gmail right-rail Gemini entry. Re-validated 2026-09-06 against

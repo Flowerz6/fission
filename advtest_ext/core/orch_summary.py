@@ -11,24 +11,29 @@ from advtest_ext.core.models import (
     CarrierAsrRow,
     SummaryStats,
 )
+from advtest_ext.core.orch_trace_meta import run_outcome_for_trace
 
 
 def summarise(traces: list[AttackTrace]) -> SummaryStats:
     """Aggregate a flat list of traces into a :class:`SummaryStats`.
 
-    ``error``-verdict traces are EXCLUDED from ASR denominators (they
-    don't count against the attack's success rate, since the attempt
-    didn't actually exercise the target). They DO appear in
+    ``invalid_technical`` traces are EXCLUDED from ASR denominators — not
+    just an explicit ``error`` verdict, but also a judge that itself errored
+    (a carried-forward score is not a measurement) and anti-automation /
+    selector-drift technical failures. These are *non-measurements*, so
+    folding them into the rate would bias it; the measurement-layer
+    trichotomy (:func:`run_outcome_for_trace`) decides. They DO appear in
     ``total_traces`` so the operator can see the failure surface.
     """
     rows: dict[tuple[str, str | None, str], AsrBreakdownRow] = {}
     successes = 0
-    counted = 0  # non-error attempts
+    counted = 0  # valid (measurable) attempts
     by_judge: dict[str, list[bool]] = {}
     carriers: dict[str, CarrierAsrRow] = {}  # per hiding-technique rollup
     for trace in traces:
-        is_error = trace.verdict == "error"
-        is_success = trace.verdict == "success"
+        outcome = run_outcome_for_trace(trace)
+        is_invalid = outcome == "invalid_technical"
+        is_success = outcome == "valid_success"
         attack_name = trace.payload.generator_name
         technique_id = trace.technique.id if trace.technique else None
         key = (attack_name, technique_id, trace.behavior_id)
@@ -40,7 +45,7 @@ def summarise(traces: list[AttackTrace]) -> SummaryStats:
                 behavior_id=trace.behavior_id,
             ),
         )
-        if not is_error:
+        if not is_invalid:
             row.attempts += 1
             counted += 1
             if is_success:

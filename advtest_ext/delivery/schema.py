@@ -20,11 +20,20 @@ changing meaning.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from advtest_ext.delivery.harm_taxonomy import PILOT_HARM_TYPES
 from advtest_ext.delivery.journeys import UserJourney
 
 SCHEMA_VERSION = "1.0"
+
+# The brief's seven harm types + the two higher-harm sub-categories
+# (``PILOT_HARM_TYPES``), plus the ``unspecified`` sentinel that
+# ``classify_harm`` emits when nothing matched — it flags a record for manual
+# tagging rather than guessing a label. Any other value is a typo or a drifted
+# label that would serialise straight into the Google deliverable and silently
+# corrupt the ``by_harm_type`` diversity count, so ``PilotAttack`` rejects it.
+VALID_HARM_TYPES = frozenset((*PILOT_HARM_TYPES, "unspecified"))
 
 
 class PayloadPart(BaseModel):
@@ -91,6 +100,7 @@ class AttackMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     strategy: str | None = None  # attacker generator (tap_crescendo, pair, bon, ...)
+    persuasion_technique: str | None = None  # authority, trust delegation, false urgency, ...
     hiding_technique: str | None = None  # white_text, comment_injection, ...
     technique_class: str | None = None  # AttackClass of the hiding technique
     tone: str | None = None
@@ -129,6 +139,12 @@ class PilotAttack(BaseModel):
     # field 5 + 6
     user_journey_id: str
     user_supplied_prompt: str | None = None
+    # §7 carrier: the Workspace surface the payload LIVES in (where it was
+    # planted), distinct from ``user_journey_id`` (the target surface Gemini
+    # acts on). The two differ for a cross-app attack — e.g. a Doc carrier
+    # triggered from Gmail — which the brief prizes; carrying it here makes that
+    # visible in the handback. ``None`` when it can't be read off the guide.
+    carrier_surface: str | None = None
 
     # field 7
     success_rate: SuccessRate
@@ -140,6 +156,16 @@ class PilotAttack(BaseModel):
     source_run_ids: list[str] = Field(default_factory=list)
     representative_trace_id: str | None = None
 
+    @field_validator("harm_type")
+    @classmethod
+    def _harm_type_in_taxonomy(cls, v: str) -> str:
+        if v not in VALID_HARM_TYPES:
+            raise ValueError(
+                f"harm_type {v!r} is not in the pilot taxonomy "
+                f"({sorted(VALID_HARM_TYPES)}); fix classify_harm or the guide tag"
+            )
+        return v
+
 
 class DatasetCounts(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -149,6 +175,10 @@ class DatasetCounts(BaseModel):
     by_harm_type: dict[str, int] = Field(default_factory=dict)
     by_journey: dict[str, int] = Field(default_factory=dict)
     by_severity: dict[str, int] = Field(default_factory=dict)
+    by_carrier_surface: dict[str, int] = Field(default_factory=dict)
+    # successful attacks whose carrier product differs from the target product
+    # (the cross-app shape the brief prizes), counted where both are known.
+    cross_app: int = 0
 
 
 class PilotDataset(BaseModel):

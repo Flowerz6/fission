@@ -106,7 +106,22 @@ def _description(guide: Guide) -> str:
     return "\n\n".join(parts)
 
 
-_PLANT_OPS = {"send_email", "open_document", "create_event", "create_and_seed"}
+# Every setup operation that plants PAYLOAD-BEARING carrier content the target
+# later reads (an email, doc body, sheet, slide/notes, calendar event, or a
+# seated thread reply) — i.e. the mark of a genuine indirect injection. The only
+# setup op that is NOT a plant is ``type_prompt`` (the benign trigger turn
+# itself). Keep this the single source of truth: ``benign_user_turns`` and the
+# DELIVERY-RULE prompt text both derive from it, so they can never disagree.
+_PLANT_OPS = {
+    "send_email",
+    "open_document",
+    "create_event",
+    "create_and_seed",
+    "open_deck",
+    "set_speaker_notes",
+    "set_document_body",
+    "reply",
+}
 
 
 def _plants_carrier(guide: Guide) -> bool:
@@ -309,12 +324,12 @@ def map_guide(guide: Guide) -> GuidePlan:
     #  - Conversation/crescendo (no planted payload — e.g. coax the system prompt or
     #    skill manifest out directly): the attacker DRIVES the conversation toward the
     #    goal (benign_user_turns stays off).
-    _plant_ops = {"send_email", "open_document", "create_event"}
-    plants_payload = any(
-        step.operation in _plant_ops and (step.params.get("body") or step.params.get("description"))
-        for step in guide.setup_steps
-    )
-    if plants_payload or "indirect_prompt_injection" in (guide.threat_class or ""):
+    # Single source of truth: ``_plants_carrier`` (same predicate that injects the
+    # DELIVERY RULE prompt text), so the flag and the prompt can never disagree.
+    # The previous inline set omitted sheets/slides plant ops and gated on a
+    # ``body``/``description`` param, so planted Sheets/Slides guides silently ran
+    # with the attacker free to voice the payload in chat — an invalid IPI test.
+    if _plants_carrier(guide):
         attack_kwargs["benign_user_turns"] = True
 
     # Seed the branch strategist with the guide's own approach so variant

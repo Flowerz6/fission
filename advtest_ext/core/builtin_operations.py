@@ -30,6 +30,7 @@ from advtest_ext.adapters.google_docs import recipe_ops as docs_ops
 from advtest_ext.adapters.outlook import recipe_ops as outlook_ops
 from advtest_ext.adapters.sheets import recipe_ops as sheets_ops
 from advtest_ext.adapters.slides import recipe_ops as slides_ops
+from advtest_ext.adapters.studio import recipe_ops as studio_ops
 from advtest_ext.core.recipe_operations import OperationRegistry
 
 
@@ -57,6 +58,12 @@ def default_operations() -> OperationRegistry:
     registry.register("slides", "open_deck")(slides_ops.open_deck)
     registry.register("slides", "set_speaker_notes")(slides_ops.set_speaker_notes)
     registry.register("slides", "type_prompt")(slides_ops.type_prompt)
+
+    # Workspace Studio — the agentic app-runner surface. ``create_app`` points
+    # an app at its (planted) data source; ``run_agent`` runs it / sends the
+    # trigger. See adapters/studio/recipe_ops.py.
+    registry.register("studio", "create_app")(studio_ops.create_app)
+    registry.register("studio", "run_agent")(studio_ops.run_agent)
 
     # Calendar-side operations (event title + description are the payload).
     registry.register("calendar", "create_event")(calendar_ops.create_event)
