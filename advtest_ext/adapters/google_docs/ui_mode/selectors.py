@@ -12,8 +12,8 @@ tomorrow.
 **Before every demo:** run each scenario in
 ``scripts/demo_ui_scenarios.py`` end-to-end. If any fails on
 "selector not found" or "timeout waiting for element", update the
-matching entry here and re-run. The pre-pitch checklist captures
-this in TODO_BEFORE_PITCH.md item 4.
+matching entry here and re-run, or run scripts/heal_selectors.py to
+auto-repair drift (docs/architecture/03-target-adapters.md §9).
 
 The keys are stable — :func:`ui_mode_invoke` looks each one up by
 name. The *values* may shift across Docs releases.
@@ -137,7 +137,7 @@ class SidePanelSelectors(TypedDict):
 # Snapshot taken against the live Docs DOM. Confirmed by DevTools
 # inspection — selectors target the ``appsElementsSidekick…``
 # component classes that Docs renders for the Gemini side panel.
-# Re-validate before each pitch (see TODO_BEFORE_PITCH.md item 4), or run
+# Re-validate periodically (docs/architecture/03-target-adapters.md §9), or run
 # ``scripts/heal_selectors.py`` to auto-repair drift into the overlay.
 _BASE_SELECTORS: SidePanelSelectors = {
     "side_panel_button": (

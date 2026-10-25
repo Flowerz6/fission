@@ -93,7 +93,9 @@ HUMAN_HOVER_PAUSE_S = (0.05, 0.15)  # between hover and click
 HUMAN_ACTION_PAUSE_S = (0.10, 0.30)  # between high-level steps
 
 SELECTOR_DRIFT_MESSAGE = (
-    "Selector drift suspected; see TODO_BEFORE_PITCH.md item 4 to update selectors."
+    "Selector drift suspected: the Gemini side panel was not found. First confirm the "
+    "automation profile is logged in (scripts/login_profile.py), then re-validate/heal "
+    "selectors with scripts/heal_selectors.py (see docs/architecture/03-target-adapters.md §9)."
 )
 
 

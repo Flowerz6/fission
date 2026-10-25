@@ -10,7 +10,7 @@ Non-goals (explicit):
 
 * Selector robustness — selectors will drift; we re-validate before
   each demo. See :mod:`selectors` for the registry and
-  TODO_BEFORE_PITCH.md item 4 for the validation checklist.
+  scripts/heal_selectors.py for re-validation (docs/architecture/03-target-adapters.md §9).
 * Persistence beyond the auth profile — the browser context is
   spun up per call.
 * Production parallelism — one browser context per ``ui_mode_invoke``;

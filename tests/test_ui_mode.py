@@ -623,7 +623,7 @@ async def test_side_panel_button_timeout_raises(tmp_path: Path) -> None:
             output_dir=tmp_path,
             page_factory=factory,
         )
-    assert "TODO_BEFORE_PITCH.md item 4" in str(exc_info.value)
+    assert "scripts/heal_selectors.py" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

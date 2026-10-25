@@ -821,17 +821,29 @@ def gold_label_rater_panels(
 
 
 def run_oracle_asr_counts(session: Session, run_id: str) -> tuple[int, int]:
-    """``(n_scorable, n_success)`` for a run: the oracle's ASR numerator
-    and denominator over all non-``error`` traces (the same denominator
-    the orchestrator's summary uses)."""
-    scorable = case((Trace.verdict != "error", 1), else_=0)
-    success = case((Trace.verdict == "success", 1), else_=0)
-    row = session.execute(
-        select(func.coalesce(func.sum(scorable), 0), func.coalesce(func.sum(success), 0)).where(
-            Trace.run_id == run_id
-        )
-    ).one()
-    return int(row[0]), int(row[1])
+    """``(n_scorable, n_success)`` for a run: the oracle's ASR numerator and
+    denominator over all *measurable* traces — the same denominator the
+    orchestrator's summary uses.
+
+    "Measurable" is the measurement-layer trichotomy, not just a non-``error``
+    verdict: a judge that itself errored (a carried-forward score) and
+    anti-automation / selector-drift technical failures are ``invalid_technical``
+    and excluded too, so a non-measurement never biases the PPI rate. This
+    reads verdict + ``extra_metadata`` per trace (``judge_error`` / ``error_kind``
+    live in the JSON, so a pure SQL aggregate cannot see them)."""
+    from advtest_ext.core.orch_trace_meta import run_outcome_for_trace
+
+    traces = session.execute(select(Trace).where(Trace.run_id == run_id)).scalars().all()
+    n_scorable = 0
+    n_success = 0
+    for t in traces:
+        outcome = run_outcome_for_trace(t)
+        if outcome == "invalid_technical":
+            continue
+        n_scorable += 1
+        if outcome == "valid_success":
+            n_success += 1
+    return n_scorable, n_success
 
 
 def run_partial_count(session: Session, run_id: str) -> int:

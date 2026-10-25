@@ -15,7 +15,7 @@ import hashlib
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class GuideSuccess(BaseModel):
@@ -97,7 +97,9 @@ class GuideTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     app: _App
-    surface: Literal["side_panel", "help_me_write", "summarize", "compose", "api"] = "side_panel"
+    surface: Literal[
+        "side_panel", "help_me_write", "summarize", "compose", "api", "agent"
+    ] = "side_panel"
     # Which account the disclosure/interaction lands on, and a free-text label
     # of the targeted Workspace tenancy (subscription tier, product enabled).
     account_role: _AccountRole = "recipient"
@@ -215,6 +217,13 @@ class Guide(BaseModel):
     # skill-manifest disclosure"). Falls back to a prettified id when absent.
     title: str | None = None
     threat_class: str | None = None
+    # The Seeder Handbook §3 harm type(s) this attack targets, from the CLOSED
+    # pilot taxonomy (delivery.harm_taxonomy.PILOT_HARM_TYPES). Authored on the
+    # guide — not inferred downstream — so coverage/diversity read directly off
+    # the corpus and the delivery exporter can trust the label instead of
+    # re-deriving it with classify_harm. ``threat_class`` stays as the free-text
+    # elaboration. Empty is allowed (the exporter then falls back to inference).
+    harm_types: list[str] = Field(default_factory=list)
     strategy: str | None = None
     exemplar_turns: list[str] = Field(default_factory=list)  # a worked example → seed_chain
     seed_prompts: list[str] = Field(default_factory=list)
@@ -253,6 +262,23 @@ class Guide(BaseModel):
     # the probe, the effect). A variant that breaks an invariant is a
     # different attack, not a variant of this one.
     invariants: list[str] = Field(default_factory=list)
+
+    @field_validator("harm_types")
+    @classmethod
+    def _harm_types_in_taxonomy(cls, v: list[str]) -> list[str]:
+        """Every entry must be in the closed pilot harm taxonomy. Deferred import
+        of ``PILOT_HARM_TYPES`` avoids a guides↔delivery import cycle at load."""
+        if not v:
+            return v
+        from advtest_ext.delivery.harm_taxonomy import PILOT_HARM_TYPES
+
+        allowed = set(PILOT_HARM_TYPES)
+        bad = [h for h in v if h not in allowed]
+        if bad:
+            raise ValueError(
+                f"harm_types {bad} not in the pilot taxonomy ({sorted(allowed)})"
+            )
+        return v
 
     @model_validator(mode="after")
     def _mutation_operator_names_are_unique(self) -> Guide:

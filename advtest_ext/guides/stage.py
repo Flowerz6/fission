@@ -30,6 +30,7 @@ _APP = {
     "google_calendar": "calendar",
     "google_drive": "drive",
     "google_slides": "slides",
+    "google_studio": "studio",
 }
 _ROLE = {
     "recipient": "recipient",

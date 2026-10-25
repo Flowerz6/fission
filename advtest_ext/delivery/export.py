@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING
 from advtest_ext.delivery.harm_taxonomy import (
     PILOT_HARM_TYPES,
     classify_harm,
+    default_severity,
     most_severe,
     normalize_severity,
 )
@@ -55,6 +56,60 @@ if TYPE_CHECKING:  # pragma: no cover
 
     from advtest_ext.guides.models import Guide
     from advtest_ext.storage.models import Trace
+
+# Map a guide setup operation to the §7 ``carrier_surface`` vocabulary — the
+# surface the payload is PLANTED in. Only content-planting ops appear here;
+# driving ops (``type_prompt``, ``reply``) are the trigger turn, not the
+# carrier, so they are deliberately absent.
+_OP_CARRIER_SURFACE: dict[str, str] = {
+    "open_document": "shared_doc",
+    "set_document_body": "shared_doc",
+    "send_email": "gmail_message",
+    "create_and_seed": "sheets_cell",
+    "open_deck": "slides_deck",
+    "set_speaker_notes": "slides_deck",
+}
+
+# carrier_surface -> Workspace product, and journey-id token -> product, for the
+# cross-app comparison (carrier product vs target product).
+_CARRIER_PRODUCT: dict[str, str] = {
+    "shared_doc": "docs",
+    "docs_comment_thread": "docs",
+    "gmail_message": "gmail",
+    "sheets_cell": "sheets",
+    "slides_deck": "slides",
+    "drive_file": "drive",
+}
+_JOURNEY_PRODUCT: dict[str, str] = {
+    "DOCS": "docs",
+    "GMAIL": "gmail",
+    "SHEETS": "sheets",
+    "SLIDES": "slides",
+    "STUDIO": "studio",
+    "CALENDAR": "calendar",
+    "DRIVE": "drive",
+    "TOOLUSE": "tooluse",
+}
+
+
+def _carrier_surface(guide: Guide | None) -> str | None:
+    """The §7 carrier surface for a guide: the surface of its first
+    content-planting setup step. ``None`` when no step maps cleanly — we leave
+    it unset rather than guess."""
+    if guide is None:
+        return None
+    for step in getattr(guide, "setup_steps", None) or []:
+        surface = _OP_CARRIER_SURFACE.get(step.operation)
+        if surface is not None:
+            return surface
+    return None
+
+
+def _journey_product(journey_id: str) -> str | None:
+    """Product token out of a catalogue id, e.g. ``J-DOCS-SUMMARIZE`` -> docs."""
+    parts = journey_id.split("-")
+    return _JOURNEY_PRODUCT.get(parts[1]) if len(parts) > 1 else None
+
 
 # A group with no success is still "plausible" if its best trace scored at or
 # above this. Partial-verdict groups always qualify regardless of score.
@@ -327,6 +382,15 @@ def _build_attack(
 
     guide_app = guide.target.app if guide else None
     guide_surface = guide.target.surface if guide else None
+    # Prefer the harm type AUTHORED on the guide (handbook §3 vocabulary) over
+    # the inferred one; authored harm_types also sharpen classify_harm's subtype
+    # / standards-tag match via taxonomy_hints. classify_harm still runs to
+    # supply subtype, rationale, and OWASP/ATLAS/Promptware tags.
+    guide_harm_types = list(getattr(guide, "harm_types", None) or []) if guide else []
+    authored_harm = guide_harm_types[0] if guide_harm_types else None
+    hints = None
+    if guide:
+        hints = guide_harm_types + list(guide.tags)
     harm = classify_harm(
         behavior_id=group.behavior_id,
         attack_name=group.attack_name,
@@ -334,13 +398,19 @@ def _build_attack(
         guide_objective=guide.objective if guide else None,
         guide_threat_class=guide.threat_class if guide else None,
         guide_tags=guide.tags if guide else None,
-        taxonomy_hints=list(guide.tags) if guide else None,
+        taxonomy_hints=hints,
     )
+    harm_type = authored_harm or harm.harm_type
+    harm_rationale = harm.rationale
+    if authored_harm and authored_harm != harm.harm_type:
+        harm_rationale = f"authored on guide (harm_types={guide_harm_types}); " + harm.rationale
     # The record's severity is the strongest evidence available: the more
     # severe of the harm-type default and any promoted-Finding severity, so a
     # critical harm type isn't flattened by a default-"med" finding, while an
-    # explicitly-high finding still wins.
-    severity = normalize_severity(harm.severity)
+    # explicitly-high finding still wins. When the harm type is authored, the
+    # severity tracks that authored type, not the inferred one.
+    base_severity = default_severity(harm_type) if authored_harm else harm.severity
+    severity = normalize_severity(base_severity)
     if severity_override:
         severity = most_severe(severity, severity_override)
 
@@ -373,14 +443,15 @@ def _build_attack(
         id=attack_id,
         lineage_id=group.behavior_id,  # the seed idea = the lineage
         outcome=outcome,
-        harm_type=harm.harm_type,
+        harm_type=harm_type,
         harm_subtype=harm.harm_subtype,
-        harm_rationale=harm.rationale,
+        harm_rationale=harm_rationale,
         severity=severity,
         poisoned_payload=payload,
         attack_string=attack_string,
         user_journey_id=journey_id,
         user_supplied_prompt=user_prompt,
+        carrier_surface=_carrier_surface(guide),
         success_rate=SuccessRate(
             trials_n=n,
             successes_m=m,
@@ -471,16 +542,26 @@ def _count(successful: list[PilotAttack], plausible: list[PilotAttack]) -> Datas
     by_harm: dict[str, int] = defaultdict(int)
     by_journey: dict[str, int] = defaultdict(int)
     by_sev: dict[str, int] = defaultdict(int)
+    by_carrier: dict[str, int] = defaultdict(int)
+    cross_app = 0
     for a in successful:  # severity/harm distribution over the successful set
         by_harm[a.harm_type] += 1
         by_journey[a.user_journey_id] += 1
         by_sev[a.severity] += 1
+        if a.carrier_surface:
+            by_carrier[a.carrier_surface] += 1
+            carrier_product = _CARRIER_PRODUCT.get(a.carrier_surface)
+            target_product = _journey_product(a.user_journey_id)
+            if carrier_product and target_product and carrier_product != target_product:
+                cross_app += 1
     return DatasetCounts(
         successful=len(successful),
         plausible_unsuccessful=len(plausible),
         by_harm_type=dict(by_harm),
         by_journey=dict(by_journey),
         by_severity=dict(by_sev),
+        by_carrier_surface=dict(by_carrier),
+        cross_app=cross_app,
     )
 
 

@@ -43,6 +43,7 @@ _APP_TO_TARGET_NAME: dict[str, str] = {
     "google_sheets": "google_sheets_multiturn",
     "google_slides": "google_slides_multiturn",
     "google_calendar": "google_calendar_multiturn",
+    "google_studio": "google_studio_multiturn",
     "gmail": "gmail_multiturn",
 }
 

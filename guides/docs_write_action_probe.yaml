@@ -10,6 +10,8 @@ target:
   surface: side_panel
   account_role: recipient
 threat_class: unauthorized_action, agentic_write
+harm_types:
+- unauthorized_data_modification
 success:
   signals:
   - kind: token_appears

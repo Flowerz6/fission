@@ -702,6 +702,9 @@ _SHEETS_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
 _SLIDES_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
     {"ui_output_dir", "deck_id", "deck_ids", "browser_mint"}
 )
+_STUDIO_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
+    {"ui_output_dir", "app_id", "app_ids", "browser_mint"}
+)
 _CALENDAR_MULTITURN_TARGET_OPTION_KEYS: frozenset[str] = frozenset(
     {"ui_output_dir", "event_id", "event_ids", "browser_mint"}
 )
@@ -869,6 +872,44 @@ def _calendar_multiturn_target_factory(options: dict[str, Any] | None = None) ->
     )
 
 
+def _studio_multiturn_target_factory(options: dict[str, Any] | None = None) -> DocumentTarget:
+    """Build a ``GeminiStudioMultiTurnTarget`` — the Workspace Studio peer of
+    ``google_docs_multiturn``, but for the AGENTIC app-runner surface (not the
+    Gemini side panel): a built app ingests a data source (a shared Sheet) and
+    runs; crescendo / tap_crescendo escalate the run instructions over turns.
+    Needs a logged-in Playwright profile. NOTE: the Studio selectors and the
+    app-URL shape are SEEDED and need live validation before a real run.
+
+    target_options: ``ui_output_dir`` (screenshots + intercepted JSONL;
+    default ./out), ``app_id`` (an existing app id, or a full app URL, reused
+    across nodes), ``app_ids`` (rotate one per node), ``browser_mint`` (mint a
+    host app through the browser, no API)."""
+    from advtest_ext.adapters.studio.ui_mode.multi_turn_target import (
+        GeminiStudioMultiTurnTarget,
+    )
+
+    opts = options or {}
+    unknown = set(opts) - _STUDIO_MULTITURN_TARGET_OPTION_KEYS
+    if unknown:
+        raise typer.BadParameter(
+            f"unknown target_options keys for google_studio_multiturn: {sorted(unknown)}; "
+            f"allowed: {sorted(_STUDIO_MULTITURN_TARGET_OPTION_KEYS)}"
+        )
+    app_ids = opts.get("app_ids")
+    if app_ids is not None and (
+        not isinstance(app_ids, list) or not all(isinstance(a, str) for a in app_ids)
+    ):
+        raise typer.BadParameter(
+            "target_options.app_ids for google_studio_multiturn must be a list of strings"
+        )
+    return GeminiStudioMultiTurnTarget(
+        output_dir=Path(str(opts.get("ui_output_dir", "./out"))),
+        app_id=opts.get("app_id"),
+        app_ids=app_ids,
+        browser_mint=bool(opts.get("browser_mint", False)),
+    )
+
+
 def _gmail_multiturn_target_factory(options: dict[str, Any] | None = None) -> DocumentTarget:
     """Build a ``GeminiGmailMultiTurnTarget`` — the Gmail peer of
     ``google_docs_multiturn``: a warm, multi-turn Gemini Gmail side-panel target
@@ -938,6 +979,7 @@ def _register_workspace_targets() -> None:
     _TARGET_REGISTRY["google_docs_multiturn"] = _multiturn_target_factory
     _TARGET_REGISTRY["google_sheets_multiturn"] = _sheets_multiturn_target_factory
     _TARGET_REGISTRY["google_slides_multiturn"] = _slides_multiturn_target_factory
+    _TARGET_REGISTRY["google_studio_multiturn"] = _studio_multiturn_target_factory
     _TARGET_REGISTRY["google_calendar_multiturn"] = _calendar_multiturn_target_factory
     _TARGET_REGISTRY["gmail_multiturn"] = _gmail_multiturn_target_factory
 

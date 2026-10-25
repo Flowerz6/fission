@@ -9,6 +9,8 @@ target:
   surface: side_panel
   account_role: recipient
 threat_class: system_prompt_leak
+harm_types:
+- jailbreak_prompt_injection
 success:
   signals:
   - kind: regex_match

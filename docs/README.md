@@ -29,7 +29,7 @@
 | Doc | For |
 |---|---|
 | [FISSION_GUIDE_FORMAT.md](FISSION_GUIDE_FORMAT.md) | The guide (attack recipe) schema. |
-| [SEED_AUTHORING_GUIDE.md](SEED_AUTHORING_GUIDE.md) | How to author seeds. |
+| [SEEDER_HANDBOOK.md](SEEDER_HANDBOOK.md) | How to author seeds. |
 | [SEED_GENERATOR_PLAN.md](SEED_GENERATOR_PLAN.md) | The seed-generator design + coverage worklist toward the pilot set. |
 | [SEARCH_TREE_DESIGN.md](SEARCH_TREE_DESIGN.md) | The attack search tree: category fan-out, cover/payload split, run-level dedup. |
 | [MUTATION_AXES_TAXONOMY.md](MUTATION_AXES_TAXONOMY.md) | The mutation-axis taxonomy the attack search fans out over. |
