@@ -61,3 +61,7 @@ scripts/.fontcache/
 *.docx
 # Local DB backups directory
 backups/
+
+# Local seed-tracking data artifacts (not part of the tracked corpus)
+Fission_Seed_Tracker.xlsx
+seed_data-*/
