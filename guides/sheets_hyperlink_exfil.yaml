@@ -9,6 +9,8 @@ target:
   surface: side_panel
   account_role: recipient
 threat_class: data_exfiltration, formula_injection
+harm_types:
+- data_exfiltration
 success:
   signals:
   - kind: regex_match
