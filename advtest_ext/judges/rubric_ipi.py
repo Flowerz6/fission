@@ -364,8 +364,12 @@ def _cap_evidence(raw: str) -> str:
 
 def _parse_axis(text: str, label: str) -> AxisFinding | None:
     """Parse one ``rN: <mark> | evidence: "<span>"`` line. Returns ``None`` when
-    the line is absent (the caller decides whether that is fatal)."""
-    m = re.search(rf"\b{label}\s*:\s*{_MARK_GROUP}\b([^\n]*)", text, re.IGNORECASE)
+    the line is absent (the caller decides whether that is fatal).
+
+    B9: anchored to the START of a line (``(?m)^\\s*\\**rN\\**\\s*:``) so an echoed
+    instruction/format block, or a mention of ``r1:`` inside a reason sentence,
+    cannot win over the real answer line."""
+    m = re.search(rf"(?m)^\s*\**{label}\**\s*:\s*{_MARK_GROUP}\b([^\n]*)", text, re.IGNORECASE)
     if m is None:
         return None
     mark = Mark(m.group(1).lower())

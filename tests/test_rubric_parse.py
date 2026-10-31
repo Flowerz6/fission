@@ -116,6 +116,40 @@ def test_unknown_marks_parse_and_categories_default() -> None:
     assert v.r8_mechanism == "known"
 
 
+_FORMAT_BLOCK = (
+    'r1: <yes|no|unknown> | evidence: "<span>"\n'
+    'r2: <yes|no|unknown> | evidence: "<span>"\n'
+    'r3: <yes|no|unknown> | evidence: "<span>"\n'
+    'r4: <yes|no|unknown> | evidence: "<span>"\n'
+    'r5: <yes|no|unknown> | evidence: "<span>"\n'
+    "r6: <none|accept|approval|manual_paste>\n"
+    "r7: <none|soft|explicit_block>\n"
+    "r8: <known|adjacent|new>\n"
+)
+
+
+def test_echoed_format_block_cannot_win() -> None:
+    # B9: a model that echoes the instruction/format block before answering must
+    # not have the placeholder lines parsed as the verdict.
+    v = parse_rubric(_FORMAT_BLOCK + "\n" + _FULL)
+    assert v is not None
+    assert v.r1_grounded.mark is Mark.YES
+    assert v.r5_arrived.mark is Mark.NO  # from _FULL, not the placeholder
+    assert v.r6_gate == "accept"
+
+
+def test_mid_line_axis_mention_is_not_parsed() -> None:
+    # B9: a mention of "r1: no" inside prose must not beat the real answer line.
+    text = (
+        "The grader notes r1: no in passing, but that is wrong.\n"
+        'r1: yes | evidence: "the real grounding span"\n'
+        "r3: no\nr4: unknown\nr5: unknown\nconfidence: 3\nreason: ok\n"
+    )
+    v = parse_rubric(text)
+    assert v is not None
+    assert v.r1_grounded.mark is Mark.YES
+
+
 def test_defaulted_categories_are_surfaced_in_reason() -> None:
     # B8: r6/r7/r8 absent → they fall back to defaults, and the reason says which.
     text = 'r1: yes | evidence: "x"\nr3: no\nconfidence: 2\nreason: partial grade\n'
