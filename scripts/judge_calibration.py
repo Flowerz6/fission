@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Calibrate the eight-axis rubric judge against a labelled anchor set.
+"""Measure PARSER CONFORMANCE for the eight-axis rubric judge — NOT model
+calibration.
 
-For each anchor it parses the judge's reply with the real
+For each anchor it parses a CANNED ``judge_reply`` with the real
 :func:`advtest_ext.judges.rubric_ipi.parse_rubric` and compares the parsed mark
 on every axis to the human gold label, then reports, per axis: Cohen's kappa,
-simple agreement, and the number of ``unknown`` predictions.
+simple agreement, and the number of ``unknown`` predictions. Because the reply is
+fixed (not produced by a live model), these numbers measure the PARSER and the
+axis mapping — whether the reply text is read into the right marks — not how well
+a model agrees with humans. True model calibration would sample a live judge over
+real traces; that is a separate, online exercise.
 
 Offline and deterministic by default: each anchor carries a canned
 ``judge_reply`` (what a model said), so the harness needs no network or API key
@@ -142,7 +147,10 @@ def main() -> int:
         return 2
     report = calibrate(cases)
     meta = report["_meta"]
-    print(f"rubric judge calibration — {meta['cases']} anchors, {meta['unparsed']} unparsed")
+    print(
+        f"rubric judge parser conformance (not model calibration) — "
+        f"{meta['cases']} anchors, {meta['unparsed']} unparsed"
+    )
     print(f"{'axis':<6}{'n':>4}{'kappa':>10}{'agree':>10}{'unknown':>10}")
     for axis in _AXES:
         r = report[axis]
