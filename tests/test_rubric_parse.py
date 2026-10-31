@@ -188,3 +188,11 @@ def test_from_axes_dict_confidence_is_robust() -> None:
     assert RubricVerdict.from_axes_dict({"confidence": 0}).confidence == 1  # clamp low
     assert RubricVerdict.from_axes_dict({"confidence": "oops"}).confidence == 1  # non-numeric
     assert RubricVerdict.from_axes_dict({}).confidence == 1  # absent
+
+
+def test_category_from_reason_line_does_not_win() -> None:
+    v = parse_rubric(
+        "r1: yes | evidence: a\nr6: none\nr7: none\nr8: known\nreason: gate was accept, mech new"
+    )
+    assert v.r6_gate == "none"
+    assert v.r8_mechanism == "known"

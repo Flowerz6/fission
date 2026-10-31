@@ -390,7 +390,7 @@ def _parse_category(
     ``defaulted`` is True when the line was absent or carried an unrecognised
     value, so the caller can surface which axes fell back rather than letting a
     silent default read as a real grade."""
-    m = re.search(rf"\b{label}\s*:\s*([a-z_]+)", text, re.IGNORECASE)
+    m = re.search(rf"(?m)^\s*\**{label}\**\s*:\s*([a-z_]+)", text, re.IGNORECASE)
     if m and m.group(1).lower() in allowed:
         return m.group(1).lower(), False
     return default, True
