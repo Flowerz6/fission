@@ -51,11 +51,12 @@ from advtest_ext.core.models import (
 from advtest_ext.core.orch_budget import BudgetExceeded, _BudgetTracker
 from advtest_ext.core.orch_summary import summarise
 from advtest_ext.core.orch_trace_meta import (
-    _classify_verdict,
     _extract_tap_node_id,
     _hoist_parent_and_depth,
+    classify_from_judge,
     guide_node_role,
     resolve_guide_verdict,
+    safe_objective_class,
     upgrade_verdict_for_signals,
 )
 from advtest_ext.core.sampling import stratified_sample
@@ -311,6 +312,14 @@ async def _execute_attempt(
     # never persisted as a real trace).
     if tap_id_map is not None and parent_id is not None:
         parent_id = tap_id_map.get(parent_id)
+    # Prefer the evidence-bound rubric decision table when the judge emitted a
+    # RubricVerdict (JudgeScore.axes); fall back to the score band otherwise.
+    verdict, gated = classify_from_judge(
+        judge_score, objective_class=safe_objective_class(behavior.id)
+    )
+    metadata = dict(attempt.metadata)
+    if gated:
+        metadata["rubric_gated"] = True
     trace = AttackTrace(
         id=f"trace-{uuid.uuid4().hex[:12]}",
         run_id=run_id,
@@ -322,14 +331,14 @@ async def _execute_attempt(
         raw_response=response.text,
         raw_response_data=dict(response.raw),
         judge_scores=[judge_score],
-        verdict=_classify_verdict(judge_score.score),
+        verdict=verdict,
         parent_id=parent_id,
         depth=depth,
         # Carry the attack-namespace metadata (PAIR per-round
         # attacker_reasoning + cover_story + internal judge_score,
         # TAP branch chain, etc.) through to the persisted trace so
         # the dashboard can render per-attack detail without re-running.
-        metadata=dict(attempt.metadata),
+        metadata=metadata,
     )
     if tap_id_map is not None:
         node_id = _extract_tap_node_id(attempt)

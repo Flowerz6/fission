@@ -45,9 +45,10 @@ from typing import TYPE_CHECKING, cast
 
 from advtest_ext.core.models import AttackTrace, Behavior, JudgeScore, Payload, Verdict
 from advtest_ext.core.orch_trace_meta import (
-    _classify_verdict,
+    classify_from_judge,
     guide_node_role,
     resolve_guide_verdict,
+    safe_objective_class,
     upgrade_verdict_for_signals,
 )
 from advtest_ext.core.sampling import stratified_sample
@@ -228,7 +229,13 @@ async def rescore_traces(
 
         # Signals corroborate exposure, but only the evaluator can establish
         # an unauthorized effect. Kind-only matches lift at most to partial.
-        judge_verdict = _classify_verdict(score.score, threshold=threshold)
+        # Prefer the rubric decision table when the score carries axes; this is
+        # the SAME bridge live scoring uses, so rescore reproduces its verdict.
+        judge_verdict, _gated = classify_from_judge(
+            score,
+            objective_class=safe_objective_class(trace.behavior_id),
+            threshold=threshold,
+        )
         is_guide_trace, is_seed_repro = guide_node_role(trace)
         if is_guide_trace:
             new_verdict = resolve_guide_verdict(
