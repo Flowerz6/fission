@@ -117,6 +117,11 @@ class RubricVerdict:
     confidence: int  # 1-5
     reason: str
     unparsed: bool = False
+    missing_injection: bool = False
+    """The injection string was never recorded on the trace, so R1/R2 could not
+    be judged from evidence and start ``unknown``. The verdict is still a real
+    (parsed) one — ``unparsed`` stays False — but calibration excludes these rows
+    because R1/R2 carry no signal."""
 
     def to_axes_dict(self) -> dict[str, object]:
         """Serialise every axis EXCEPT ``reason`` (which is a human string
@@ -148,6 +153,7 @@ class RubricVerdict:
             "r8_mechanism": self.r8_mechanism,
             "confidence": self.confidence,
             "unparsed": self.unparsed,
+            "missing_injection": self.missing_injection,
         }
 
     @classmethod
@@ -187,6 +193,7 @@ class RubricVerdict:
             confidence=max(1, min(5, conf)),
             reason=reason,
             unparsed=bool(data.get("unparsed", False)),
+            missing_injection=bool(data.get("missing_injection", False)),
         )
 
 
@@ -526,6 +533,7 @@ class RubricIpiJudge(LlmJudgeBase):
                     else "missing_injection"
                 ),
                 unparsed=False,
+                missing_injection=True,
             )
 
         score = score_axes(verdict)
