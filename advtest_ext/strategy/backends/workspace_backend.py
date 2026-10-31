@@ -120,7 +120,7 @@ class _RealRunner:
                 pass
 
         utility, security, verdict, judge_reason, fired, judge_unparsed, gated = await self._score(
-            sample_key, trigger_prompt, resp
+            sample_key, carrier_body, trigger_prompt, resp
         )
         final = resp.text or "(no reply)"
         traj = ""
@@ -150,7 +150,7 @@ class _RealRunner:
         return utility, security, final, traj, extra
 
     async def _score(
-        self, sample_key: str, trigger_prompt: str, resp: Any
+        self, sample_key: str, carrier_body: str, trigger_prompt: str, resp: Any
     ) -> tuple[bool, bool, str, str, list[str], bool, bool]:
         from advtest_ext.core.models import AttackTrace, Payload
         from advtest_ext.core.orch_trace_meta import (
@@ -163,7 +163,11 @@ class _RealRunner:
         from advtest_ext.judges.signals.registry import build_signal
 
         behavior = placeholder_behavior(sample_key)
-        payload = Payload(id=sample_key, text=trigger_prompt, generator_name="piminer")
+        # The planted carrier body is the injected span (it is what the summary
+        # grounds on); the trigger is the benign request. Recording it on the
+        # payload AND in metadata is what lets the rubric judge grade R1/R2 — see
+        # rubric_ipi._injected_span.
+        payload = Payload(id=sample_key, text=carrier_body, generator_name="piminer")
         trace = AttackTrace(
             id=f"wst-{uuid.uuid4().hex[:12]}",
             run_id="workspace-rollout",
@@ -173,6 +177,7 @@ class _RealRunner:
             raw_request=trigger_prompt,
             raw_response=resp.text or "",
             raw_response_data=dict(resp.raw or {}),
+            metadata={"hidden_injection": carrier_body},
         )
         ctx = SignalContext(trace=trace, behavior=behavior)
         fired: list[str] = []
