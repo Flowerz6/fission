@@ -99,6 +99,34 @@ def finalize_run(
     return run
 
 
+def _primary_rubric_score(trace: DomainTrace) -> Any:
+    """The judge score carrying a parsed RubricVerdict, if any (the rubric
+    judge's ``axes`` dict is non-None). Returns ``None`` for traces scored only
+    by non-rubric judges."""
+    for js in trace.judge_scores:
+        if getattr(js, "axes", None):
+            return js
+    return None
+
+
+def _reasoning_with_downgrade(js: Any) -> str:
+    """Keep the judge's human reasoning, appending ``| downgraded: <axes>`` when
+    the evidence rule (or a missing packet) downgraded any axis — surfaced from
+    the rubric verdict's reason so the operator sees it in the scores table."""
+    reasoning = js.reasoning or ""
+    axes = getattr(js, "axes", None)
+    if not isinstance(axes, dict):
+        return reasoning
+    marker = "downgraded:"
+    if marker not in reasoning:
+        return reasoning
+    # Extract the axis tokens the parser recorded, e.g. "downgraded: r1,r3 ...".
+    tail = reasoning.split(marker, 1)[1].strip()
+    token = tail.split(" ", 1)[0].rstrip(";,")
+    suffix = f"| downgraded: {token}"
+    return reasoning if reasoning.rstrip().endswith(suffix) else f"{reasoning} {suffix}"
+
+
 def insert_trace(session: Session, *, run_id: str, trace: DomainTrace) -> Trace:
     """Persist a domain ``AttackTrace`` and its judge-score children.
     Hoisted ``parent_id`` and ``depth`` come straight from the domain
@@ -113,6 +141,7 @@ def insert_trace(session: Session, *, run_id: str, trace: DomainTrace) -> Trace:
     existing = session.get(Trace, trace.id)
     if existing is not None:
         return existing
+    rubric_score = _primary_rubric_score(trace)
     row = Trace(
         id=trace.id,
         run_id=run_id,
@@ -130,6 +159,9 @@ def insert_trace(session: Session, *, run_id: str, trace: DomainTrace) -> Trace:
         parent_id=trace.parent_id,
         depth=trace.depth,
         extra_metadata=dict(trace.metadata),
+        judge_axes=(rubric_score.axes if rubric_score is not None else None),
+        gated=bool(trace.metadata.get("rubric_gated", False)),
+        judge_unparsed=any(getattr(js, "error", False) for js in trace.judge_scores),
     )
     session.add(row)
     for js in trace.judge_scores:
@@ -139,7 +171,7 @@ def insert_trace(session: Session, *, run_id: str, trace: DomainTrace) -> Trace:
                 judge_name=js.judge_name,
                 score=js.score,
                 flagged=js.flagged,
-                reasoning=js.reasoning,
+                reasoning=_reasoning_with_downgrade(js),
                 judge_version=js.judge_version,
             )
         )
@@ -172,6 +204,35 @@ def update_trace_uncertainty(
     if row is not None:
         row.uncertainty = uncertainty
         row.uncertainty_reason = reason
+
+
+def update_trace_rubric(
+    session: Session,
+    *,
+    trace_id: str,
+    judge_axes: dict[str, Any] | None,
+    gated: bool = False,
+    judge_unparsed: bool = False,
+) -> None:
+    """Persist the rubric sub-verdict columns onto an already-inserted trace
+    (rescore re-grades a trace with the rubric judge and writes them as a
+    follow-up UPDATE, like the verdict/uncertainty upgrades). No-op if the row
+    doesn't exist."""
+    row = session.get(Trace, trace_id)
+    if row is not None:
+        row.judge_axes = judge_axes
+        row.gated = gated
+        row.judge_unparsed = judge_unparsed
+
+
+def traces_with_unparsed_judge(session: Session, *, run_id: str | None = None) -> list[Trace]:
+    """Traces whose scoring judge could not be parsed (``judge_unparsed`` true) —
+    non-measurements that belong in the HITL queue, excluded from calibration.
+    Scoped to ``run_id`` when given, else across all runs."""
+    stmt = select(Trace).where(Trace.judge_unparsed.is_(True))
+    if run_id is not None:
+        stmt = stmt.where(Trace.run_id == run_id)
+    return list(session.execute(stmt).scalars().all())
 
 
 def insert_signal_records(

@@ -231,7 +231,7 @@ async def rescore_traces(
         # an unauthorized effect. Kind-only matches lift at most to partial.
         # Prefer the rubric decision table when the score carries axes; this is
         # the SAME bridge live scoring uses, so rescore reproduces its verdict.
-        judge_verdict, _gated = classify_from_judge(
+        judge_verdict, gated = classify_from_judge(
             score,
             objective_class=safe_objective_class(trace.behavior_id),
             threshold=threshold,
@@ -265,6 +265,12 @@ async def rescore_traces(
         row.verdict = new_verdict
         row.uncertainty = unc.score
         row.uncertainty_reason = unc.reason
+        # Persist the rubric sub-verdict columns when the judge emitted axes
+        # (errored scores were already skipped above, so judge_unparsed is False).
+        if getattr(score, "axes", None) is not None:
+            row.judge_axes = score.axes
+            row.gated = gated
+            row.judge_unparsed = False
 
         # The verdict reflects the evaluator's decision. Kind-only signals
         # cannot create success or a Finding.
@@ -319,6 +325,7 @@ def _replace_judge_score(session: Session, *, trace_id: str, score: JudgeScore) 
     from sqlalchemy import delete
 
     from advtest_ext.storage.models import JudgeScore as JudgeScoreRow
+    from advtest_ext.storage.repository import _reasoning_with_downgrade
 
     session.execute(
         delete(JudgeScoreRow).where(
@@ -332,7 +339,7 @@ def _replace_judge_score(session: Session, *, trace_id: str, score: JudgeScore) 
             judge_name=score.judge_name,
             score=score.score,
             flagged=score.flagged,
-            reasoning=score.reasoning,
+            reasoning=_reasoning_with_downgrade(score),
             judge_version=score.judge_version,
         )
     )

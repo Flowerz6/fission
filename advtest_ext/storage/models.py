@@ -145,6 +145,19 @@ class Trace(Base):
     NOT ``depth`` (turn depth). Nullable; added additively via
     ``_ensure_additive_columns`` and populated forward — historical runs (none
     used ``phases``) read NULL → bucket 0. See ``advtest_ext.archive.signature``."""
+    judge_axes: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    """The serialised :class:`~advtest_ext.judges.rubric_ipi.RubricVerdict`
+    (minus ``reason``) when the trace was scored by the eight-axis rubric judge;
+    NULL for every other judge. Lets the dashboard and rescore read the axes
+    without re-running the judge. Added additively via
+    ``_ensure_additive_columns``."""
+    gated: Mapped[bool] = mapped_column(Boolean, default=False)
+    """True when a real effect reached the user through a consent/paste gate
+    (rubric R6 != none), so a success/partial is flagged ``gated`` for review."""
+    judge_unparsed: Mapped[bool] = mapped_column(Boolean, default=False)
+    """True when the scoring judge's reply could not be parsed (an errored
+    JudgeScore). Such a trace is a non-measurement, routed to HITL, and excluded
+    from calibration — distinct from a genuine ``refused``."""
 
     run: Mapped[Run] = relationship(back_populates="traces")
     judge_scores: Mapped[list[JudgeScore]] = relationship(
