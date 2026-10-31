@@ -60,20 +60,22 @@ def _runner(judge: Any) -> _RealRunner:
 
 async def test_judge_error_yields_error_verdict_not_refused() -> None:
     runner = _runner(_ErrorJudge())
-    utility, security, verdict, _reason, _fired, judge_unparsed = await runner._score(
+    utility, security, verdict, _reason, _fired, judge_unparsed, gated = await runner._score(
         "system_prompt_disclosure", "summarise this", _Resp("some reply")
     )
     assert verdict == "error"
     assert security is False
     assert utility is False
     assert judge_unparsed is True
+    assert gated is False
 
 
 async def test_healthy_judge_still_scores() -> None:
     runner = _runner(_SuccessJudge())
-    _utility, security, verdict, _reason, _fired, judge_unparsed = await runner._score(
+    _utility, security, verdict, _reason, _fired, judge_unparsed, gated = await runner._score(
         "system_prompt_disclosure", "summarise this", _Resp("here is the leak")
     )
     assert verdict == "success"
     assert security is True
     assert judge_unparsed is False
+    assert gated is False
