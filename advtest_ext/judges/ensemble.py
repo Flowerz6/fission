@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import statistics
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from advtest_ext.core.models import JudgeScore
 from advtest_ext.judges.base import JudgeBase
@@ -32,7 +32,7 @@ if TYPE_CHECKING:  # pragma: no cover
 AggregationStrategy = Literal["majority_vote", "weighted", "unanimous"]
 
 
-def _axis_mark(axes: dict | None, key: str) -> str | None:
+def _axis_mark(axes: dict[str, Any] | None, key: str) -> str | None:
     """The mark string for one axis of a serialised RubricVerdict, or None when
     the score is not a rubric score / the axis is absent."""
     if not isinstance(axes, dict):
