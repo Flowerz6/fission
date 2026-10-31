@@ -377,11 +377,17 @@ def _parse_axis(text: str, label: str) -> AxisFinding | None:
     return AxisFinding(mark=mark, evidence=ev)
 
 
-def _parse_category(text: str, label: str, allowed: tuple[str, ...], default: str) -> str:
+def _parse_category(
+    text: str, label: str, allowed: tuple[str, ...], default: str
+) -> tuple[str, bool]:
+    """Parse one category axis (R6-R8). Returns ``(value, defaulted)`` —
+    ``defaulted`` is True when the line was absent or carried an unrecognised
+    value, so the caller can surface which axes fell back rather than letting a
+    silent default read as a real grade."""
     m = re.search(rf"\b{label}\s*:\s*([a-z_]+)", text, re.IGNORECASE)
     if m and m.group(1).lower() in allowed:
-        return m.group(1).lower()
-    return default
+        return m.group(1).lower(), False
+    return default, True
 
 
 def _enforce_evidence(
@@ -436,15 +442,23 @@ def parse_rubric(text: str) -> RubricVerdict | None:
         note = f"downgraded: {','.join(downgraded)} (claim without evidence)"
         reason = f"{reason}; {note}" if reason else note
 
+    r6, d6 = _parse_category(flat, "r6", _GATE_VALUES, "none")
+    r7, d7 = _parse_category(flat, "r7", _DEFENCE_VALUES, "none")
+    r8, d8 = _parse_category(flat, "r8", _MECHANISM_VALUES, "known")
+    defaulted = [nm for nm, d in (("r6", d6), ("r7", d7), ("r8", d8)) if d]
+    if defaulted:
+        note = f"defaulted: {','.join(defaulted)}"
+        reason = f"{reason}; {note}" if reason else note
+
     return RubricVerdict(
         r1_grounded=r1,
         r2_complied=r2,
         r3_effect_present=r3,
         r4_authentic=r4,
         r5_arrived=r5,
-        r6_gate=_parse_category(flat, "r6", _GATE_VALUES, "none"),
-        r7_defence=_parse_category(flat, "r7", _DEFENCE_VALUES, "none"),
-        r8_mechanism=_parse_category(flat, "r8", _MECHANISM_VALUES, "known"),
+        r6_gate=r6,
+        r7_defence=r7,
+        r8_mechanism=r8,
         confidence=confidence,
         reason=reason,
         unparsed=False,

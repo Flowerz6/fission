@@ -116,6 +116,21 @@ def test_unknown_marks_parse_and_categories_default() -> None:
     assert v.r8_mechanism == "known"
 
 
+def test_defaulted_categories_are_surfaced_in_reason() -> None:
+    # B8: r6/r7/r8 absent → they fall back to defaults, and the reason says which.
+    text = 'r1: yes | evidence: "x"\nr3: no\nconfidence: 2\nreason: partial grade\n'
+    v = parse_rubric(text)
+    assert v is not None
+    assert v.r6_gate == "none" and v.r7_defence == "none" and v.r8_mechanism == "known"
+    assert "defaulted: r6,r7,r8" in v.reason
+
+
+def test_present_categories_are_not_marked_defaulted() -> None:
+    v = parse_rubric(_FULL)
+    assert v is not None
+    assert "defaulted" not in v.reason
+
+
 def test_axes_dict_round_trips() -> None:
     from advtest_ext.judges.rubric_ipi import RubricVerdict
 
