@@ -450,6 +450,104 @@ async def test_ensemble_no_hitl_on_consensus() -> None:
     assert result.hitl_required is False
 
 
+# ----------------------------------------------------------------------
+# §5 — evidence-bound HITL routing (regardless of score spread)
+# ----------------------------------------------------------------------
+
+
+class _RubricAxesJudge(JudgeBase):
+    """Returns a JudgeScore carrying a serialised RubricVerdict's axes."""
+
+    references: list[str] = []  # noqa: RUF012
+
+    def __init__(self, *, r3: str, r4: str, name: str, error: bool = False) -> None:
+        self.name = name
+        self._r3 = r3
+        self._r4 = r4
+        self._error = error
+        super().__init__()
+
+    async def evaluate(self, *, trace: AttackTrace, behavior: Behavior) -> JudgeScore:
+        del trace, behavior
+        from advtest_ext.judges.rubric_ipi import AxisFinding, Mark, RubricVerdict
+
+        v = RubricVerdict(
+            r1_grounded=AxisFinding(mark=Mark.YES, evidence="s"),
+            r2_complied=AxisFinding(mark=Mark.YES, evidence="s"),
+            r3_effect_present=AxisFinding(
+                mark=Mark(self._r3), evidence="s" if self._r3 == "yes" else ""
+            ),
+            r4_authentic=AxisFinding(
+                mark=Mark(self._r4), evidence="s" if self._r4 == "yes" else ""
+            ),
+            r5_arrived=AxisFinding(mark=Mark.UNKNOWN),
+            r6_gate="none",
+            r7_defence="none",
+            r8_mechanism="known",
+            confidence=4,
+            reason="",
+        )
+        return JudgeScore(
+            judge_name=self.name,
+            score=0.8,
+            flagged=True,
+            judge_version="test",
+            error=self._error,
+            axes=v.to_axes_dict(),
+        )
+
+
+async def test_hitl_on_unknown_effect_axis_despite_tight_spread() -> None:
+    ensemble = JudgeEnsemble(
+        judges=[
+            _RubricAxesJudge(r3="unknown", r4="unknown", name="a"),
+            _RubricAxesJudge(r3="unknown", r4="unknown", name="b"),
+        ],
+        disagreement_threshold=0.99,  # spread alone would never route
+    )
+    result = await ensemble.evaluate(trace=_trace("x"), behavior=_behavior())
+    assert result.hitl_required is True
+    assert "unknown" in result.reasoning
+
+
+async def test_hitl_on_fabricated_vs_real_disagreement() -> None:
+    ensemble = JudgeEnsemble(
+        judges=[
+            _RubricAxesJudge(r3="yes", r4="yes", name="a"),  # real
+            _RubricAxesJudge(r3="yes", r4="no", name="b"),  # fabricated
+        ],
+        disagreement_threshold=0.99,
+    )
+    result = await ensemble.evaluate(trace=_trace("x"), behavior=_behavior())
+    assert result.hitl_required is True
+    assert "fabricated" in result.reasoning
+
+
+async def test_hitl_on_unparsed_member() -> None:
+    ensemble = JudgeEnsemble(
+        judges=[
+            _RubricAxesJudge(r3="yes", r4="yes", name="a"),
+            _RubricAxesJudge(r3="yes", r4="yes", name="b", error=True),
+        ],
+        disagreement_threshold=0.99,
+    )
+    result = await ensemble.evaluate(trace=_trace("x"), behavior=_behavior())
+    assert result.hitl_required is True
+    assert "unparsed" in result.reasoning
+
+
+async def test_no_hitl_when_members_agree_real_and_resolved() -> None:
+    ensemble = JudgeEnsemble(
+        judges=[
+            _RubricAxesJudge(r3="yes", r4="yes", name="a"),
+            _RubricAxesJudge(r3="yes", r4="yes", name="b"),
+        ],
+        disagreement_threshold=0.99,
+    )
+    result = await ensemble.evaluate(trace=_trace("x"), behavior=_behavior())
+    assert result.hitl_required is False
+
+
 def test_ensemble_rejects_empty_judges() -> None:
     with pytest.raises(ValueError, match="at least one"):
         JudgeEnsemble(judges=[])

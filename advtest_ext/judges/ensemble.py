@@ -32,6 +32,38 @@ if TYPE_CHECKING:  # pragma: no cover
 AggregationStrategy = Literal["majority_vote", "weighted", "unanimous"]
 
 
+def _axis_mark(axes: dict | None, key: str) -> str | None:
+    """The mark string for one axis of a serialised RubricVerdict, or None when
+    the score is not a rubric score / the axis is absent."""
+    if not isinstance(axes, dict):
+        return None
+    raw = axes.get(key)
+    if isinstance(raw, dict):
+        mark = raw.get("mark")
+        return mark if isinstance(mark, str) else None
+    return None
+
+
+def _rubric_hitl_reason(scores: list[JudgeScore]) -> str | None:
+    """Return a short reason to route to HITL regardless of score spread, or
+    None. Triggers (§5): any member unparsed/errored; any rubric member with R3
+    or R4 ``unknown``; or members that split fabricated-vs-real on R4."""
+    if any(getattr(s, "error", False) for s in scores):
+        return "unparsed judge"
+    r4_marks: set[str] = set()
+    for s in scores:
+        axes = getattr(s, "axes", None)
+        r3 = _axis_mark(axes, "r3_effect_present")
+        r4 = _axis_mark(axes, "r4_authentic")
+        if r3 == "unknown" or r4 == "unknown":
+            return "unknown effect/authenticity axis"
+        if r4 in ("yes", "no"):
+            r4_marks.add(r4)
+    if {"yes", "no"} <= r4_marks:
+        return "fabricated-vs-real disagreement"
+    return None
+
+
 @dataclass
 class EnsembleResult:
     """Aggregated outcome across all judges. The full per-judge
@@ -112,6 +144,15 @@ class JudgeEnsemble:
         hitl_required = spread > self.disagreement_threshold
         if hitl_required:
             reasoning = f"{reasoning}; HITL flagged (spread={spread:.2f})"
+
+        # Evidence-bound routing (§5): threshold-proximity is no longer
+        # sufficient on its own. An unresolvable effect/authenticity axis, an
+        # unparsed member, or a fabricated-vs-real split across members forces a
+        # human look regardless of the numeric spread.
+        rubric_reason = _rubric_hitl_reason(scores)
+        if rubric_reason is not None:
+            hitl_required = True
+            reasoning = f"{reasoning}; HITL flagged ({rubric_reason})"
 
         return EnsembleResult(
             aggregate_score=aggregate,
