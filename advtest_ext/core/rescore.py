@@ -207,7 +207,7 @@ async def rescore_traces(
 
         behavior = by_id.get(trace.behavior_id) or placeholder_behavior(trace.behavior_id)
         try:
-            score: JudgeScore = await judge.evaluate(trace=trace, behavior=behavior)
+            score: JudgeScore = await _evaluate_rescore_judge(judge, trace, behavior)
         except Exception as exc:
             stats.errors.append((row.id, f"{type(exc).__name__}: {exc}"))
             continue
@@ -316,6 +316,36 @@ async def rescore_traces(
         stats.n_enqueued_disagreement = len(plan.disagreement)
 
     return stats
+
+
+async def _evaluate_rescore_judge(
+    judge: JudgeBase, trace: AttackTrace, behavior: Behavior
+) -> JudgeScore:
+    """Call ``judge.evaluate``, supplying the rubric judge its R4 packet and R5
+    arrival summary.
+
+    Only a persisted trace is in scope here — there is no stored side-effect
+    observation and no run ground-truth mapping to reconstruct, so arrival
+    renders ``unknown`` and the packet is built from the trace alone (empty →
+    ``none``). R4/R5 therefore fall to ``unknown`` on rescore unless a future
+    change persists the packet; the verdict CLASSIFIER is identical to live
+    scoring (both go through ``classify_from_judge``), which is the invariant
+    rescore has to keep. Non-rubric judges are called unchanged."""
+    from advtest_ext.judges.rubric_ipi import RubricIpiJudge
+
+    if not isinstance(judge, RubricIpiJudge):
+        return await judge.evaluate(trace=trace, behavior=behavior)
+
+    from advtest_ext.judges.arrival import render_arrival
+    from advtest_ext.judges.ground_truth import build_packet
+
+    packet = build_packet(trace).render()
+    return await judge.evaluate(
+        trace=trace,
+        behavior=behavior,
+        ground_truth_packet=packet,
+        arrival_observation=render_arrival(None),
+    )
 
 
 def _replace_judge_score(session: Session, *, trace_id: str, score: JudgeScore) -> None:
