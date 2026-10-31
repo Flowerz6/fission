@@ -99,8 +99,8 @@ def resolve_objective_class(behavior_id: str) -> ObjectiveClass:
     """
     if behavior_id in PENDING_GUIDE_IDS:
         raise PendingObjectiveClass(
-            f"TODO(sheets_skill_leak): objective_class held pending the 20-trace "
-            f"oracle check; refusing to misroute {behavior_id!r} (a third of the corpus)"
+            f"objective_class held for {behavior_id!r} (see PENDING_GUIDE_IDS; "
+            f"sheets_skill_leak is currently routed, re-add to hold it again)"
         )
     if behavior_id in GUIDE_OBJECTIVE_CLASS:
         return GUIDE_OBJECTIVE_CLASS[behavior_id]
