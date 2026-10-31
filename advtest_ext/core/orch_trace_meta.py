@@ -5,11 +5,22 @@ coarse verdict. Pure functions, extracted from ``orchestrator.py``.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from typing import Any, Literal
 
 from advtest_ext.attacks.base import AttackAttempt
 from advtest_ext.core.models import Verdict
+
+logger = logging.getLogger(__name__)
+
+PENDING_OBJECTIVE_HITS = 0
+"""Count of :func:`safe_objective_class` calls that hit a deliberately-held
+objective class (``PendingObjectiveClass``). A harness can assert this stayed 0
+for behaviour ids that should route — a non-zero value means a held id reached
+scoring and had its R5 requirement silently dropped."""
+
+_pending_warned = False
 
 RunOutcome = Literal["valid_success", "valid_refusal", "invalid_technical"]
 """Three-way gate for the measurement layer. Only the first two are real
@@ -240,13 +251,30 @@ def safe_objective_class(behavior_id: str) -> str | None:
     """Resolve a trace's objective class from its ``behavior_id`` (the real
     seam — objective class is not a trace field), returning ``None`` for an
     unresolvable / held / out_of_scope id so the R5 requirement is simply not
-    applied rather than raising."""
+    applied rather than raising.
+
+    A deliberately-HELD id (``PendingObjectiveClass``) is caught separately from
+    an ordinary failure: it increments :data:`PENDING_OBJECTIVE_HITS` and logs
+    once at WARNING, so dropping its R5 requirement is visible rather than silent.
+    It still returns ``None`` (do not raise into the scoring path)."""
+    global PENDING_OBJECTIVE_HITS, _pending_warned
     try:
-        from advtest_ext.scoring.guide_map import resolve_objective_class
+        from advtest_ext.scoring.guide_map import PendingObjectiveClass, resolve_objective_class
     except Exception:  # pragma: no cover - scoring layer optional at import time
         return None
     try:
         oc = resolve_objective_class(behavior_id)
+    except PendingObjectiveClass:
+        PENDING_OBJECTIVE_HITS += 1
+        if not _pending_warned:
+            logger.warning(
+                "objective_class held pending for %r; R5 requirement not applied "
+                "(PENDING_OBJECTIVE_HITS now %d)",
+                behavior_id,
+                PENDING_OBJECTIVE_HITS,
+            )
+            _pending_warned = True
+        return None
     except Exception:
         return None
     return None if oc == "out_of_scope" else oc
