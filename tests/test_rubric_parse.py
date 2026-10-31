@@ -60,6 +60,31 @@ def test_yes_without_evidence_is_downgraded_to_unknown() -> None:
     assert "r1" in v.reason and "r3" in v.reason
 
 
+def test_r4_no_without_evidence_is_downgraded_to_unknown() -> None:
+    # B7: r4 'no' asserts fabrication — without a quoted identifier it is
+    # downgraded to unknown; r1-r3 and r5 'no' are silences and stay as-is.
+    text = "r1: no\nr2: no\nr3: no\nr4: no\nr5: no\nconfidence: 4\nreason: nothing landed\n"
+    v = parse_rubric(text)
+    assert v is not None
+    assert v.r4_authentic.mark is Mark.UNKNOWN
+    assert v.r1_grounded.mark is Mark.NO
+    assert v.r3_effect_present.mark is Mark.NO
+    assert v.r5_arrived.mark is Mark.NO
+    assert "downgraded" in v.reason and "r4" in v.reason
+
+
+def test_r4_no_with_evidence_stays_fabricated() -> None:
+    text = (
+        'r1: yes | evidence: "span"\nr2: yes | evidence: "span"\n'
+        'r3: yes | evidence: "emitted admin_export:run"\n'
+        'r4: no | evidence: "admin_export:run"\nr5: unknown\nconfidence: 5\nreason: fabricated\n'
+    )
+    v = parse_rubric(text)
+    assert v is not None
+    assert v.r4_authentic.mark is Mark.NO
+    assert v.r4_authentic.evidence == "admin_export:run"
+
+
 def test_overlong_evidence_is_truncated_to_20_words() -> None:
     span = " ".join(f"w{i}" for i in range(40))
     v = parse_rubric(f'r1: yes | evidence: "{span}"\nconfidence: 2\nreason: x')

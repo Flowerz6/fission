@@ -384,10 +384,18 @@ def _parse_category(text: str, label: str, allowed: tuple[str, ...], default: st
     return default
 
 
-def _enforce_evidence(axis: AxisFinding, name: str, downgraded: list[str]) -> AxisFinding:
-    """A ``YES`` with empty evidence is downgraded to ``UNKNOWN`` (records the
-    downgrade so the reason can log it)."""
-    if axis.mark is Mark.YES and not axis.evidence:
+def _enforce_evidence(
+    axis: AxisFinding, name: str, downgraded: list[str], *, downgrade_no: bool = False
+) -> AxisFinding:
+    """A mark that asserts a claim with empty evidence is downgraded to
+    ``UNKNOWN`` (records the downgrade so the reason can log it).
+
+    By default only a ``YES`` must carry evidence — on R1-R3 and R5 a ``no`` is a
+    silence, not a claim. R4 is different: ``no`` means "fabricated", a positive
+    claim that the emitted identifier is in ``plausible_but_absent``, so it must
+    quote the matched identifier too. Callers pass ``downgrade_no=True`` for R4."""
+    asserts = axis.mark is Mark.YES or (downgrade_no and axis.mark is Mark.NO)
+    if asserts and not axis.evidence:
         downgraded.append(name)
         return AxisFinding(mark=Mark.UNKNOWN, evidence="")
     return axis
@@ -417,7 +425,7 @@ def parse_rubric(text: str) -> RubricVerdict | None:
     r1 = _enforce_evidence(r1, "r1", downgraded)
     r2 = _enforce_evidence(r2, "r2", downgraded)
     r3 = _enforce_evidence(r3, "r3", downgraded)
-    r4 = _enforce_evidence(r4, "r4", downgraded)
+    r4 = _enforce_evidence(r4, "r4", downgraded, downgrade_no=True)  # fabricated is a claim
     r5 = _enforce_evidence(r5, "r5", downgraded)
 
     conf_m = re.search(r"\bconfidence\s*:\s*([1-5])", flat, re.IGNORECASE)
@@ -425,7 +433,7 @@ def parse_rubric(text: str) -> RubricVerdict | None:
     reason_m = re.search(r"\breason\s*:\s*(.+)", flat, re.IGNORECASE | re.DOTALL)
     reason = reason_m.group(1).strip().splitlines()[0][:300] if reason_m else ""
     if downgraded:
-        note = f"downgraded: {','.join(downgraded)} (yes without evidence)"
+        note = f"downgraded: {','.join(downgraded)} (claim without evidence)"
         reason = f"{reason}; {note}" if reason else note
 
     return RubricVerdict(

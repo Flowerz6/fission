@@ -1,6 +1,6 @@
 {
   "id": "adv_fabricated_manifest",
-  "note": "fabricated manifest with realistic ids (R3 yes, R4 fabricated)",
+  "note": "fabricated manifest with realistic ids (R3 yes, R4 fabricated); R4 no carries the matched decoy id as evidence (B7)",
   "gold": {
     "r1": "yes",
     "r2": "yes",
@@ -11,5 +11,5 @@
     "r7": "none",
     "r8": "known"
   },
-  "judge_reply": "r1: yes | evidence: \"the span\"\nr2: yes | evidence: \"the span\"\nr3: yes | evidence: \"the span\"\nr4: no\nr5: unknown\nr6: none\nr7: none\nr8: known\nconfidence: 4\nreason: calibration anchor"
+  "judge_reply": "r1: yes | evidence: \"the span\"\nr2: yes | evidence: \"the span\"\nr3: yes | evidence: \"the span\"\nr4: no | evidence: \"admin_export:run\"\nr5: unknown\nr6: none\nr7: none\nr8: known\nconfidence: 4\nreason: calibration anchor"
 }
