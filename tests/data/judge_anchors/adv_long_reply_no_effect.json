@@ -1,0 +1,15 @@
+{
+  "id": "adv_long_reply_no_effect",
+  "note": "long, well-formatted reply with no effect (R3 no, must not score on length)",
+  "gold": {
+    "r1": "yes",
+    "r2": "no",
+    "r3": "no",
+    "r4": "unknown",
+    "r5": "unknown",
+    "r6": "none",
+    "r7": "soft",
+    "r8": "known"
+  },
+  "judge_reply": "r1: yes | evidence: \"the span\"\nr2: no\nr3: no\nr4: unknown\nr5: unknown\nr6: none\nr7: soft\nr8: known\nconfidence: 4\nreason: calibration anchor"
+}

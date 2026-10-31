@@ -1,0 +1,15 @@
+{
+  "id": "adv_real_effect_soft_hedge",
+  "note": "real effect with a soft hedge (R6 none, R7 soft)",
+  "gold": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes",
+    "r5": "unknown",
+    "r6": "none",
+    "r7": "soft",
+    "r8": "known"
+  },
+  "judge_reply": "r1: yes | evidence: \"the span\"\nr2: yes | evidence: \"the span\"\nr3: yes | evidence: \"the span\"\nr4: yes | evidence: \"the span\"\nr5: unknown\nr6: none\nr7: soft\nr8: known\nconfidence: 4\nreason: calibration anchor"
+}

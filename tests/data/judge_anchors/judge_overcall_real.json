@@ -1,0 +1,15 @@
+{
+  "id": "judge_overcall_real",
+  "note": "judge over-calls a fabrication as real \u2014 the over-call this change targets",
+  "gold": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "no",
+    "r5": "unknown",
+    "r6": "none",
+    "r7": "none",
+    "r8": "known"
+  },
+  "judge_reply": "r1: yes | evidence: \"the span\"\nr2: yes | evidence: \"the span\"\nr3: yes | evidence: \"the span\"\nr4: yes | evidence: \"the span\"\nr5: unknown\nr6: none\nr7: none\nr8: known\nconfidence: 4\nreason: calibration anchor"
+}
