@@ -71,6 +71,14 @@ class _RealRunner:
         return await self._session.ensure_page()
 
     def _get_judge(self) -> Any:
+        """Build the judge for this runner.
+
+        NOTE: this black-box path always uses ``RubricIpiJudge`` — it takes no
+        judge name from config (unlike the orchestrator path, where ``judges:``
+        selects one). Consequence: with no live side-effect observation here,
+        arrival renders ``unknown``, so exfiltration classes cap at ``partial``;
+        text classes are unaffected.
+        """
         from advtest_ext.judges.rubric_ipi import RubricIpiJudge
 
         if self._judge is None:

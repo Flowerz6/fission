@@ -40,9 +40,9 @@ def register(app: typer.Typer) -> None:
             "decomposed_ipi",
             "--judge",
             help=(
-                "Judge to score with. 'decomposed_ipi' emits separable "
-                "attended/complied/harmful_effect sub-verdicts and is the "
-                "right default for IPI traces."
+                "Judge to score with. Default 'decomposed_ipi' (text-only predecessor); "
+                "pass 'rubric_ipi' for the evidence-bound oracle — note it needs a "
+                "ground-truth packet and an arrival observation to reach 'success'."
             ),
         ),
         threshold: float = typer.Option(

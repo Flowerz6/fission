@@ -132,6 +132,10 @@ successor — **opt in with `judges: [rubric_ipi]`** in a run config. The shippe
 (`configs/benchmark_full.yaml`, `configs/run_unified_gmail_then_docs.yaml`) still name their
 existing judges; switch them to `rubric_ipi` when you want the evidence-bound oracle.
 
+The `WorkspaceTarget` black-box path has no judge selector and always uses `rubric_ipi`. It also has
+no live side-effect observation, so arrival renders `unknown` there: exfiltration classes cap at
+`partial`, text classes reach `success` normally.
+
 ### 4.5 Retrieval-IPI ladder & the gradient cap
 
 `retrieval_verdict.py` scores retrieval-style IPI with conservative text heuristics
