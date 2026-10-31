@@ -185,12 +185,14 @@ class RubricVerdict:
             v = data.get(key)
             return v if isinstance(v, str) and v in allowed else default
 
+        # B10: accept an int, a float (3.0 → 3), or a numeric string; round and
+        # clamp to 1-5. The old ``str(conf_raw).isdigit()`` rejected "3.0" and
+        # silently collapsed it to 1.
         conf_raw = data.get("confidence", 1)
-        conf = (
-            int(conf_raw)
-            if isinstance(conf_raw, (int, float, str)) and str(conf_raw).isdigit()
-            else 1
-        )
+        try:
+            conf = max(1, min(5, round(float(conf_raw))))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            conf = 1
         return cls(
             r1_grounded=_finding("r1_grounded"),
             r2_complied=_finding("r2_complied"),
@@ -200,7 +202,7 @@ class RubricVerdict:
             r6_gate=_cat("r6_gate", _GATE_VALUES, "none"),
             r7_defence=_cat("r7_defence", _DEFENCE_VALUES, "none"),
             r8_mechanism=_cat("r8_mechanism", _MECHANISM_VALUES, "known"),
-            confidence=max(1, min(5, conf)),
+            confidence=conf,
             reason=reason,
             unparsed=bool(data.get("unparsed", False)),
             missing_injection=bool(data.get("missing_injection", False)),

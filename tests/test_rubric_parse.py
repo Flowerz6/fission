@@ -175,3 +175,16 @@ def test_axes_dict_round_trips() -> None:
     assert back.r4_authentic.mark is v.r4_authentic.mark
     assert back.r6_gate == v.r6_gate
     assert back.confidence == v.confidence
+
+
+def test_from_axes_dict_confidence_is_robust() -> None:
+    from advtest_ext.judges.rubric_ipi import RubricVerdict
+
+    # B10: float 3.0 → 3 (the old isdigit() check collapsed it to 1).
+    assert RubricVerdict.from_axes_dict({"confidence": 3.0}).confidence == 3
+    assert RubricVerdict.from_axes_dict({"confidence": "4"}).confidence == 4
+    assert RubricVerdict.from_axes_dict({"confidence": 4.6}).confidence == 5  # round
+    assert RubricVerdict.from_axes_dict({"confidence": 9}).confidence == 5  # clamp high
+    assert RubricVerdict.from_axes_dict({"confidence": 0}).confidence == 1  # clamp low
+    assert RubricVerdict.from_axes_dict({"confidence": "oops"}).confidence == 1  # non-numeric
+    assert RubricVerdict.from_axes_dict({}).confidence == 1  # absent
