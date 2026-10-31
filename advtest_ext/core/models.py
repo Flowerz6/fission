@@ -134,6 +134,15 @@ class JudgeScore(BaseModel):
     as refusals biases the ASR down and corrupts every agreement
     statistic computed against the gold set. Consumers should exclude
     errored scores rather than treat them as data."""
+    axes: dict[str, Any] | None = None
+    """Optional structured sub-verdict carried alongside the scalar score.
+
+    Set by :class:`~advtest_ext.judges.rubric_ipi.RubricIpiJudge` to the
+    serialised :class:`RubricVerdict` (minus ``reason``) so the verdict
+    classifier can switch from the score band to the evidence-bound
+    decision table, and so the orchestrator can persist it to
+    ``traces.judge_axes``. ``None`` for every other judge — additive and
+    backwards-compatible; consumers that don't understand it ignore it."""
 
 
 class AttackTrace(BaseModel):

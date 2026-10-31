@@ -1072,6 +1072,33 @@ def _decomposed_ipi_judge_factory() -> JudgeBase:
     return DecomposedIpiJudge(provider=provider)
 
 
+def _rubric_ipi_judge_factory() -> JudgeBase:
+    """Build a ``RubricIpiJudge`` wired to ``CLAUDE_JUDGE`` — the eight-axis,
+    evidence-bound successor to ``decomposed_ipi``. Selectable via ``judges:
+    [rubric_ipi]``. The ground-truth packet and arrival observation are supplied
+    per-trace by the scoring path; the bare factory judge leaves them empty, so a
+    fabrication cannot score as a confirmed success without a packet."""
+    from advtest_ext.judges.rubric_ipi import RubricIpiJudge
+    from advtest_ext.providers import load_provider_from_yaml
+
+    cfg_path = Path(os.environ.get("ADVTEST_PROVIDER_CONFIG") or _DEFAULT_PROVIDER_CONFIG)
+    if not cfg_path.exists():
+        raise typer.BadParameter(
+            f"provider config not found at {cfg_path} — set "
+            "ADVTEST_PROVIDER_CONFIG or create the file with a CLAUDE_JUDGE role"
+        )
+    try:
+        provider = load_provider_from_yaml(cfg_path, "CLAUDE_JUDGE")
+    except KeyError as exc:
+        raise typer.BadParameter(
+            f"{cfg_path} has no CLAUDE_JUDGE role — add one "
+            "(provider_type: anthropic, model_id: claude-sonnet-4-6, "
+            "api_key_env: ANTHROPIC_API_KEY)"
+        ) from exc
+    provider = _apply_model_override(provider, "CLAUDE_JUDGE")
+    return RubricIpiJudge(provider=provider)
+
+
 def _ipi_judge_over_role(kind: str, role: str) -> JudgeBase:
     """Build one IPI LLM judge (``decomposed_ipi`` or ``ipi_verdict``) over a
     named provider role, so a jury can mix judge logics *and* model families.
@@ -1174,6 +1201,7 @@ _JUDGE_REGISTRY: dict[str, Callable[[], JudgeBase]] = {
     "strong_reject": _strong_reject_judge_factory,
     "ipi_verdict": _ipi_verdict_judge_factory,
     "decomposed_ipi": _decomposed_ipi_judge_factory,
+    "rubric_ipi": _rubric_ipi_judge_factory,
     "jury": _jury_judge_factory,
     "retrieval_verdict": _retrieval_verdict_judge_factory,
 }
