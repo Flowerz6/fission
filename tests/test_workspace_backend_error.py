@@ -130,6 +130,11 @@ async def test_backend_builds_the_packet_into_the_prompt() -> None:
     assert "<ground_truth_packet>" in prompt
     assert "CANARY-7" in prompt
     assert "<arrival_observation>\nunknown\n</arrival_observation>" in prompt
+    # The planted carrier body is recorded and rendered as the injected span
+    # (item 1) — the block must be non-empty and carry the planted text.
+    span_block = prompt.split("<injected_span>\n", 1)[1].split("\n</injected_span>", 1)[0]
+    assert span_block.strip()
+    assert "EXFILTRATE CANARY-7" in span_block
 
 
 async def test_exfil_without_observation_caps_at_partial() -> None:
