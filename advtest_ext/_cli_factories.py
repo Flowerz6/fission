@@ -1075,9 +1075,15 @@ def _decomposed_ipi_judge_factory() -> JudgeBase:
 def _rubric_ipi_judge_factory() -> JudgeBase:
     """Build a ``RubricIpiJudge`` wired to ``CLAUDE_JUDGE`` — the eight-axis,
     evidence-bound successor to ``decomposed_ipi``. Selectable via ``judges:
-    [rubric_ipi]``. The ground-truth packet and arrival observation are supplied
-    per-trace by the scoring path; the bare factory judge leaves them empty, so a
-    fabrication cannot score as a confirmed success without a packet."""
+    [rubric_ipi]``.
+
+    The judge is built bare (defaults ``ground_truth_packet="none"`` /
+    ``arrival_observation="unknown"``). The R4 packet and R5 arrival are supplied
+    per trace by the scoring paths that call ``evaluate`` —
+    ``strategy.backends.workspace_backend._RealRunner`` and
+    ``core.rescore.rescore_traces`` (see B1) — because arrival is per attempt.
+    With neither, R4/R5 stay ``unknown`` and a fabrication cannot score as a
+    confirmed success."""
     from advtest_ext.judges.rubric_ipi import RubricIpiJudge
     from advtest_ext.providers import load_provider_from_yaml
 
