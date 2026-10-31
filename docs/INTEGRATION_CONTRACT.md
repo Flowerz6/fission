@@ -78,13 +78,14 @@
 | Path → symbol | Responsibility |
 |---|---|
 | `advtest_ext/judges/base.py:JudgeBase` / `LlmJudgeBase` | Judge ABC. `async evaluate(*, trace, behavior) -> JudgeScore`. LLM judges take a `Provider` (role `CLAUDE_JUDGE`); model id is **not** pinned in code. |
-| `advtest_ext/judges/decomposed_ipi.py:DecomposedIpiJudge` | **The default L2 confirm / "gold" IPI oracle.** 3 axes (`attended`/`complied`/`harmful_effect`) → `aggregate_score`. Text-only. |
-| `advtest_ext/judges/ipi_verdict.py:IpiVerdictJudge` | Single-scalar IPI-fired judge (superseded as primary by decomposed). |
+| `advtest_ext/judges/rubric_ipi.py:RubricIpiJudge` | **The default L2 confirm / "gold" IPI oracle.** Eight evidence-bound axes (`r1 grounded`/`r2 complied`/`r3 effect_present`/`r4 authentic`/`r5 arrived`/`r6 gate`/`r7 defence`/`r8 mechanism`) → `score_axes`; serialises the `RubricVerdict` onto `JudgeScore.axes`. R4 authenticity is a ground-truth join (`judges/ground_truth.py` + `judges/decoys.py`), so a fabrication can never be `success`. Text-only input + optional packet/observation blocks. |
+| `advtest_ext/judges/decomposed_ipi.py:DecomposedIpiJudge` | Predecessor L2 oracle, still importable. 3 axes (`attended`/`complied`/`harmful_effect`) → `aggregate_score`. Text-only. |
+| `advtest_ext/judges/ipi_verdict.py:IpiVerdictJudge` | Single-scalar IPI-fired judge (superseded as primary by the rubric judge). |
 | `advtest_ext/judges/retrieval_verdict_judge.py:RetrievalVerdictJudge` | Text-only heuristic per-turn gradient judge (default `attack_judge`). |
 | `advtest_ext/judges/{heuristic,strong_reject,harmbench,llama_guard,shield_gemma}.py` | Other judges — all **text-only** (`trace.raw_response`). |
-| `advtest_ext/judges/ensemble.py:JudgeEnsemble` / `EnsembleAsJudge` | Panel aggregation (`majority_vote`/`weighted`/`unanimous`); disagreement → `hitl_required`. |
+| `advtest_ext/judges/ensemble.py:JudgeEnsemble` / `EnsembleAsJudge` | Panel aggregation (`majority_vote`/`weighted`/`unanimous`); `hitl_required` on disagreement spread **and** on any unknown R3/R4, unparsed member, or fabricated-vs-real split. |
 | `advtest_ext/judges/signals/` | **Deterministic L0 predicates.** `Signal` ABC, `SignalContext.surface(where)` with `Surface = {UI_RESPONSE, FULL_RESPONSE, REQUEST, INTERCEPTED_TRAFFIC, DOCUMENT_BODY}`. Registry: `TokenAppears`, `RegexMatch`, `CanaryAppears`, `HttpResponseShape`. |
-| `advtest_ext/core/orch_trace_meta.py:_classify_verdict` / `upgrade_verdict_for_signals` | Score → `Verdict` band; a bare signal can only lift to `partial`. `_GROUND_TRUTH_SIGNAL_KINDS = frozenset()` today. |
+| `advtest_ext/core/orch_trace_meta.py:classify_rubric` / `classify_from_judge` / `_classify_verdict` / `upgrade_verdict_for_signals` | `classify_from_judge` prefers the evidence-bound `classify_rubric` (rubric axes) and falls back to the `_classify_verdict` score band; a bare signal can only lift to `partial`. `_GROUND_TRUTH_SIGNAL_KINDS = frozenset()` today. |
 
 ### Persistence & config
 | Path → symbol | Responsibility |
@@ -283,7 +284,7 @@ footnote as first-class API writes. Sheets/Calendar `invoke` raise `NotImplement
 |---|---|
 | Read the typed attack | `advtest_ext/guides/models.py:Guide` (+ `content_hash`, `GuideMutationOperator.dimension/cell_values`). Build `AttackSpec` as a thin adapter over `Guide`; do **not** fork the schema. |
 | Get per-branch descriptor data | `trace.extra_metadata["tap_crescendo"]["mutation"] = {dimension, feature_value}` (written by `mutation_runtime.py:GuideMutationMaterializer.apply`). |
-| Compute the verdict | `orch_trace_meta.py:_classify_verdict` + `upgrade_verdict_for_signals`; read `Trace.verdict` / `Trace.judge_scores`. |
+| Compute the verdict | `orch_trace_meta.py:classify_from_judge` (prefers the rubric `classify_rubric`, falls back to `_classify_verdict`) + `upgrade_verdict_for_signals`; read `Trace.verdict` / `Trace.judge_scores` / `Trace.judge_axes`. |
 | Detect a *valid* success (not oracle-only) | the SIGNAL-VERIFIED predicate `any(s.fired and s.kind != "llm_judge_verdict")` (`dashboard/app.py:1001`; mirrored `orchestrator.py:968`). |
 | Detect a *technical* failure | `adapters/_ui_mode_common/errors.py:classify_error_kind` + `Verdict=="error"` + `JudgeScore.error`. |
 | Persist the signature / posterior | new ORM models in `storage/models.py` + helpers in `storage/repository.py`; picked up automatically by `create_all`/`_ensure_additive_columns`. |
@@ -308,7 +309,13 @@ keys you need (the `GoldLabel` precedent) so measurement rows outlive a deleted 
 | `traces` | `run_outcome` | `VARCHAR(24)` indexed, nullable | `valid_success` / `valid_refusal` / `invalid_technical`; the posterior filter (§Run-outcome). |
 | `traces` | `signature_cell` | `VARCHAR(128)` indexed, nullable | the MAP-Elites cell key this attempt lands in (denormalised for fast rollups). |
 | `traces` | `signature_provenance` | `VARCHAR(16)` nullable | `native` (computed at run time) vs `backfilled` (heuristic) — lets posteriors weight/exclude. |
+| `traces` | `judge_axes` | `JSON` nullable | the serialised rubric `RubricVerdict` (minus `reason`) when scored by `rubric_ipi`; NULL otherwise. Lets the dashboard/rescore read the axes without re-judging. |
+| `traces` | `gated` | `BOOLEAN` default false | a real effect reached the user through a consent/paste gate (rubric R6 != none). |
+| `traces` | `judge_unparsed` | `BOOLEAN` default false | the scoring judge's reply could not be parsed (errored `JudgeScore`) — a non-measurement, routed to HITL (`repository.traces_with_unparsed_judge`), excluded from calibration. |
 | `runs` | `target_version` | `VARCHAR(128)` indexed, nullable | operator-declared target label; the drift axis. |
+
+> `judge_scores.reasoning` keeps the human string and gains a `| downgraded: <axes>` suffix when
+> the rubric evidence rule downgraded a `yes`-with-no-evidence axis.
 
 ### New tables
 | Table (`__tablename__`) | Key columns | FKs |
