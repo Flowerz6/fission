@@ -161,6 +161,7 @@ def insert_trace(session: Session, *, run_id: str, trace: DomainTrace) -> Trace:
         extra_metadata=dict(trace.metadata),
         judge_axes=(rubric_score.axes if rubric_score is not None else None),
         gated=bool(trace.metadata.get("rubric_gated", False)),
+        failure_class=trace.metadata.get("failure_class"),
         judge_unparsed=any(getattr(js, "error", False) for js in trace.judge_scores),
     )
     session.add(row)
@@ -213,16 +214,23 @@ def update_trace_rubric(
     judge_axes: dict[str, Any] | None,
     gated: bool = False,
     judge_unparsed: bool = False,
+    failure_class: str | None = None,
 ) -> None:
     """Persist the rubric sub-verdict columns onto an already-inserted trace
     (rescore re-grades a trace with the rubric judge and writes them as a
     follow-up UPDATE, like the verdict/uncertainty upgrades). No-op if the row
-    doesn't exist."""
+    doesn't exist.
+
+    ``failure_class`` is only written when supplied (the default ``None`` leaves a
+    previously-computed class in place) so a rescore that doesn't recompute it
+    never erases the backfilled value."""
     row = session.get(Trace, trace_id)
     if row is not None:
         row.judge_axes = judge_axes
         row.gated = gated
         row.judge_unparsed = judge_unparsed
+        if failure_class is not None:
+            row.failure_class = failure_class
 
 
 def traces_with_unparsed_judge(session: Session, *, run_id: str | None = None) -> list[Trace]:

@@ -74,6 +74,30 @@ def cover_offpalette_fields(operator: Any, patch: dict[str, Any]) -> list[str]:
     return off
 
 
+def anchors_for(guide: Guide) -> list[str]:
+    """Literals the guide's success depends on: canary, entity, token signals.
+
+    The reusable half of :func:`carrier_invariant_violations` — the set of
+    strings that MUST survive into a carrier for the guide's own oracle to be
+    able to fire. Shared by the live scoring sites and the failure-class
+    backfill (``scoring.failure``) so "inert" means the same thing everywhere.
+    """
+    anchors: list[str] = []
+    for value in (getattr(guide, "canary", None), getattr(guide, "entity", None)):
+        if isinstance(value, str):
+            anchors.append(value)
+    for spec in guide.success.signals:
+        if not isinstance(spec, dict):
+            continue
+        if spec.get("kind") == "token_appears" and isinstance(spec.get("token"), str):
+            anchors.append(spec["token"])
+        if spec.get("kind") == "canary_appears":
+            canary = spec.get("canary") or spec.get("token")
+            if isinstance(canary, str):
+                anchors.append(canary)
+    return [a for a in dict.fromkeys(anchors) if a and len(a) >= 3]
+
+
 def carrier_invariant_violations(guide: Guide, variant: Guide) -> list[str]:
     """Anchors the attack NEEDS to survive a carrier mutation; any that are missing
     from the mutated carrier mean the variant is inert (it can no longer fire its

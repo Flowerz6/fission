@@ -275,6 +275,7 @@ async def _execute_attempt(
     judge: JudgeBase,
     run_id: str,
     tap_id_map: dict[str, str] | None = None,
+    anchors: Sequence[str] = (),
 ) -> tuple[AttackTrace, JudgeScore]:
     """Render the attempt's document, invoke the target, judge the
     response, and return a fully-populated :class:`AttackTrace`. The
@@ -320,6 +321,19 @@ async def _execute_attempt(
     metadata = dict(attempt.metadata)
     if gated:
         metadata["rubric_gated"] = True
+    # Sub-classify *why* a non-success trace failed (scoring.failure). Anchors are
+    # the run's success literals, so a carrier that lost its canary is recorded as
+    # ``inert_payload`` rather than an indistinguishable ``refused``. Null on success.
+    from advtest_ext.scoring.failure import classify_failure
+
+    failure_class = classify_failure(
+        verdict=verdict,
+        response=response.text or "",
+        payload_text=attempt.payload.text or "",
+        anchors=anchors,
+    )
+    if failure_class is not None:
+        metadata["failure_class"] = failure_class
     trace = AttackTrace(
         id=f"trace-{uuid.uuid4().hex[:12]}",
         run_id=run_id,
@@ -521,7 +535,8 @@ class Orchestrator:
         # fails the run at startup, not after the first trace.
         # Empty list (default) → existing behaviour, no signal
         # fan-out, no SignalRecord rows written.
-        self._signals = _build_signal_stack(signal_specs or [])
+        self._signal_specs: list[dict[str, Any]] = list(signal_specs or [])
+        self._signals = _build_signal_stack(self._signal_specs)
         # Phase-4 account pool. ``None`` (the default) means single-
         # account legacy behaviour — targets continue using their
         # legacy ``~/.advtest/playwright-profile`` path. A populated
@@ -612,6 +627,22 @@ class Orchestrator:
 
     # ----- inner machinery -------------------------------------------
 
+    def _failure_anchors(self) -> list[str]:
+        """Success literals for this run's guide, for ``scoring.failure``.
+
+        Reuses :func:`~advtest_ext.guides.mutation_runtime.anchors_for` over the
+        run's raw signal specs (wrapped in the same lightweight guide shape the
+        black-box judge path uses). Empty when the run has no signals, in which
+        case the classifier simply can't mark a trace ``inert_payload``."""
+        if not self._signal_specs:
+            return []
+        from types import SimpleNamespace
+
+        from advtest_ext.guides.mutation_runtime import anchors_for
+
+        guide_ns = SimpleNamespace(success=SimpleNamespace(signals=self._signal_specs))
+        return anchors_for(guide_ns)
+
     async def _run_one_attempt(
         self,
         *,
@@ -651,6 +682,7 @@ class Orchestrator:
                 judge=self.judge,
                 run_id=self.run_id,
                 tap_id_map=tap_id_map,
+                anchors=self._failure_anchors(),
             )
         except (asyncio.CancelledError, BudgetExceeded):
             raise

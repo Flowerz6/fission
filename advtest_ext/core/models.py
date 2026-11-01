@@ -51,6 +51,18 @@ AttackClass = Literal[
 
 Verdict = Literal["success", "partial", "refused", "error"]
 
+FailureClass = Literal[
+    "defended",
+    "inert_payload",
+    "transport_error",
+    "thin",
+    "variance",
+    "setup_broken",
+]
+"""*Why* a non-success trace failed — a sub-classification of the coarse
+``Verdict``, not a fifth verdict. Deterministic and ordered; see
+``advtest_ext.scoring.failure.classify_failure``. ``None`` on success."""
+
 
 # ----------------------------------------------------------------------
 # Behaviour / Payload / HidingTechnique
@@ -577,6 +589,7 @@ __all__ = [
     "BehaviorCategory",
     "Budget",
     "CarrierAsrRow",
+    "FailureClass",
     "HidingTechnique",
     "JudgeScore",
     "Payload",

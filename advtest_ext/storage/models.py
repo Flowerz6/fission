@@ -154,6 +154,8 @@ class Trace(Base):
     gated: Mapped[bool] = mapped_column(Boolean, default=False)
     """True when a real effect reached the user through a consent/paste gate
     (rubric R6 != none), so a success/partial is flagged ``gated`` for review."""
+    failure_class: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    """Why a non-success trace failed; see scoring.failure. Null on success."""
     judge_unparsed: Mapped[bool] = mapped_column(Boolean, default=False)
     """True when the scoring judge's reply could not be parsed (an errored
     JudgeScore). Such a trace is a non-measurement, routed to HITL, and excluded

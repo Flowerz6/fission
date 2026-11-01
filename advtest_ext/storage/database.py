@@ -109,6 +109,15 @@ def make_engine(url: str | None = None, *, echo: bool = False) -> Engine:
             extra["poolclass"] = StaticPool
     engine = create_engine(resolved, echo=echo, future=True, connect_args=connect_args, **extra)
     Base.metadata.create_all(engine)
+    # Explicit guard for the additive ``failure_class`` column on a pre-existing
+    # SQLite dev DB (Brief 1). Redundant with _ensure_additive_columns below, which
+    # covers it portably; the PRAGMA path is SQLite-only, so it is dialect-gated to
+    # avoid raising on the supported Postgres backend.
+    if engine.dialect.name == "sqlite":
+        with engine.begin() as conn:
+            cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(traces)")}
+            if "failure_class" not in cols:
+                conn.exec_driver_sql("ALTER TABLE traces ADD COLUMN failure_class VARCHAR(32)")
     # Self-heal additive schema changes on a pre-existing DB (create_all only
     # makes missing tables, not missing columns) so a dev advtest.db from an
     # earlier version keeps working without a manual migration.
