@@ -326,11 +326,15 @@ async def _execute_attempt(
     # ``inert_payload`` rather than an indistinguishable ``refused``. Null on success.
     from advtest_ext.scoring.failure import classify_failure
 
+    payload_recorded = bool((attempt.payload.text or "").strip())
+    if not payload_recorded:
+        logger.warning("scored with no payload recorded", behavior_id=behavior.id, verdict=verdict)
     failure_class = classify_failure(
         verdict=verdict,
         response=response.text or "",
         payload_text=attempt.payload.text or "",
         anchors=anchors,
+        payload_recorded=payload_recorded,
     )
     if failure_class is not None:
         metadata["failure_class"] = failure_class

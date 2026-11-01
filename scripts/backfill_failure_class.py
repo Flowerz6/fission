@@ -68,13 +68,21 @@ def main(argv: list[str] | None = None) -> int:
     resolve_anchors = _anchors_resolver(Path(args.guides_dir))
     factory = make_session_factory(make_engine(args.db_url))
 
-    n_scanned = n_updated = 0
+    n_scanned = n_updated = n_unrecorded = 0
     counts: Counter[str] = Counter()
     no_guide: set[str] = set()
 
     with session_scope(factory) as s:
         for t in s.query(Trace).filter(Trace.failure_class.is_(None)).all():
             n_scanned += 1
+            # An empty payload_text means the carrier was never recorded, not that
+            # it was inert — the anchor check would fire spuriously against "" and
+            # mislabel the row ``inert_payload`` (Brief 1b). Leave it NULL and count
+            # it separately; a failure class can only be assigned from a real carrier.
+            if not (t.payload_text or "").strip():
+                n_unrecorded += 1
+                counts["unrecorded"] += 1
+                continue
             verdict = t.verdict if t.verdict in _VALID_VERDICTS else "error"
             anchors = resolve_anchors(t.behavior_id)
             if not anchors and resolve_guide_path(Path(args.guides_dir), t.behavior_id) is None:
@@ -94,15 +102,24 @@ def main(argv: list[str] | None = None) -> int:
         if args.dry_run:
             s.rollback()
 
-    total_classified = sum(v for k, v in counts.items() if not k.startswith("("))
-    print(f"{'failure_class':<20} {'count':>8} {'share':>8}")
-    print("-" * 38)
+    special = {"unrecorded", "(null: success)"}
+
+    def basis_for(cls: str) -> str:
+        if cls == "unrecorded":
+            return "payload-empty"
+        if cls == "(null: success)":
+            return "success"
+        return "recorded"
+
+    total_classified = sum(v for k, v in counts.items() if k not in special)
+    print(f"{'failure_class':<20} {'count':>8} {'share':>8}  {'basis':<13}")
+    print("-" * 53)
     for cls, n in counts.most_common():
-        share = (n / total_classified * 100) if total_classified and not cls.startswith("(") else 0.0
-        print(f"{cls:<20} {n:>8} {share:>7.1f}%")
+        share = (n / total_classified * 100) if (total_classified and cls not in special) else 0.0
+        print(f"{cls:<20} {n:>8} {share:>7.1f}%  {basis_for(cls):<13}")
     verb = "would update" if args.dry_run else "updated"
-    print("-" * 38)
-    print(f"scanned {n_scanned} null row(s); {verb} {n_updated}")
+    print("-" * 53)
+    print(f"scanned {n_scanned} null row(s); {verb} {n_updated}; unrecorded {n_unrecorded} (left NULL)")
     if no_guide:
         print(f"no guide file for behavior_id(s) (no anchors): {sorted(no_guide)}")
     return 0

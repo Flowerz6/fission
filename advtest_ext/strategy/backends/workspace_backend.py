@@ -27,8 +27,12 @@ from __future__ import annotations
 import uuid
 from typing import Any, Protocol
 
+import structlog
+
 from advtest_ext.strategy.loop import DEFAULT_BENIGN_TRIGGER, splice_injection
 from advtest_ext.strategy.models import RolloutResult, Sample
+
+_log = structlog.get_logger(__name__)
 
 
 class WorkspaceRunner(Protocol):
@@ -217,11 +221,15 @@ class _RealRunner:
         # run's success signals (the same specs the oracle fires on), so a carrier
         # that dropped its canary reads as ``inert_payload`` rather than a refusal.
         guide_ns = SimpleNamespace(success=SimpleNamespace(signals=self._signal_specs))
+        payload_recorded = bool((carrier_body or "").strip())
+        if not payload_recorded:
+            _log.warning("scored with no payload recorded", sample_key=sample_key, verdict=verdict)
         failure_class = classify_failure(
             verdict=verdict,
             response=resp.text or "",
             payload_text=carrier_body,
             anchors=anchors_for(guide_ns),
+            payload_recorded=payload_recorded,
         )
         security = verdict == "success"
         utility = bool(resp.text) and verdict != "refused"
