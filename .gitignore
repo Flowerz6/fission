@@ -61,3 +61,9 @@ scripts/.fontcache/
 *.docx
 # Local DB backups directory
 backups/
+
+# ---- Session research artifacts (competitor research notes + reports) ----
+# Deep-research working notes and generated reports are session deliverables,
+# not product source; surfaced to the user directly, kept out of the codebase.
+research_notes/
+reports/
