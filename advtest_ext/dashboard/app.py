@@ -2232,6 +2232,34 @@ def create_app(
             {"by_guide": by_guide, "total": len(rows), "status": status},
         )
 
+    @app.get("/seeder", response_class=HTMLResponse)
+    async def seeder(request: Request) -> Response:
+        """Seeder dashboard — author a seed, generate and track its variants,
+        and capture a human run (New seed / Variants / Capture tabs). The page
+        is self-contained; the flow builder and Studio catalogs run client-side."""
+        return templates.TemplateResponse(request, "seeder/index.html", {})
+
+    @app.post("/seeder/save", include_in_schema=False)
+    async def seeder_save(request: Request) -> JSONResponse:
+        """Serialize a seeder-captured seed into ``guides/<id>.yaml`` for the variants
+        generator. Fixture-only by design: it writes a Guide file and makes no model call.
+        Output dir is ``ADVTEST_GUIDES_DIR`` or the repo ``guides/``."""
+        from advtest_ext.guides.seed_to_guide import SeedConversionError, write_guide
+
+        seed = await request.json()
+        if not isinstance(seed, dict):
+            return JSONResponse({"ok": False, "error": "expected a JSON object"}, status_code=400)
+        guides_dir = Path(
+            os.environ.get(
+                "ADVTEST_GUIDES_DIR", str(Path(__file__).resolve().parents[2] / "guides")
+            )
+        )
+        try:
+            path = write_guide(seed, guides_dir)
+        except SeedConversionError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        return JSONResponse({"ok": True, "guide_id": seed.get("id"), "path": str(path)})
+
     @app.get("/playbooks", response_class=HTMLResponse)
     async def playbooks_index(request: Request) -> Response:
         """The attack playbooks — the file-based ``guides/`` corpus the LLM
