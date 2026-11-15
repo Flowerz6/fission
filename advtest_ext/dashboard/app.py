@@ -2232,6 +2232,13 @@ def create_app(
             {"by_guide": by_guide, "total": len(rows), "status": status},
         )
 
+    @app.get("/seeder", response_class=HTMLResponse)
+    async def seeder(request: Request) -> Response:
+        """Seeder dashboard — author a seed, generate and track its variants,
+        and capture a human run (New seed / Variants / Capture tabs). The page
+        is self-contained; the flow builder and Studio catalogs run client-side."""
+        return templates.TemplateResponse(request, "seeder/index.html", {})
+
     @app.get("/playbooks", response_class=HTMLResponse)
     async def playbooks_index(request: Request) -> Response:
         """The attack playbooks — the file-based ``guides/`` corpus the LLM
