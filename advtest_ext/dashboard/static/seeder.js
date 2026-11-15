@@ -383,6 +383,7 @@ function sdrCollectSeed() {
     outcome: outcome,
     harm: sdrVal("sdr-harm"),
     technique: sdrSelectedChips("sdr-technique"),
+    attack_string: sdrVal("sdr-attack"),
     why_it_works: sdrVal("sdr-why"),
     canary: sdrVal("sdr-canary"),
     success_signals: sdrSelectedChips("sdr-signals"),
