@@ -350,3 +350,68 @@ document.addEventListener("DOMContentLoaded", function () {
   sdrMakeStep("Add to a doc");
   sdrPickStarter("When an item in a folder is edited");
 });
+
+/* Save path: collect the New-seed fields into a Seed object (docs/FISSION_CAPTURE_SPEC.md
+   §4.1 shape) and POST to /seeder/save, which serializes it to guides/<id>.yaml. */
+var SDR_SURFACE_MAP = { studio: "workspace_studio", gemini: "gemini_sidepanel", spark: "gemini_spark" };
+
+function sdrSelectedChips(containerId) {
+  var box = document.getElementById(containerId);
+  if (!box) return [];
+  return Array.prototype.slice.call(box.querySelectorAll(".chip.sel")).map(function (c) {
+    return c.textContent.trim();
+  });
+}
+
+function sdrOutcome() {
+  var seg = document.getElementById("sdr-seedOutcome");
+  return seg && seg.children[1].className === "on-bad" ? "failed" : "success";
+}
+
+function sdrVal(id) {
+  var el = document.getElementById(id);
+  return el ? String(el.value).trim() : "";
+}
+
+function sdrCollectSeed() {
+  var outcome = sdrOutcome();
+  var bodyEl = document.getElementById("sdr-carrierBody");
+  var seed = {
+    id: sdrVal("sdr-id"),
+    title: sdrVal("sdr-title"),
+    surface: SDR_SURFACE_MAP[document.getElementById("sdr-surface").value] || "",
+    outcome: outcome,
+    harm: sdrVal("sdr-harm"),
+    technique: sdrSelectedChips("sdr-technique"),
+    why_it_works: sdrVal("sdr-why"),
+    canary: sdrVal("sdr-canary"),
+    success_signals: sdrSelectedChips("sdr-signals"),
+    artifacts: [{
+      role: "carrier",
+      type: sdrVal("sdr-carrierType") || "doc",
+      title: sdrVal("sdr-carrierTitle"),
+      location: sdrVal("sdr-carrierLoc"),
+      verbatim: true,
+      body: bodyEl ? bodyEl.value : ""
+    }]
+  };
+  if (outcome === "failed") seed.failure_reason = sdrVal("sdr-failText");
+  return seed;
+}
+
+function sdrSaveSeed() {
+  var out = document.getElementById("sdr-saveResult");
+  if (out) out.textContent = "Saving\u2026";
+  fetch("/seeder/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sdrCollectSeed())
+  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) {
+      if (!out) return;
+      out.textContent = res.ok
+        ? "Saved guide " + res.j.guide_id + " \u2192 " + res.j.path
+        : "Error: " + (res.j.error || "save failed");
+    })
+    .catch(function (e) { if (out) out.textContent = "Error: " + e; });
+}
