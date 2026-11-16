@@ -51,6 +51,7 @@ def main() -> None:
     from advtest_ext.guides.corpus import load_guides, resolve_guide_path
     from advtest_ext.providers.base import ChatMessage
     from advtest_ext.providers.factory import load_provider_from_yaml
+    from advtest_ext.redaction import redact_for_egress
 
     guide_path = resolve_guide_path(_REPO_ROOT / "guides", args.guide)
     if guide_path is None:
@@ -64,7 +65,9 @@ def main() -> None:
     provider = load_provider_from_yaml(args.provider_config, args.role)
 
     async def complete(prompt: str) -> str:
-        resp = await provider.complete([ChatMessage(role="user", content=prompt)])
+        # Egress gate: redact immediately before the prompt leaves for the third-party model.
+        safe = redact_for_egress(prompt).text
+        resp = await provider.complete([ChatMessage(role="user", content=safe)])
         return resp.text
 
     proposals = asyncio.run(
