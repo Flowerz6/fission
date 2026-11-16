@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 from advtest_ext.generate.axes import Cell
 from advtest_ext.generate.variant import Variant
+from advtest_ext.redaction import redact_for_egress
 
 Complete = Callable[[str], Awaitable[str]]
 
@@ -157,6 +158,9 @@ async def generate_candidates(
     prompt = build_directed_prompt(
         parent, target_cell, allowed=allowed, forbidden=forbidden, memory=memory
     )
+    # Egress gate: the carrier genome + memory leave for the third-party model here, so redact
+    # immediately before the call. A fixture carrier (simulated secrets only) is unchanged.
+    prompt = redact_for_egress(prompt).text
     axis = target_cell.differing_axes(parent.cell)[0]
     rationale = f"{axis}: {getattr(parent.cell, axis)} -> {getattr(target_cell, axis)}"
     candidates: list[Variant] = []
