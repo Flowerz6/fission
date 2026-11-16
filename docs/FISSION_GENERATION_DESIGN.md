@@ -117,6 +117,17 @@ mutator (§2). The Layer-0.5 seam is unchanged: an automated judge/MCTS later sw
 archive the directed generator already fills.
 
 
+## 4c. Redaction caveat — evidence egress is a Layer-0.5 decision
+
+The shipped regex redactor (`advtest_ext/redaction/`) reliably redacts **structured** secrets (keys,
+cookies, cards, SSNs, emails, IPs) but **not unstructured victim data** (real document titles, owners,
+email subjects) — which is exactly what an exfil `target_response` contains. **Phase 1 is unaffected:**
+the directed generator egresses the **carrier genome + mutation critiques** (§2.3 memory-augmented
+prompts), never `target_response`. Before **Layer 0.5** reuses captured evidence as few-shot
+exemplars, either keep `target_response` out of Venice-bound prompts entirely (carrier-only exemplars;
+evidence is for the human oracle + at-rest training) or add an NER/classifier layer on the evidence
+channel. See `FISSION_V2_PLAN §6` (redaction gate).
+
 ## 5. References (hand to CC with the doc)
 - Rainbow Teaming — Samvelyan et al. 2024 (arXiv:2402.16822) — QD/MAP-Elites, directed mutation, feature descriptors.
 - Ferret — Pala et al. 2024 (arXiv:2408.10701) — multiple mutations + scoring, non-uniform cell sampling.
