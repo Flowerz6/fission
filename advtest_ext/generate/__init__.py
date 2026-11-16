@@ -21,6 +21,7 @@ from advtest_ext.generate.directed import (
     parse_carrier,
     prerank,
 )
+from advtest_ext.generate.from_seed import SeedAdapterError, variant_from_seed
 from advtest_ext.generate.variant import Variant, render_writeup, seed_variant
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "ArchiveSet",
     "Cell",
     "FailedAttempt",
+    "SeedAdapterError",
     "Target",
     "Variant",
     "build_directed_prompt",
@@ -39,4 +41,5 @@ __all__ = [
     "prerank",
     "render_writeup",
     "seed_variant",
+    "variant_from_seed",
 ]
